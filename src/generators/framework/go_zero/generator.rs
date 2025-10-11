@@ -43,7 +43,7 @@ impl Generator for GoZeroGenerator {
     fn generate(&mut self, params: Self::Params, output_path: &Path) -> Result<()> {
         params.validate()?;
 
-        println!("🔧 Generating Go-Zero microservice framework structure");
+        println!("Generating Go-Zero microservice framework structure");
 
         // 处理Go-Zero模板目录
         let template_dir = "frameworks/go/go_zero";
@@ -59,7 +59,7 @@ impl Generator for GoZeroGenerator {
             self.generate_basic_structure(&params, output_path)?;
         }
 
-        println!("✅ Go-Zero microservice framework structure generated");
+        println!("Go-Zero microservice framework structure generated");
         Ok(())
     }
 }

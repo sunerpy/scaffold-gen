@@ -36,7 +36,7 @@ impl GeneratorOrchestrator {
         output_path: &Path,
         options: GinProjectOptions,
     ) -> Result<()> {
-        println!("🚀 Starting Gin project generation: {project_name}");
+        println!("Starting Gin project generation: {project_name}");
 
         // 1. 创建项目级别参数
         let project_params = ProjectParams::new(project_name.clone())
@@ -110,6 +110,7 @@ impl GeneratorOrchestrator {
         let mut project_params = ProjectParams::new(project_name.clone())
             .with_license(options.license.unwrap_or_else(|| "MIT".to_string()))
             .with_git(options.enable_git.unwrap_or(true))
+            .with_precommit(options.enable_precommit.unwrap_or(true))
             .with_description(
                 options
                     .description
@@ -129,8 +130,8 @@ impl GeneratorOrchestrator {
             .post_process(&gin_params, output_path)
             .context("Failed to execute Gin post-processing")?;
 
-        println!("✅ Gin project generation completed successfully!");
-        println!("📁 Project created at: {}", output_path.display());
+        println!("Gin project generation completed successfully!");
+        println!("Project created at: {}", output_path.display());
 
         Ok(())
     }

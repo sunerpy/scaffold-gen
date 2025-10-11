@@ -23,17 +23,18 @@ pub trait Generator {
     /// 获取模板路径（相对于templates目录）
     fn get_template_path(&self) -> &'static str;
 
-    /// 生成代码 - 默认实现使用模板渲染
+    /// 生成代码 - 默认实现使用嵌入式模板渲染
     fn generate(&mut self, params: Self::Params, output_path: &Path) -> Result<()> {
-        let template_processor = TemplateProcessor::new()?;
+        let mut template_processor = TemplateProcessor::new()?;
         let template_path = self.get_template_path();
         let context = params.to_template_context();
 
-        println!("🔧 Generating {} structure", self.name());
+        println!("Generating {} structure", self.name());
 
-        if template_processor.template_exists(template_path) {
-            self.render_templates(
-                &template_processor,
+        // 检查嵌入式模板目录是否存在
+        if crate::template_engine::embedded_template_dir_exists(template_path) {
+            self.render_embedded_templates(
+                &mut template_processor,
                 template_path,
                 output_path,
                 context,
@@ -41,31 +42,31 @@ pub trait Generator {
             )?;
         } else {
             return Err(anyhow::anyhow!(
-                "{} templates not found at: {}",
+                "{} embedded templates not found at: {}",
                 self.name(),
                 template_path
             ));
         }
 
-        println!("✅ {} structure generated", self.name());
+        println!("{} structure generated", self.name());
         Ok(())
     }
 
-    /// 渲染模板 - 可以被子类重写以实现自定义逻辑
-    fn render_templates(
+    /// 渲染嵌入式模板 - 可以被子类重写以实现自定义逻辑
+    fn render_embedded_templates(
         &mut self,
-        template_processor: &TemplateProcessor,
+        template_processor: &mut TemplateProcessor,
         template_path: &str,
         output_path: &Path,
         context: HashMap<String, Value>,
         _params: &Self::Params,
     ) -> Result<()> {
-        // 默认实现：直接处理模板目录
-        let template_path_obj = std::path::Path::new(template_path);
-        template_processor.process_template_directory(template_path_obj, output_path, context)
+        // 默认实现：处理嵌入式模板
+        template_processor.process_embedded_template_directory(template_path, output_path, context)
     }
 
     /// 后处理逻辑，在生成完成后执行
+    #[allow(dead_code)]
     fn post_process(&mut self, _params: &Self::Params, _output_path: &Path) -> Result<()> {
         // 默认实现为空
         Ok(())

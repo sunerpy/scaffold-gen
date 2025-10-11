@@ -19,6 +19,8 @@ pub struct ProjectParams {
     pub license: String,
     /// 是否启用Git
     pub enable_git: bool,
+    /// 是否启用pre-commit hooks
+    pub enable_precommit: bool,
     /// 项目版本
     pub version: String,
 }
@@ -31,6 +33,7 @@ impl Default for ProjectParams {
             author: None,
             license: "MIT".to_string(),
             enable_git: true,
+            enable_precommit: false,
             version: "0.1.0".to_string(),
         }
     }
@@ -54,6 +57,7 @@ impl Parameters for ProjectParams {
         context.insert("project_version".to_string(), json!(self.version));
         context.insert("license".to_string(), json!(self.license));
         context.insert("enable_git".to_string(), json!(self.enable_git));
+        context.insert("enable_precommit".to_string(), json!(self.enable_precommit));
 
         // 添加项目名称的不同格式
         context.insert(
@@ -123,6 +127,12 @@ impl ProjectParams {
     /// 设置是否启用Git
     pub fn with_git(mut self, enable_git: bool) -> Self {
         self.enable_git = enable_git;
+        self
+    }
+
+    /// 设置是否启用pre-commit hooks
+    pub fn with_precommit(mut self, enable_precommit: bool) -> Self {
+        self.enable_precommit = enable_precommit;
         self
     }
 

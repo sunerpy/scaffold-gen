@@ -82,15 +82,6 @@ impl Scaffold {
             templates_root.join(&template_path)
         };
 
-        // 检查模板目录是否存在
-        if !full_template_path.exists() {
-            return Err(anyhow::anyhow!(
-                "Template directory not found: {}\nExpected path: {}",
-                template_path.display(),
-                full_template_path.display()
-            ));
-        }
-
         let template_engine = TemplateEngine::new(templates_root)?;
 
         Ok(Self {
@@ -154,53 +145,91 @@ impl Scaffold {
 
     /// 递归处理模板文件
     fn process_templates(&mut self, output_path: &Path) -> Result<()> {
-        self.process_directory(&self.template_path.clone(), output_path, "")?;
+        self.process_template_directory(&self.template_path.clone(), output_path, "")?;
         Ok(())
     }
 
     /// 递归处理目录
-    fn process_directory(
+    fn process_template_directory(
         &mut self,
-        template_dir: &Path,
+        _template_dir: &Path,
         output_dir: &Path,
         relative_path: &str,
     ) -> Result<()> {
-        for entry in std::fs::read_dir(template_dir).with_context(|| {
-            format!(
-                "Failed to read template directory: {}",
-                template_dir.display()
-            )
-        })? {
-            let entry = entry?;
-            let path = entry.path();
-            let file_name_os = entry.file_name();
-            let file_name = file_name_os.to_string_lossy();
+        // 强制使用嵌入式模板
+        let template_files = crate::template_engine::get_embedded_template_files(relative_path)?;
 
-            // 只跳过构建系统相关的特殊文件，允许所有模板文件被处理
+        for file_path in template_files {
+            let file_name = Path::new(&file_path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or(&file_path);
+
+            // 跳过构建系统相关的特殊文件
             if file_name == "Cargo.toml" || file_name == "Cargo.lock" {
                 continue;
             }
 
-            let current_relative = if relative_path.is_empty() {
-                file_name.to_string()
-            } else {
-                format!("{relative_path}/{file_name}")
-            };
+            // 构建输出路径
+            let output_file = output_dir.join(file_name);
 
-            if path.is_dir() {
-                let new_output_dir = output_dir.join(&*file_name);
-                std::fs::create_dir_all(&new_output_dir).with_context(|| {
-                    format!("Failed to create directory: {}", new_output_dir.display())
-                })?;
-                self.process_directory(&path, &new_output_dir, &current_relative)?;
-            } else {
-                self.process_file(&path, output_dir, &file_name)?;
-            }
+            // 处理嵌入式模板文件
+            self.process_embedded_file(&file_path, &output_file)?;
         }
         Ok(())
     }
 
     /// 处理单个文件
+    /// 处理嵌入式模板文件
+    fn process_embedded_file(
+        &mut self,
+        template_file_path: &str,
+        output_file: &Path,
+    ) -> Result<()> {
+        // 检查是否应该跳过此文件
+        let file_name = Path::new(template_file_path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(template_file_path);
+
+        if self.should_skip_file(file_name) {
+            println!("⏭️  Skipped: {file_name} (disabled by configuration)");
+            return Ok(());
+        }
+
+        if file_name.ends_with(".tmpl") {
+            // 处理模板文件 - 读取嵌入式模板内容
+            let content = crate::template_engine::read_embedded_template(template_file_path)
+                .with_context(|| {
+                    format!("Failed to read embedded template: {template_file_path}")
+                })?;
+
+            // 渲染模板
+            let rendered_content = self
+                .template_engine
+                .handlebars
+                .render_template(&content, self.params.get_all())
+                .with_context(|| {
+                    format!("Failed to render embedded template: {template_file_path}")
+                })?;
+
+            std::fs::write(output_file, rendered_content)
+                .with_context(|| format!("Failed to write file: {}", output_file.display()))?;
+        } else {
+            // 直接复制非模板文件
+            let content = crate::template_engine::read_embedded_template(template_file_path)
+                .with_context(|| format!("Failed to read embedded file: {template_file_path}"))?;
+
+            std::fs::write(output_file, content)
+                .with_context(|| format!("Failed to write file: {}", output_file.display()))?;
+        }
+
+        println!("Generated: {}", output_file.display());
+        Ok(())
+    }
+
+    /// 处理文件系统模板文件
+    #[allow(dead_code)]
     fn process_file(
         &mut self,
         template_file: &Path,
@@ -239,7 +268,7 @@ impl Scaffold {
             })?;
         }
 
-        println!("✅ Generated: {}", output_file.display());
+        println!("Generated: {}", output_file.display());
         Ok(())
     }
 
@@ -331,7 +360,7 @@ impl PostProcessor {
                 args,
                 description,
             } => {
-                println!("🔧 {description}");
+                println!("{description}");
                 let output = Command::new(command)
                     .args(args)
                     .current_dir(output_path)
@@ -344,7 +373,7 @@ impl PostProcessor {
                         "Command failed: {description}\nError: {stderr}"
                     ));
                 }
-                println!("✅ {description}");
+                println!("{description}");
             }
         }
         Ok(())

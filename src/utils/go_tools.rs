@@ -8,7 +8,7 @@ pub struct GoTools;
 impl GoTools {
     /// 运行 go mod tidy 命令
     pub fn mod_tidy(output_path: &Path) -> Result<()> {
-        println!("🔧 Running go mod tidy...");
+        println!("Running go mod tidy...");
 
         let status = Command::new("go")
             .args(["mod", "tidy"])
@@ -17,9 +17,9 @@ impl GoTools {
             .context("Failed to execute go mod tidy command")?;
 
         if status.success() {
-            println!("✅ Dependencies organized with go mod tidy");
+            println!("Dependencies organized with go mod tidy");
         } else {
-            println!("⚠️  Warning: Failed to run go mod tidy, you may need to run it manually");
+            println!("Warning: Failed to run go mod tidy, you may need to run it manually");
         }
 
         Ok(())
@@ -28,7 +28,7 @@ impl GoTools {
     /// 运行 go mod init 命令
     #[allow(dead_code)]
     pub fn mod_init(output_path: &Path, module_name: &str) -> Result<()> {
-        println!("🔧 Initializing Go module: {module_name}");
+        println!("Initializing Go module: {module_name}");
 
         let status = Command::new("go")
             .args(["mod", "init", module_name])
@@ -37,7 +37,7 @@ impl GoTools {
             .context("Failed to execute go mod init command")?;
 
         if status.success() {
-            println!("✅ Go module initialized: {module_name}");
+            println!("Go module initialized: {module_name}");
         } else {
             return Err(anyhow::anyhow!("Failed to initialize Go module"));
         }
@@ -64,7 +64,7 @@ impl GoTools {
     /// 运行 go get 命令安装依赖
     #[allow(dead_code)]
     pub fn get_dependency(output_path: &Path, dependency: &str) -> Result<()> {
-        println!("📦 Installing Go dependency: {dependency}");
+        println!("Installing Go dependency: {dependency}");
 
         let status = Command::new("go")
             .args(["get", dependency])
@@ -73,9 +73,9 @@ impl GoTools {
             .context("Failed to execute go get command")?;
 
         if status.success() {
-            println!("✅ Dependency installed: {dependency}");
+            println!("Dependency installed: {dependency}");
         } else {
-            println!("⚠️  Warning: Failed to install dependency: {dependency}");
+            println!("Warning: Failed to install dependency: {dependency}");
         }
 
         Ok(())

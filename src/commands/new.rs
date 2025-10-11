@@ -90,11 +90,7 @@ impl NewCommand {
     }
 
     pub async fn execute(&self) -> Result<()> {
-        println!(
-            "{}",
-            "🚀 Welcome to DevCLI Project Generator!".cyan().bold()
-        );
-        println!();
+        println!("Welcome to Scaffold-Gen Project Generator!");
 
         // 交互式选择
         let language = self.select_language()?;
@@ -127,11 +123,9 @@ impl NewCommand {
 
         self.generate_project(params).await?;
 
-        println!();
-        println!("{}", "✅ Project created successfully!".green().bold());
-        println!("📁 Project path: {}", project_path.display());
-        println!();
-        println!("{}", "🚀 Next steps:".yellow().bold());
+        println!("Project created successfully!");
+        println!("Project path: {}", project_path.display());
+        println!("Next steps:");
         println!("  cd {}", self.project_name);
         println!("  # Follow the README.md for further instructions");
 
@@ -139,7 +133,7 @@ impl NewCommand {
     }
 
     async fn check_environment(&self, language: &Language) -> Result<()> {
-        println!("{}", "🔍 Checking environment...".yellow());
+        println!("Checking environment...");
 
         let env_checker = EnvironmentChecker::new();
 
@@ -149,12 +143,12 @@ impl NewCommand {
                 "Git is not available. Please install Git first."
             ));
         }
-        println!("  ✅ Git: Available");
+        println!("  Git: Available");
 
         // 根据语言检查相应的环境
         match language {
             Language::Go => match env_checker.check_go().await {
-                Ok(true) => println!("  ✅ Go: Available"),
+                Ok(true) => println!("  Go: Available"),
                 Ok(false) => {
                     return Err(anyhow::anyhow!(
                         "Go is not available. Please install Go first."
@@ -164,15 +158,14 @@ impl NewCommand {
             },
             Language::Python => {
                 // TODO: 实现 Python 环境检查
-                println!("  ⚠️  Python: Environment check not implemented yet");
+                println!("  Python: Environment check not implemented yet");
             }
             Language::Rust => {
                 // TODO: 实现 Rust 环境检查
-                println!("  ⚠️  Rust: Environment check not implemented yet");
+                println!("  Rust: Environment check not implemented yet");
             }
         }
 
-        println!();
         Ok(())
     }
 
@@ -191,7 +184,7 @@ impl NewCommand {
 
         // 当只有一个选项时，直接返回该选项
         if languages.len() == 1 {
-            println!("🔍 Programming language: {}", languages[0]);
+            println!("Programming language: {}", languages[0]);
             return Ok(languages[0]);
         }
 
@@ -223,7 +216,7 @@ impl NewCommand {
     }
 
     fn configure_network_settings(&self, framework: &Framework) -> Result<(String, u16, u16)> {
-        println!("🔧 Configuring network settings...");
+        println!("Configuring network settings...");
 
         let host = if let Some(ref h) = self.host {
             println!("Using provided host: {h}");
@@ -273,7 +266,7 @@ impl NewCommand {
     }
 
     fn configure_precommit(&self) -> Result<bool> {
-        println!("🔧 Configuring pre-commit settings...");
+        println!("Configuring pre-commit settings...");
 
         if let Some(enable) = self.enable_precommit {
             println!("Using provided pre-commit setting: {enable}");
@@ -288,7 +281,7 @@ impl NewCommand {
     }
 
     fn configure_license(&self) -> Result<String> {
-        println!("🔧 Configuring license...");
+        println!("Configuring license...");
 
         if let Some(ref license) = self.license {
             println!("Using provided license: {license}");

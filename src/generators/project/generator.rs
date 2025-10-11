@@ -72,7 +72,9 @@ impl Generator for ProjectGenerator {
         }
 
         // 安装 pre-commit hooks
-        self.install_precommit(output_path)?;
+        if params.enable_precommit {
+            self.install_precommit(output_path)?;
+        }
 
         Ok(())
     }
@@ -91,7 +93,9 @@ impl ProjectGeneratorTrait for ProjectGenerator {
 
         let template_path = self
             .template_processor
-            .get_template_path(&license_template)?;
+            .get_template_path(&license_template)
+            .context("Failed to get license template path")?;
+
         let license_file = output_path.join("LICENSE");
         let mut context = params.to_template_context();
 
@@ -102,12 +106,13 @@ impl ProjectGeneratorTrait for ProjectGenerator {
             }
         }
 
-        let mut template_processor = TemplateProcessor::new()?;
+        let mut template_processor =
+            TemplateProcessor::new().context("Failed to create template processor")?;
+
         template_processor
             .process_template_file(&template_path, &license_file, context)
             .context("Failed to generate LICENSE file")?;
 
-        println!("✅ Generated LICENSE file");
         Ok(())
     }
 
@@ -119,7 +124,7 @@ impl ProjectGeneratorTrait for ProjectGenerator {
 
         match status {
             Ok(status) if status.success() => {
-                println!("✅ Initialized Git repository");
+                println!("Initialized Git repository");
                 Ok(())
             }
             _ => {
@@ -159,7 +164,7 @@ impl ProjectGeneratorTrait for ProjectGenerator {
                 .context("Failed to generate README.md file")?;
         }
 
-        println!("✅ Generated README.md file");
+        println!("Generated README.md file");
         Ok(())
     }
 
@@ -167,7 +172,7 @@ impl ProjectGeneratorTrait for ProjectGenerator {
         // 检查是否存在 .pre-commit-config.yaml 文件
         let precommit_config = output_path.join(".pre-commit-config.yaml");
         if !precommit_config.exists() {
-            println!("⚠️  No .pre-commit-config.yaml found, skipping pre-commit installation");
+            println!("No .pre-commit-config.yaml found, skipping pre-commit installation");
             return Ok(());
         }
 
@@ -179,7 +184,7 @@ impl ProjectGeneratorTrait for ProjectGenerator {
 
         match status {
             Ok(status) if status.success() => {
-                println!("✅ Pre-commit hooks installed");
+                println!("Pre-commit hooks installed");
             }
             _ => {
                 println!(

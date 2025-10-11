@@ -54,7 +54,7 @@ impl GoGenerator {
 
         match status {
             Ok(status) if status.success() => {
-                println!("✅ Initialized Go module: {project_name}");
+                println!("Initialized Go module: {project_name}");
             }
             _ => {
                 // 如果go命令失败，手动创建go.mod文件
@@ -64,7 +64,7 @@ impl GoGenerator {
                 std::fs::write(&go_mod_path, go_mod_content)
                     .context("Failed to create go.mod file")?;
 
-                println!("✅ Created go.mod file manually");
+                println!("Created go.mod file manually");
             }
         }
 
@@ -104,9 +104,9 @@ impl Generator for GoGenerator {
 
         // 检查Go安装
         match self.check_go_installation() {
-            Ok(version) => println!("✅ Go {version} detected"),
+            Ok(version) => println!("Go {version} detected"),
             Err(_) => {
-                println!("⚠️  Warning: Go not found in PATH, generated files may need manual setup")
+                println!("Warning: Go not found in PATH, generated files may need manual setup")
             }
         }
 
@@ -114,13 +114,11 @@ impl Generator for GoGenerator {
         let template_path = self.get_template_path();
         let context = params.to_template_context();
 
-        println!("🔧 Generating {} structure", self.name());
-
         if self.template_processor.template_exists(template_path) {
             // 创建新的模板处理器实例避免借用冲突
-            let template_processor = TemplateProcessor::new()?;
-            self.render_templates(
-                &template_processor,
+            let mut template_processor = TemplateProcessor::new()?;
+            self.render_embedded_templates(
+                &mut template_processor,
                 template_path,
                 output_path,
                 context,
@@ -128,22 +126,19 @@ impl Generator for GoGenerator {
             )?;
         } else {
             println!(
-                "⚠️  {} templates not found at: {}, generating basic structure",
+                "{} templates not found at: {}, generating basic structure",
                 self.name(),
                 template_path
             );
         }
 
         // 执行语言级别的后处理步骤
-        println!("🔧 Setting up Go module and dependencies...");
-
         // 1. 初始化 Go 模块
         self.init_go_module(&params, output_path)?;
 
         // 2. 整理依赖
         self.setup_dependencies(&params, output_path)?;
 
-        println!("✅ {} structure generated", self.name());
         Ok(())
     }
 }

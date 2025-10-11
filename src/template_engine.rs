@@ -1,13 +1,20 @@
 use anyhow::{Context, Result};
 use handlebars::Handlebars;
+use include_dir::{Dir, include_dir};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::fs;
 use std::path::{Path, PathBuf};
+
+/// 将路径标准化为Unix风格的路径分隔符
+/// 这对于嵌入式模板路径是必要的，因为rust-embed使用Unix风格的路径
+fn normalize_path(path: &str) -> String {
+    path.replace('\\', "/")
+}
 
 /// 模板引擎，负责处理Handlebars模板的渲染
 pub struct TemplateEngine {
     pub handlebars: Handlebars<'static>,
+    #[allow(dead_code)]
     templates_dir: PathBuf,
 }
 
@@ -26,115 +33,41 @@ impl TemplateEngine {
         })
     }
 
-    /// 渲染指定的模板文件
+    /// 渲染模板内容
+    pub fn render_template_content(
+        &mut self,
+        template_content: &str,
+        context: HashMap<String, Value>,
+    ) -> Result<String> {
+        let template = self
+            .handlebars
+            .render_template(template_content, &context)
+            .context("Failed to render template content")?;
+        Ok(template)
+    }
+
+    /// 渲染指定的模板文件（强制使用嵌入式模板）
     pub fn render_template(
         &mut self,
         template_path: &Path,
         data: &HashMap<String, Value>,
     ) -> Result<String> {
-        if !template_path.exists() {
-            return Err(anyhow::anyhow!(
-                "Template file not found: {}\nPlease ensure the template exists",
-                template_path.display()
-            ));
-        }
+        let relative_path = normalize_path(&template_path.to_string_lossy());
 
-        let template_content = fs::read_to_string(template_path)
-            .with_context(|| format!(
-                "Failed to read template file: {}\nCheck file permissions and encoding (should be UTF-8)",
-                template_path.display()
-            ))?;
+        println!("Reading embedded template: {relative_path}");
+        let template_content = read_embedded_template(&relative_path)
+            .with_context(|| format!("Failed to read embedded template: {relative_path}"))?;
 
-        self.handlebars.render_template(&template_content, data)
-            .with_context(|| format!(
-                "Template rendering failed for '{}'\nCommon issues:\n  - Missing template variables\n  - Invalid Handlebars syntax\n  - Circular template references",
-                template_path.display()
-            ))
-    }
+        println!(
+            "Embedded template read successfully, content length: {}",
+            template_content.len()
+        );
 
-    /// 渲染框架特定的模板，支持回退机制
-    #[allow(dead_code)]
-    pub fn render_framework_template(
-        &mut self,
-        framework: &str,
-        template_name: &str,
-        data: &HashMap<String, Value>,
-    ) -> Result<String> {
-        let template_path = self.find_template_with_fallback(framework, template_name)?;
-        self.render_template(&template_path, data)
-    }
-
-    /// 查找模板，支持回退机制：框架特定 -> 语言通用 -> 基础模板
-    #[allow(dead_code)]
-    pub fn find_template_with_fallback(
-        &self,
-        framework: &str,
-        template_name: &str,
-    ) -> Result<PathBuf> {
-        let search_paths = vec![
-            self.get_framework_template_path(framework, template_name),
-            self.get_language_template_path("go", template_name),
-            self.get_base_template_path(template_name),
-        ];
-
-        for path in &search_paths {
-            if path.exists() {
-                return Ok(path.clone());
-            }
-        }
-
-        // 如果都找不到，返回详细的错误信息
-        let search_info = search_paths
-            .iter()
-            .enumerate()
-            .map(|(i, path)| format!("  {}. {}", i + 1, path.display()))
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        Err(anyhow::anyhow!(
-            "Template '{template_name}' not found. Searched in:\n{search_info}"
-        ))
-    }
-
-    /// 获取框架特定模板路径
-    #[allow(dead_code)]
-    pub fn get_framework_template_path(&self, framework: &str, template_name: &str) -> PathBuf {
-        if framework.is_empty() {
-            self.get_base_template_path(template_name)
-        } else {
-            self.templates_dir
-                .join("frameworks")
-                .join("go")
-                .join(framework)
-                .join(template_name)
-        }
-    }
-
-    /// 获取语言模板路径
-    #[allow(dead_code)]
-    pub fn get_language_template_path(&self, language: &str, template_name: &str) -> PathBuf {
-        self.templates_dir
-            .join("languages")
-            .join(language)
-            .join(template_name)
-    }
-
-    /// 获取基础模板路径
-    #[allow(dead_code)]
-    pub fn get_base_template_path(&self, template_name: &str) -> PathBuf {
-        self.templates_dir.join(template_name)
-    }
-
-    /// 检查模板是否存在
-    #[allow(dead_code)]
-    pub fn template_exists(&self, path: &Path) -> bool {
-        path.exists()
-    }
-
-    /// 获取模板目录路径
-    #[allow(dead_code)]
-    pub fn get_templates_dir(&self) -> &PathBuf {
-        &self.templates_dir
+        self.handlebars
+            .render_template(&template_content, data)
+            .with_context(|| {
+                format!("Template rendering failed for embedded template: {relative_path}")
+            })
     }
 }
 
@@ -185,26 +118,119 @@ fn to_snake_case(s: &str) -> String {
     s.replace('-', "_").to_lowercase()
 }
 
-/// 获取模板目录路径
-pub fn get_templates_dir() -> Result<PathBuf> {
-    let search_paths = vec![
-        // 可执行文件同级目录下的templates
-        std::env::current_exe()
-            .ok()
-            .and_then(|exe| exe.parent().map(|p| p.join("templates"))),
-        // 当前工作目录下的templates
-        std::env::current_dir()
-            .ok()
-            .map(|dir| dir.join("devcli").join("templates")),
-        // 相对路径
-        Some(Path::new("templates").to_path_buf()),
-    ];
+// 嵌入模板目录
+static EMBEDDED_TEMPLATES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates");
 
-    for path in search_paths.into_iter().flatten() {
-        if path.exists() {
-            return Ok(path);
+/// 获取模板目录路径（强制使用嵌入式模板）
+pub fn get_templates_dir() -> Result<PathBuf> {
+    // 直接返回空路径，因为所有模板都是嵌入式的
+    Ok(PathBuf::new())
+}
+
+/// 从嵌入式模板读取文件内容
+pub fn read_embedded_template(relative_path: &str) -> Result<String> {
+    if let Some(file) = EMBEDDED_TEMPLATES.get_file(relative_path) {
+        Ok(String::from_utf8_lossy(file.contents()).to_string())
+    } else {
+        Err(anyhow::anyhow!(
+            "Embedded template file not found: {relative_path}"
+        ))
+    }
+}
+
+/// 检查嵌入式模板文件是否存在
+pub fn embedded_template_exists(relative_path: &str) -> bool {
+    EMBEDDED_TEMPLATES.get_file(relative_path).is_some()
+}
+
+/// 检查嵌入式模板目录是否存在
+pub fn embedded_template_dir_exists(relative_path: &str) -> bool {
+    if relative_path.is_empty() {
+        return true; // 根目录总是存在
+    }
+
+    // 检查是否有文件以该路径开头
+    for file in EMBEDDED_TEMPLATES.files() {
+        let file_path = file.path().to_string_lossy();
+        if file_path.starts_with(&format!("{relative_path}/")) {
+            return true;
         }
     }
 
-    Err(anyhow::anyhow!("Templates directory not found"))
+    // 递归检查子目录
+    fn check_dir_recursive(dir: &Dir, target_path: &str, current_path: &str) -> bool {
+        if current_path == target_path {
+            return true;
+        }
+
+        for subdir in dir.dirs() {
+            let subdir_name = subdir.path().file_name().unwrap().to_string_lossy();
+            let subdir_path = if current_path.is_empty() {
+                subdir_name.to_string()
+            } else {
+                format!("{current_path}/{subdir_name}")
+            };
+
+            if check_dir_recursive(subdir, target_path, &subdir_path) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    check_dir_recursive(&EMBEDDED_TEMPLATES, relative_path, "")
+}
+
+/// 获取嵌入式模板内容
+pub fn get_embedded_template_content(relative_path: &str) -> Option<String> {
+    EMBEDDED_TEMPLATES
+        .get_file(relative_path)
+        .map(|file| String::from_utf8_lossy(file.contents()).to_string())
+}
+
+/// 获取嵌入式模板目录中的所有文件
+pub fn get_embedded_template_files(relative_path: &str) -> Result<Vec<String>> {
+    fn collect_files_recursive(dir: &Dir, current_path: &str, files: &mut Vec<String>) {
+        for file in dir.files() {
+            let file_path = if current_path.is_empty() {
+                file.path().to_string_lossy().to_string()
+            } else {
+                format!(
+                    "{}/{}",
+                    current_path,
+                    file.path().file_name().unwrap().to_string_lossy()
+                )
+            };
+            files.push(normalize_path(&file_path));
+        }
+
+        for subdir in dir.dirs() {
+            let subdir_name = subdir.path().file_name().unwrap().to_string_lossy();
+            let subdir_path = if current_path.is_empty() {
+                subdir_name.to_string()
+            } else {
+                format!("{current_path}/{subdir_name}")
+            };
+            collect_files_recursive(subdir, &subdir_path, files);
+        }
+    }
+
+    let mut all_files = Vec::new();
+    collect_files_recursive(&EMBEDDED_TEMPLATES, "", &mut all_files);
+
+    // 如果指定了相对路径，过滤出该路径下的文件
+    if relative_path.is_empty() {
+        Ok(all_files)
+    } else {
+        let filtered_files: Vec<String> = all_files
+            .into_iter()
+            .filter(|file| {
+                file.starts_with(relative_path)
+                    && file.len() > relative_path.len()
+                    && file.chars().nth(relative_path.len()) == Some('/')
+            })
+            .collect();
+        Ok(filtered_files)
+    }
 }
