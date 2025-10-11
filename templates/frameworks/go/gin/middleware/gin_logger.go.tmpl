@@ -1,0 +1,98 @@
+package middleware
+
+import (
+	"net"
+	"net/http"
+	"net/http/httputil"
+	"os"
+	"runtime/debug"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+)
+
+func GinLogger(gLogger *zap.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.URL.Path == "/api/v1/health" {
+			c.Next()
+			return
+		}
+		start := time.Now()
+		path := c.Request.URL.Path
+		query := c.Request.URL.RawQuery
+		// todo k8s会进行snat 获取真实IP可考虑nginx-ingress
+		c.Next()
+		cost := time.Since(start)
+		gLogger.Info(path,
+			zap.Int("status", c.Writer.Status()),
+			zap.String("method", c.Request.Method),
+			zap.String("path", path),
+			zap.String("query", query),
+			zap.String("client_ip", c.ClientIP()),
+			zap.String("user-agent", c.Request.UserAgent()),
+			zap.String("errors", c.Errors.ByType(gin.ErrorTypePrivate).String()),
+			zap.Duration("cost", cost),
+		)
+	}
+}
+
+func GinRecovery(logger *zap.Logger, stack bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		defer recoverFromPanic(c, logger, stack)
+		c.Next()
+	}
+}
+
+func recoverFromPanic(c *gin.Context, logger *zap.Logger, stack bool) {
+	if err := recover(); err != nil {
+		brokenPipe := isBrokenPipeError(err)
+		httpRequest, _ := httputil.DumpRequest(c.Request, false)
+		if brokenPipe {
+			logBrokenPipeError(c, logger, err, httpRequest)
+			return
+		}
+		logRecovery(logger, err, httpRequest, stack)
+		c.AbortWithStatus(http.StatusInternalServerError)
+	}
+}
+
+func isBrokenPipeError(err any) bool {
+	ne, ok := err.(*net.OpError)
+	if !ok {
+		return false
+	}
+	se, ok := ne.Err.(*os.SyscallError)
+	if !ok {
+		return false
+	}
+	errMsg := strings.ToLower(se.Error())
+	return strings.Contains(errMsg, "broken pipe") || strings.Contains(errMsg, "connection reset by peer")
+}
+
+func logBrokenPipeError(c *gin.Context, logger *zap.Logger, err any, httpRequest []byte) {
+	logger.Error(c.Request.URL.Path,
+		zap.Any("error", err),
+		zap.String("request", string(httpRequest)),
+	)
+	c.Error(err.(error))
+	c.Abort()
+}
+
+func logRecovery(logger *zap.Logger, err any, httpRequest []byte, stack bool) {
+	if stack {
+		stackTrace := debug.Stack()
+		stackLines := strings.Split(string(stackTrace), "\n")
+		logger.Error("[Recovery from panic]",
+			zap.Any("error", err),
+			zap.String("request", string(httpRequest)),
+			zap.Strings("stack", stackLines),
+		)
+	} else {
+		logger.Error("[Recovery from panic]",
+			zap.Any("error", err),
+			zap.String("request", string(httpRequest)),
+		)
+	}
+}

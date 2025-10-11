@@ -1,0 +1,20 @@
+package config
+
+import "context"
+
+// Config 应用配置结构
+type Config struct {
+	Server ServerConfig `mapstructure:"server"`
+	Zap    ZapConfig    `mapstructure:"zap"`
+}
+
+// ServerConfig 服务器配置
+type ServerConfig struct {
+	Host         string `mapstructure:"host"`
+	Port         int    `mapstructure:"port"`
+	Mode         string `mapstructure:"mode"`
+	RouterPrefix string `mapstructure:"router_prefix" json:"router_prefix" yaml:"router_prefix"`
+	IPLimitCount int    `mapstructure:"iplimit_count" json:"iplimit_count" yaml:"iplimit_count"`
+	IPLimitTime  int    `mapstructure:"iplimit_time" json:"iplimit_time" yaml:"iplimit_time"`
+	Context      context.Context
+}

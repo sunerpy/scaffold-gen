@@ -1,0 +1,119 @@
+package core
+
+import (
+	"fmt"
+	"os"
+	"sync"
+
+	"github.com/spf13/viper"
+	"go.uber.org/zap"
+
+	"{{project_name}}/config"
+	"{{project_name}}/util"
+)
+
+var (
+	appOnce sync.Once
+	appVal  *App
+)
+
+// App 应用核心结构
+type App struct {
+	Config *config.Config
+	Logger *zap.Logger
+}
+
+func init() {
+	// 初始化应用
+	CoreInit()
+}
+
+// LoadConfig 加载配置
+func LoadConfig() (*config.Config, error) {
+	// 获取环境变量，默认为dev
+	env := os.Getenv("GO_ENV")
+	if env == "" {
+		env = "dev"
+	}
+
+	viper.SetConfigName(env)
+	viper.SetConfigType("toml")
+	viper.AddConfigPath("./config")
+	viper.AddConfigPath(".")
+
+	// 设置默认值
+	setDefaults()
+
+	// 读取环境变量
+	viper.AutomaticEnv()
+
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			fmt.Println("Config file not found, using defaults and environment variables")
+		} else {
+			return nil, fmt.Errorf("error reading config file: %w", err)
+		}
+	}
+
+	var cfg config.Config
+	if err := viper.Unmarshal(&cfg); err != nil {
+		return nil, fmt.Errorf("error unmarshaling config: %w", err)
+	}
+
+	return &cfg, nil
+}
+
+// initializeApp 初始化应用
+func initializeApp() (*App, error) {
+	// 加载配置
+	cfg, err := LoadConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// 初始化logger
+	logger, err := util.NewZapLogger(&cfg.Zap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize logger: %w", err)
+	}
+
+	return &App{
+		Config: cfg,
+		Logger: logger,
+	}, nil
+}
+
+func CoreInit() {
+	appOnce.Do(func() {
+		// 初始化应用
+		app, err := initializeApp()
+		if err != nil {
+			panic(err)
+		}
+		zap.ReplaceGlobals(app.Logger)
+		// 设置全局变量
+		appVal = app
+	})
+}
+
+func GetApp() *App {
+	if appVal == nil {
+		CoreInit()
+	}
+	return appVal
+}
+
+func GetLoggers() (lg *zap.Logger, sg *zap.SugaredLogger) {
+	lg = zap.L()
+	sg = zap.S()
+	return lg, sg
+}
+
+func setDefaults() {
+	viper.SetDefault("server.host", "0.0.0.0")
+	viper.SetDefault("server.port", 8080)
+	viper.SetDefault("server.mode", "debug")
+	viper.SetDefault("log.level", "info")
+	viper.SetDefault("log.format", "json")
+	viper.SetDefault("log.output", "stdout")
+}

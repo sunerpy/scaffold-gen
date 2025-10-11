@@ -1,0 +1,29 @@
+package routers
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
+
+// ApiRouter API路由组
+type ApiRouter struct{}
+
+// InitApiRoutes 初始化API路由
+func (a *ApiRouter) InitApiRoutes(rg *gin.RouterGroup) {
+	apiGroup := rg.Group("/api")
+	{
+		v1 := apiGroup.Group("/v1")
+		{
+			v1.GET("/ping", a.Ping)
+			// 可以在这里添加更多API路由
+		}
+	}
+}
+
+// Ping API ping处理器
+func (a *ApiRouter) Ping(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"message": "pong",
+	})
+}

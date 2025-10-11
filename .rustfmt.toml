@@ -1,0 +1,22 @@
+# Rust formatting configuration
+# This ensures consistent formatting across the project
+
+# # Only support nightly version of rustfmt
+# # Import organization
+# reorder_imports = true
+# group_imports = "StdExternalCrate"
+# imports_granularity = "Crate"
+# reorder_impl_items = true
+# brace_style = "SameLineWhere"
+
+# Line length and wrapping
+max_width = 100
+use_small_heuristics = "Default"
+
+# Function formatting
+fn_params_layout = "Tall"
+
+
+# Other formatting options
+newline_style = "Unix"
+remove_nested_parens = true

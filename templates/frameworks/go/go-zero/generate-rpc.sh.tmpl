@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# Generate RPC code
+goctl rpc protoc rpc/{{ProjectName}}.proto --go_out=rpc --go-grpc_out=rpc --zrpc_out=rpc --style=goZero
+
+echo "RPC code generated successfully!"

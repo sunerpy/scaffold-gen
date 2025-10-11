@@ -1,0 +1,111 @@
+package routers
+
+import (
+	"net/http"
+	"os"
+
+	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+{{#if enable_swagger}}
+	"github.com/swaggo/gin-swagger"
+	"github.com/swaggo/files"
+	"{{project_name}}/docs"
+{{/if}}
+)
+
+type Option func(*gin.RouterGroup)
+
+var middlewares = []gin.HandlerFunc{}
+
+func AddMiddleware(middleware ...gin.HandlerFunc) {
+	middlewares = append(middlewares, middleware...)
+}
+
+var swaggerRouter func(*gin.Engine) = nil
+
+{{#if enable_swagger}}
+func initSwaggerRouter() {
+	swaggerRouter = func(r *gin.Engine) {
+		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	}
+}
+{{/if}}
+
+func InitRouters() *gin.Engine {
+	mode := os.Getenv("GIN_MODE")
+	switch mode {
+	case gin.ReleaseMode:
+		gin.SetMode(gin.ReleaseMode)
+	default:
+		gin.SetMode(gin.DebugMode)
+	}
+	r := gin.New()
+
+{{#if enable_swagger}}
+	// 设置Swagger文档的BasePath
+	docs.SwaggerInfo.BasePath = "/"
+	initSwaggerRouter()
+{{/if}}
+	initMiddlewares(r)
+	registerRoutes(r)
+	registerMetrics(r)
+{{#if enable_swagger}}
+	registerSwagger(r)
+{{/if}}
+	handleNotFoundRoutes(r)
+	return r
+}
+
+func initMiddlewares(r *gin.Engine) {
+	r.Use(middlewares...)
+}
+
+func registerRoutes(r *gin.Engine) {
+	// 创建根路由组
+	rootGroup := r.Group("")
+
+	// 注册健康检查路由
+	RouterGroupApp.Health.InitHealthRoutes(rootGroup)
+
+	// 注册API路由
+	RouterGroupApp.Api.InitApiRoutes(rootGroup)
+
+	// 如果需要添加路由前缀，可以这样做：
+	// app := core.GetApp()
+	// prefixGroup := r.Group(app.Config.Server.RouterPrefix)
+	// RouterGroupApp.Health.InitHealthRoutes(prefixGroup)
+	// RouterGroupApp.Api.InitApiRoutes(prefixGroup)
+}
+
+func registerMetrics(r *gin.Engine) {
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+}
+
+{{#if enable_swagger}}
+func registerSwagger(r *gin.Engine) {
+	if swaggerRouter != nil {
+		swaggerRouter(r)
+	}
+}
+{{/if}}
+
+func handleNotFoundRoutes(r *gin.Engine) {
+	r.NoRoute(func(c *gin.Context) {
+		path := c.Request.URL.Path
+		method := c.Request.Method
+		handleNoRoute(r, c, path, method)
+	})
+}
+
+func handleNoRoute(r *gin.Engine, c *gin.Context, path, method string) {
+	for _, routeInfo := range r.Routes() {
+		if routeInfo.Path == path {
+			if routeInfo.Method == method {
+				return
+			}
+			c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "method not allowed"})
+			return
+		}
+	}
+	c.JSON(http.StatusNotFound, gin.H{"error": "page not found"})
+}

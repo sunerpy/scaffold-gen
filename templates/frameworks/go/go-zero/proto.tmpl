@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package {{ProjectName}};
+option go_package = "./{{ProjectName}}";
+
+message PingRequest {
+}
+
+message PingResponse {
+  string message = 1;
+}
+
+service {{ProjectNameCamel}} {
+  rpc Ping(PingRequest) returns(PingResponse);
+}

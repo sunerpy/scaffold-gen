@@ -1,0 +1,36 @@
+package config
+
+import (
+	"go.uber.org/zap/zapcore"
+)
+
+// ZapConfig Zap日志配置
+type ZapConfig struct {
+	Directory     string `mapstructure:"directory" json:"directory"  yaml:"directory"`
+	MaxSize       int    `mapstructure:"max_size" json:"max_size" yaml:"max_size"`
+	MaxAge        int    `mapstructure:"max_age" json:"max_age" yaml:"max_age"`
+	MaxBackups    int    `mapstructure:"max_backups" json:"max_backups" yaml:"max_backups"`
+	Compress      bool   `mapstructure:"compress" json:"compress" yaml:"compress"`
+	Level         string `mapstructure:"level" json:"level" yaml:"level"` // debug  info  warn  error
+	Format        string `mapstructure:"format" json:"format" yaml:"format"`
+	EncodeLevel   string `mapstructure:"encode_level" json:"encode_level" yaml:"encode_level"`
+	StacktraceKey string `mapstructure:"stacktrace_key" json:"stacktrace_key" yaml:"stacktrace_key"`
+	LogInConsole  bool   `mapstructure:"log_in_console" json:"log_in_console" yaml:"log_in_console"`
+	ShowLine      bool   `mapstructure:"show_line" json:"show_line" yaml:"show_line"`
+}
+
+// ZapEncodeLevel 获取Zap编码级别
+func (z *ZapConfig) ZapEncodeLevel() zapcore.LevelEncoder {
+	switch z.EncodeLevel {
+	case "LowercaseLevelEncoder":
+		return zapcore.LowercaseLevelEncoder
+	case "LowercaseColorLevelEncoder":
+		return zapcore.LowercaseColorLevelEncoder
+	case "CapitalLevelEncoder":
+		return zapcore.CapitalLevelEncoder
+	case "CapitalColorLevelEncoder":
+		return zapcore.CapitalColorLevelEncoder
+	default:
+		return zapcore.LowercaseLevelEncoder
+	}
+}

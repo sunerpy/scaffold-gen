@@ -1,0 +1,36 @@
+syntax = "v1"
+
+info(
+    title: "{{ProjectName}} API"
+    desc: "API service for {{ProjectName}}"
+    author: "DevCLI"
+    version: "v1.0.0"
+)
+
+type (
+    // Common response
+    BaseResponse {
+        Code    int    `json:"code"`
+        Message string `json:"message"`
+        Data    any `json:"data,omitempty"`
+    }
+
+    // Health check response
+    HealthResponse {
+        Status  string `json:"status"`
+        Message string `json:"message"`
+    }
+
+    // Ping response
+    PingResponse {
+        Message string `json:"message"`
+    }
+)
+
+service {{ProjectName}}-api {
+    @handler HealthHandler
+    get /health returns (HealthResponse)
+
+    @handler PingHandler
+    get /api/v1/ping returns (PingResponse)
+}

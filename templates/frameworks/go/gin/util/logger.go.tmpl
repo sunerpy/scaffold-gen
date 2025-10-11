@@ -1,0 +1,115 @@
+package util
+
+import (
+	"os"
+	"path/filepath"
+
+	"{{project_name}}/config"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
+)
+
+const (
+	podNameENv = "POD_NAME"
+	envTypeEnv = "ENV"
+	podField = "pod"
+	envTypeField = "env"
+)
+
+// NewZapLogger 创建一个新的zap logger实例
+func NewZapLogger(zapConfig *config.ZapConfig) (*zap.Logger, error) {
+	if err := os.MkdirAll(zapConfig.Directory, os.ModePerm); err != nil {
+		return nil, err
+	}
+	var level zapcore.Level
+	if err := level.UnmarshalText([]byte(zapConfig.Level)); err != nil {
+		return nil, err
+	}
+	encoderConfig := zapcore.EncoderConfig{
+		TimeKey:        "time",
+		LevelKey:       "level",
+		NameKey:        "logger",
+		CallerKey:      "caller",
+		MessageKey:     "msg",
+		StacktraceKey:  zapConfig.StacktraceKey,
+		LineEnding:     zapcore.DefaultLineEnding,
+		EncodeLevel:    zapConfig.ZapEncodeLevel(),
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeDuration: zapcore.SecondsDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
+	}
+	var encoder zapcore.Encoder
+	if zapConfig.Format == "json" {
+		encoder = zapcore.NewJSONEncoder(encoderConfig)
+	} else {
+		encoder = zapcore.NewConsoleEncoder(encoderConfig)
+	}
+	debugWriter := zapcore.AddSync(&lumberjack.Logger{
+		Filename:   filepath.Join(zapConfig.Directory, "debug.log"),
+		MaxSize:    zapConfig.MaxSize,
+		MaxBackups: zapConfig.MaxBackups,
+		MaxAge:     zapConfig.MaxAge,
+		Compress:   zapConfig.Compress,
+	})
+	infoWriter := zapcore.AddSync(&lumberjack.Logger{
+		Filename:   filepath.Join(zapConfig.Directory, "info.log"),
+		MaxSize:    zapConfig.MaxSize,
+		MaxBackups: zapConfig.MaxBackups,
+		MaxAge:     zapConfig.MaxAge,
+		Compress:   zapConfig.Compress,
+	})
+	errorWriter := zapcore.AddSync(&lumberjack.Logger{
+		Filename:   filepath.Join(zapConfig.Directory, "error.log"),
+		MaxSize:    zapConfig.MaxSize,
+		MaxBackups: zapConfig.MaxBackups,
+		MaxAge:     zapConfig.MaxAge,
+		Compress:   zapConfig.Compress,
+	})
+	debugPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+		return lvl <= zapcore.DebugLevel && lvl >= level
+	})
+	highPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+		return lvl >= zapcore.ErrorLevel && lvl >= level
+	})
+	lowPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+		return lvl > zapcore.DebugLevel && lvl < zapcore.ErrorLevel && lvl >= level
+	})
+	cores := []zapcore.Core{
+		zapcore.NewCore(encoder, debugWriter, debugPriority),
+		zapcore.NewCore(encoder, infoWriter, lowPriority),
+		zapcore.NewCore(encoder, errorWriter, highPriority),
+	}
+	if zapConfig.LogInConsole {
+		consoleEncoderConfig := zapcore.EncoderConfig{
+			TimeKey:        "time",
+			LevelKey:       "level",
+			NameKey:        "logger",
+			CallerKey:      "caller",
+			MessageKey:     "msg",
+			StacktraceKey:  zapConfig.StacktraceKey,
+			LineEnding:     zapcore.DefaultLineEnding,
+			EncodeLevel:    zapcore.CapitalColorLevelEncoder,
+			EncodeTime:     zapcore.ISO8601TimeEncoder,
+			EncodeDuration: zapcore.SecondsDurationEncoder,
+			EncodeCaller:   zapcore.ShortCallerEncoder,
+		}
+		consoleEncoder := zapcore.NewConsoleEncoder(consoleEncoderConfig)
+		consoleCore := zapcore.NewCore(consoleEncoder, zapcore.Lock(os.Stdout), zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+			return lvl >= level
+		}))
+		cores = append(cores, consoleCore)
+	}
+	core := zapcore.NewTee(cores...)
+	podName := os.Getenv(podNameENv)
+	envType := os.Getenv(envTypeEnv)
+	options := []zap.Option{zap.Fields(zap.String(podField, podName), zap.String(envTypeField, envType))}
+	if zapConfig.ShowLine {
+		options = append(options, zap.AddCaller())
+	}
+	if zapConfig.StacktraceKey != "" {
+		options = append(options, zap.AddStacktrace(zapcore.ErrorLevel))
+	}
+	logger := zap.New(core, options...)
+	return logger, nil
+}

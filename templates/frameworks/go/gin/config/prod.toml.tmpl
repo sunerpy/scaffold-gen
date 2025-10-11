@@ -1,0 +1,17 @@
+[server]
+host = "{{host}}"
+port = {{port}}
+mode = "release"
+
+[zap]
+directory = "logs"
+max_size = 10
+max_age = 30
+max_backups = 10
+compress = true
+level = "info"
+format = "json"
+show_line = true
+encode_level = "LowercaseLevelEncoder"
+stacktrace_key = "stacktrace"
+log_in_console = false

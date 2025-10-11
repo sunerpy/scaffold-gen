@@ -1,0 +1,96 @@
+# {{project_name_pascal}}
+
+A modern Go web application built with the Gin framework.
+
+## Features
+
+- 🚀 Fast HTTP server with Gin framework
+- 📑 Structured logging with Zap
+- ⚙️ Configuration management with Viper
+- 🐳 Docker support
+- 🔧 Clean architecture with separation of concerns
+
+## Project Structure
+
+```
+{{project_name_pascal}}/
+├── config/                # Configuration files
+├── core/                  # Core application code
+├── middleware/            # Custom middleware
+├── model/                 # Data models
+├── routers/               # API routes
+├── service/               # Business logic
+├── util/                  # Utility functions
+├── logs/                  # Log files
+└── main.go                # Application entrypoint
+```
+
+## Quick Start
+
+### Prerequisites
+
+- Go {{go_version}} or higher
+- Docker (optional)
+
+### Development
+
+1. Install dependencies:
+```bash
+go mod tidy
+```
+
+2. Run the application:
+```bash
+go run main.go
+```
+
+3. Test the API:
+```bash
+curl http://{{host}}:{{port}}/health
+curl http://{{host}}:{{port}}/api/v1/ping
+```
+
+### Docker
+
+1. Build and run with Docker Compose:
+```bash
+docker-compose up -d
+```
+
+2. Or build and run with Docker:
+```bash
+docker build -t {{project_name_pascal}} .
+docker run -p {{port}}:{{port}} {{project_name_pascal}}
+```
+
+## Configuration
+
+Configuration is managed through `configs/config.yaml`. You can also use environment variables:
+
+- `SERVER_HOST`: Server host (default: {{default_host}})
+- `SERVER_PORT`: Server port (default: {{default_port}})
+- `SERVER_MODE`: Gin mode (debug/release)
+- `LOG_LEVEL`: Log level (debug/info/warn/error)
+
+## API Endpoints
+
+- `GET /health` - Health check
+- `GET /api/v1/ping` - Ping endpoint
+
+## Development
+
+### Adding New Routes
+
+1. Add your handler in `internal/handler/`
+2. Register the route in `internal/handler/routes.go`
+3. Add business logic in `internal/service/`
+
+### Adding Configuration
+
+1. Update the config struct in `config/config.go`
+2. Add default values in the `setDefaults()` function
+3. Update `configs/config.yaml`
+
+## License
+
+This project is licensed under the MIT License.

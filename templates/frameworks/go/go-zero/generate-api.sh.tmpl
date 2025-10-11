@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# Generate API code from api.api
+goctl api go -api api/api.api -dir api --style=goZero
+
+echo "API code generated successfully!"

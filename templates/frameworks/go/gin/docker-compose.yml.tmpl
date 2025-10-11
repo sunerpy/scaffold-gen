@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  {{project_name}}:
+    build: .
+    ports:
+      - "{{port}}:{{port}}"
+    environment:
+      - GIN_MODE=release
+    volumes:
+      - ./config:/root/config
+      - ./logs:/root/logs
+    restart: unless-stopped
+
+  # Uncomment if you need a database
+  # mysql:
+  #   image: mysql:8.0
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: rootpassword
+  #     MYSQL_DATABASE: {{project_name}}
+  #   ports:
+  #     - "3306:3306"
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #   restart: unless-stopped
+
+# volumes:
+#   mysql_data:

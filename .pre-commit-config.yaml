@@ -1,0 +1,34 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-case-conflict
+
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+      - id: fmt
+        args: ["--", "--check"]
+      - id: cargo-check
+        args: ["--workspace"]
+      - id: clippy
+        args: [
+            "--workspace",
+            "--",
+            "-D",
+            "warnings",
+            "-A",
+            "unused", # 1. 忽略所有 rustc unused
+            "-A",
+            "clippy::uninlined_format_args", # 忽略这条 clippy 警告
+          ]
+
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.2.2
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]

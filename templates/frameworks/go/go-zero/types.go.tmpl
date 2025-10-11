@@ -1,0 +1,16 @@
+package types
+
+type BaseResponse struct {
+    Code    int         `json:"code"`
+    Message string      `json:"message"`
+    Data    any `json:"data,omitempty"`
+}
+
+type HealthResponse struct {
+    Status  string `json:"status"`
+    Message string `json:"message"`
+}
+
+type PingResponse struct {
+    Message string `json:"message"`
+}

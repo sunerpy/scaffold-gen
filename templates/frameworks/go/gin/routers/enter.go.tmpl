@@ -1,0 +1,10 @@
+package routers
+
+// RouterGroup 路由组结构体
+type RouterGroup struct {
+	Health HealthRouter
+	Api    ApiRouter
+}
+
+// RouterGroupApp 全局路由组实例
+var RouterGroupApp = new(RouterGroup)
