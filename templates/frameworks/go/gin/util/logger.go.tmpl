@@ -5,15 +5,16 @@ import (
 	"path/filepath"
 
 	"{{project_name}}/config"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
-	podNameENv = "POD_NAME"
-	envTypeEnv = "ENV"
-	podField = "pod"
+	podNameENv   = "POD_NAME"
+	envTypeEnv   = "ENV"
+	podField     = "pod"
 	envTypeField = "env"
 )
 

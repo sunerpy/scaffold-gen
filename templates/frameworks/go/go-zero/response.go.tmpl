@@ -1,26 +1,26 @@
 package response
 
 import (
-    "net/http"
+	"net/http"
 
-    "github.com/zeromicro/go-zero/rest/httpx"
+	"github.com/zeromicro/go-zero/rest/httpx"
 )
 
 type Body struct {
-    Code int         `json:"code"`
-    Msg  string      `json:"msg"`
-    Data any `json:"data,omitempty"`
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+	Data any    `json:"data,omitempty"`
 }
 
 func Response(w http.ResponseWriter, resp any, err error) {
-    if err != nil {
-        httpx.Error(w, err)
-        return
-    }
+	if err != nil {
+		httpx.Error(w, err)
+		return
+	}
 
-    httpx.OkJson(w, &Body{
-        Code: 0,
-        Msg:  "success",
-        Data: resp,
-    })
+	httpx.OkJson(w, &Body{
+		Code: 0,
+		Msg:  "success",
+		Data: resp,
+	})
 }

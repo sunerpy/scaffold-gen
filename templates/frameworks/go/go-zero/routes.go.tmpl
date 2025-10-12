@@ -1,26 +1,25 @@
 package handler
 
 import (
-    "net/http"
+	"net/http"
+	"{{ProjectName}}/api/internal/svc"
 
-    "{{ProjectName}}/api/internal/svc"
-
-    "github.com/zeromicro/go-zero/rest"
+	"github.com/zeromicro/go-zero/rest"
 )
 
 func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
-    server.AddRoutes(
-        []rest.Route{
-            {
-                Method:  http.MethodGet,
-                Path:    "/health",
-                Handler: HealthHandler(serverCtx),
-            },
-            {
-                Method:  http.MethodGet,
-                Path:    "/api/v1/ping",
-                Handler: PingHandler(serverCtx),
-            },
-        },
-    )
+	server.AddRoutes(
+		[]rest.Route{
+			{
+				Method:  http.MethodGet,
+				Path:    "/health",
+				Handler: HealthHandler(serverCtx),
+			},
+			{
+				Method:  http.MethodGet,
+				Path:    "/api/v1/ping",
+				Handler: PingHandler(serverCtx),
+			},
+		},
+	)
 }

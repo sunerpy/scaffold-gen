@@ -4,12 +4,15 @@ import (
 	"net/http"
 	"os"
 
+{{#if enable_swagger}}
+	"{{project_name}}/docs"
+
+{{/if}}
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 {{#if enable_swagger}}
 	"github.com/swaggo/gin-swagger"
 	"github.com/swaggo/files"
-	"{{project_name}}/docs"
 {{/if}}
 )
 
