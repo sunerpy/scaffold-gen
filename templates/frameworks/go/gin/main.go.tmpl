@@ -41,8 +41,8 @@ func initialize() {
 func main() {
 	// 初始化应用
 	app := core.GetApp()
-	defer logger.Sync()
-	defer sLogger.Sync()
+	defer logger.Sync() //nolint:errcheck
+	defer sLogger.Sync() //nolint:errcheck
 	globalCtx, globalCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer globalCancel()
 	app.Config.Server.Context = globalCtx
