@@ -145,7 +145,7 @@ impl Generator for GinGenerator {
 impl GinGenerator {
     /// 后处理逻辑 - 处理 Swagger 文档生成
     pub fn post_process(&self, params: &GinParams, output_path: &Path) -> Result<()> {
-        if params.enable_swagger {
+        if params.enable_swagger() {
             println!("Checking for swag command...");
 
             // 使用同步方式检查 swag 命令
@@ -174,6 +174,42 @@ impl GinGenerator {
             if output.status.success() {
                 println!("Swagger documentation generated successfully");
 
+                // 升级 swag 版本以确保兼容性
+                println!("Upgrading swag to latest version...");
+                let upgrade_output = std::process::Command::new("go")
+                    .arg("get")
+                    .arg("-u")
+                    .arg("github.com/swaggo/swag")
+                    .current_dir(output_path)
+                    .output()
+                    .context("Failed to execute go get -u github.com/swaggo/swag command")?;
+
+                if upgrade_output.status.success() {
+                    println!("Swag upgraded successfully");
+                } else {
+                    let stderr = String::from_utf8_lossy(&upgrade_output.stderr);
+                    println!("Warning: Failed to upgrade swag: {stderr}");
+                }
+
+                // 向 swagger.json 文件末尾添加空白行以符合格式规范
+                let swagger_json_path = output_path.join("docs").join("swagger.json");
+                if swagger_json_path.exists() {
+                    if let Ok(mut content) = std::fs::read_to_string(&swagger_json_path) {
+                        // 检查文件是否以换行符结尾（支持不同平台的换行符）
+                        let needs_newline = !content.ends_with('\n') && !content.ends_with("\r\n");
+
+                        if needs_newline {
+                            content.push('\n');
+
+                            if let Err(e) = std::fs::write(&swagger_json_path, content) {
+                                println!("Warning: Failed to add newline to swagger.json: {e}");
+                            } else {
+                                println!("Added newline to swagger.json for proper formatting");
+                            }
+                        }
+                    }
+                }
+
                 // 生成 Swagger 文档后，重新运行 go mod tidy 来整理新增的依赖
                 GoTools::mod_tidy(output_path)
                     .context("Failed to run go mod tidy after Swagger generation")?;
@@ -190,7 +226,7 @@ impl GinGenerator {
 impl GinGenerator {
     /// 检查是否应该跳过swagger相关文件
     fn should_skip_swagger_file(&self, file_name: &str, params: &GinParams) -> bool {
-        if !params.enable_swagger {
+        if !params.enable_swagger() {
             // 如果禁用swagger，跳过所有swagger相关文件
             file_name.contains("swagger")
                 || file_name.starts_with("docs.go")
@@ -203,7 +239,7 @@ impl GinGenerator {
 
     /// 检查是否应该跳过pre-commit相关文件
     fn should_skip_precommit_file(&self, file_name: &str, params: &GinParams) -> bool {
-        if !params.enable_precommit {
+        if !params.enable_precommit() {
             // 如果禁用pre-commit，跳过所有pre-commit相关文件
             file_name == ".pre-commit-config.yaml.tmpl" || file_name == ".pre-commit-config.yaml"
         } else {

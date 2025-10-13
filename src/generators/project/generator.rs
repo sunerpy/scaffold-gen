@@ -67,12 +67,12 @@ impl Generator for ProjectGenerator {
         self.generate_license(&params, output_path)?;
 
         // 初始化Git仓库
-        if params.enable_git {
+        if params.enable_git() {
             self.init_git_repository(output_path)?;
         }
 
         // 安装 pre-commit hooks
-        if params.enable_precommit {
+        if params.enable_precommit() {
             self.install_precommit(output_path)?;
         }
 
@@ -82,12 +82,12 @@ impl Generator for ProjectGenerator {
 
 impl ProjectGeneratorTrait for ProjectGenerator {
     fn generate_license(&mut self, params: &Self::Params, output_path: &Path) -> Result<()> {
-        let license_template = format!("licenses/{}.tmpl", params.license);
+        let license_template = format!("licenses/{}.tmpl", params.license());
 
         if !self.template_processor.template_exists(&license_template) {
             return Err(anyhow::anyhow!(
                 "License template not found: {}",
-                params.license
+                params.license()
             ));
         }
 
@@ -100,7 +100,7 @@ impl ProjectGeneratorTrait for ProjectGenerator {
         let mut context = params.to_template_context();
 
         // 如果参数中没有作者信息，尝试从Git获取
-        if params.author.is_none() {
+        if params.author().is_none() {
             if let Ok(git_author) = self.get_git_author() {
                 context.insert("author".to_string(), serde_json::json!(git_author));
             }
@@ -141,13 +141,13 @@ impl ProjectGeneratorTrait for ProjectGenerator {
             // 如果没有模板，创建基础 README
             let readme_content = format!(
                 "# {}\n\n{}\n\n## Author\n\n{}\n\n## License\n\n{}\n",
-                params.name,
+                params.name(),
                 params
-                    .description
+                    .description()
                     .as_deref()
                     .unwrap_or("No description provided"),
-                params.author.as_deref().unwrap_or("Unknown"),
-                params.license
+                params.author().as_deref().unwrap_or("Unknown"),
+                params.license()
             );
 
             let readme_file = output_path.join("README.md");

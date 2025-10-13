@@ -1,120 +1,98 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::generators::core::Parameters;
+use crate::generators::core::{BaseParams, InheritableParams};
 
-/// Go语言级别参数
+/// Go语言级别参数 - 现在继承自BaseParams
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoParams {
-    /// Go版本
-    pub version: String,
-    /// Go模块名称
-    pub module_name: String,
-    /// 是否启用Go modules
-    pub enable_modules: bool,
-    /// 是否启用CGO
-    pub enable_cgo: bool,
-    /// Go构建标签
-    pub build_tags: Vec<String>,
-    /// 是否启用vendor
-    pub enable_vendor: bool,
+    /// 基础参数
+    pub base: BaseParams,
 }
 
 impl Default for GoParams {
     fn default() -> Self {
-        Self {
-            version: "1.21".to_string(),
-            module_name: String::new(),
+        let base = BaseParams {
+            language_version: Some("1.21".to_string()),
             enable_modules: true,
             enable_cgo: false,
-            build_tags: Vec::new(),
             enable_vendor: false,
-        }
+            ..Default::default()
+        };
+
+        Self { base }
     }
 }
 
-impl Parameters for GoParams {
-    fn validate(&self) -> Result<()> {
-        if self.module_name.is_empty() {
-            return Err(anyhow::anyhow!("Go module name cannot be empty"));
-        }
-
-        // 验证Go版本格式
-        if !self.version.chars().next().unwrap_or('0').is_ascii_digit() {
-            return Err(anyhow::anyhow!(
-                "Invalid Go version format: {}",
-                self.version
-            ));
-        }
-
-        Ok(())
+impl InheritableParams for GoParams {
+    fn base_params(&self) -> &BaseParams {
+        &self.base
     }
 
-    fn to_template_context(&self) -> HashMap<String, Value> {
-        let mut context = HashMap::new();
-
-        context.insert("go_version".to_string(), json!(self.version));
-        context.insert("module_name".to_string(), json!(self.module_name));
-        context.insert("enable_modules".to_string(), json!(self.enable_modules));
-        context.insert("enable_cgo".to_string(), json!(self.enable_cgo));
-        context.insert("build_tags".to_string(), json!(self.build_tags));
-        context.insert("enable_vendor".to_string(), json!(self.enable_vendor));
-
-        // 添加Go相关的环境变量
-        context.insert("goos".to_string(), json!(std::env::consts::OS));
-        context.insert("goarch".to_string(), json!(std::env::consts::ARCH));
-
-        context
+    fn base_params_mut(&mut self) -> &mut BaseParams {
+        &mut self.base
     }
 
-    fn override_from_env(&mut self) -> Result<()> {
-        if let Ok(version) = std::env::var("GO_VERSION") {
-            self.version = version;
-        }
-
-        if let Ok(module) = std::env::var("GO_MODULE") {
-            self.module_name = module;
-        }
-
-        Ok(())
+    fn from_base(base: BaseParams) -> Self {
+        Self { base }
     }
+
+    // Go参数没有额外的参数，所有参数都在BaseParams中
 }
 
 impl GoParams {
     /// 创建新的Go参数
     pub fn new(module_name: String) -> Self {
-        Self {
-            module_name,
-            ..Default::default()
-        }
+        // 从模块名称中提取项目名称（取最后一部分）
+        let project_name = module_name
+            .split('/')
+            .next_back()
+            .unwrap_or(&module_name)
+            .to_string();
+
+        let mut base = BaseParams::new(project_name);
+
+        // 设置Go特定的默认值
+        base.language_version = Some("1.21".to_string());
+        base.enable_modules = true;
+        base.enable_cgo = false;
+        base.enable_vendor = false;
+        base.module_name = Some(module_name);
+
+        Self { base }
+    }
+
+    /// 从项目名称创建
+    pub fn from_project_name(project_name: String) -> Self {
+        Self::new(Self::infer_module_name(&project_name))
     }
 
     /// 设置Go版本
     pub fn with_version(mut self, version: String) -> Self {
-        self.version = version;
+        self.base.language_version = Some(version);
         self
     }
 
     /// 启用CGO
     #[allow(dead_code)]
     pub fn with_cgo(mut self, enable: bool) -> Self {
-        self.enable_cgo = enable;
+        self.base.enable_cgo = enable;
         self
     }
 
     /// 添加构建标签
     #[allow(dead_code)]
     pub fn with_build_tag(mut self, tag: String) -> Self {
-        self.build_tags.push(tag);
+        self.base.build_tags.push(tag);
         self
     }
 
     /// 启用vendor
     #[allow(dead_code)]
     pub fn with_vendor(mut self, enable: bool) -> Self {
-        self.enable_vendor = enable;
+        self.base.enable_vendor = enable;
         self
     }
 
@@ -125,5 +103,30 @@ impl GoParams {
             "github.com/example/{}",
             project_name.to_lowercase().replace(' ', "-")
         )
+    }
+
+    // 为了向后兼容，提供访问器方法
+    pub fn version(&self) -> Option<&String> {
+        self.base.language_version.as_ref()
+    }
+
+    pub fn module_name(&self) -> Option<&String> {
+        self.base.module_name.as_ref()
+    }
+
+    pub fn enable_modules(&self) -> bool {
+        self.base.enable_modules
+    }
+
+    pub fn enable_cgo(&self) -> bool {
+        self.base.enable_cgo
+    }
+
+    pub fn build_tags(&self) -> &Vec<String> {
+        &self.base.build_tags
+    }
+
+    pub fn enable_vendor(&self) -> bool {
+        self.base.enable_vendor
     }
 }

@@ -6,11 +6,11 @@ edition = "2024"
 description = "A modern scaffolding generator for creating project templates"
 authors = ["nkuzhangshn@gmail.com"]
 build = "build.rs"
-repository  = "https://github.com/sunerpy/scaffold-gen"  # 仓库地址
-homepage    = "https://github.com/sunerpy/scaffold-gen"  # 可选，同 repository 即可
-keywords    = ["cli", "scaffold", "scafgen"]                 # 可选，≤ 5 个
-categories  = ["command-line-utilities"]          # 可选，见 crates.io/categories
-readme      = "README.md"   
+repository = "https://github.com/sunerpy/scaffold-gen"                        # 仓库地址
+homepage = "https://github.com/sunerpy/scaffold-gen"                          # 可选，同 repository 即可
+keywords = ["cli", "scaffold", "scafgen"]                                     # 可选，≤ 5 个
+categories = ["command-line-utilities"]                                       # 可选，见 crates.io/categories
+readme = "README.md"
 [[bin]]
 name = "scafgen"
 path = "src/main.rs"

@@ -88,15 +88,15 @@ impl FrameworkGeneratorTrait for GoZeroGenerator {
         }
 
         // 根据参数决定生成哪些服务
-        if params.enable_api {
+        if params.enable_api() {
             self.generate_api_service(params, output_path)?;
         }
 
-        if params.enable_rpc {
+        if params.enable_rpc() {
             self.generate_rpc_service(params, output_path)?;
         }
 
-        if params.enable_admin {
+        if params.enable_admin() {
             self.generate_admin_service(params, output_path)?;
         }
 

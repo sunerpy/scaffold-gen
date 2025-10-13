@@ -3,9 +3,10 @@ use std::path::Path;
 use std::process::Command;
 
 use super::parameters::GoParams;
-use crate::constants::Language;
+use crate::constants::{Framework, Language};
 use crate::generators::core::{
-    Generator, LanguageGenerator as LanguageGeneratorTrait, Parameters, TemplateProcessor,
+    Generator, InheritableParams, LanguageGenerator as LanguageGeneratorTrait, Parameters,
+    TemplateProcessor,
 };
 use crate::utils::go_tools::GoTools;
 
@@ -38,42 +39,58 @@ impl GoGenerator {
     }
 
     /// 初始化Go模块
-    fn init_go_module(&mut self, params: &GoParams, output_path: &Path) -> Result<()> {
-        // 从模块名称中提取项目名称（取最后一部分）
-        let project_name = params
-            .module_name
-            .split('/')
-            .next_back()
-            .unwrap_or(&params.module_name);
+    fn init_go_module(&self, params: &GoParams, output_path: &Path) -> Result<()> {
+        // 使用项目名而不是完整的模块名
+        let project_name = &params.base_params().project_name;
 
-        // 使用go mod init命令初始化模块
-        let status = Command::new("go")
+        // 尝试运行 go mod init
+        let output = Command::new("go")
             .args(["mod", "init", project_name])
             .current_dir(output_path)
-            .status();
+            .output();
 
-        match status {
-            Ok(status) if status.success() => {
-                println!("Initialized Go module: {project_name}");
+        match output {
+            Ok(result) if result.status.success() => {
+                println!("Go module initialized: {project_name}");
+                Ok(())
             }
-            _ => {
-                // 如果go命令失败，手动创建go.mod文件
-                let go_mod_content = format!("module {}\n\ngo {}\n", project_name, params.version);
+            Ok(result) => {
+                let stderr = String::from_utf8_lossy(&result.stderr);
+                eprintln!("go mod init failed: {stderr}");
 
+                // 手动创建 go.mod 文件
+                let go_mod_content = format!("module {project_name}\n\ngo 1.21\n");
                 let go_mod_path = output_path.join("go.mod");
-                std::fs::write(&go_mod_path, go_mod_content)
-                    .context("Failed to create go.mod file")?;
+                std::fs::write(&go_mod_path, go_mod_content)?;
+                println!("Manually created go.mod file");
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("Failed to execute go mod init: {e}");
 
-                println!("Created go.mod file manually");
+                // 手动创建 go.mod 文件
+                let go_mod_content = format!("module {project_name}\n\ngo 1.21\n");
+                let go_mod_path = output_path.join("go.mod");
+                std::fs::write(&go_mod_path, go_mod_content)?;
+                println!("Manually created go.mod file");
+                Ok(())
             }
         }
-
-        Ok(())
     }
 
     /// 设置依赖
-    fn setup_dependencies(&mut self, _params: &GoParams, output_path: &Path) -> Result<()> {
-        GoTools::mod_tidy(output_path)
+    fn setup_dependencies(&self, output_path: &Path) -> Result<()> {
+        match GoTools::mod_tidy(output_path) {
+            Ok(_) => {
+                println!("Dependencies organized with go mod tidy");
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("Warning: go mod tidy failed: {e}");
+                // 不返回错误，因为这不是致命的
+                Ok(())
+            }
+        }
     }
 }
 
@@ -103,42 +120,37 @@ impl Generator for GoGenerator {
         params.validate()?;
 
         // 检查Go安装
-        match self.check_go_installation() {
-            Ok(version) => println!("Go {version} detected"),
-            Err(_) => {
-                println!("Warning: Go not found in PATH, generated files may need manual setup")
-            }
-        }
+        self.check_go_installation()?;
 
-        // 创建新的模板处理器实例避免借用冲突
+        // 处理嵌入式模板
+        let mut template_processor = TemplateProcessor::new()?;
         let template_path = self.get_template_path();
         let context = params.to_template_context();
 
-        if self.template_processor.template_exists(template_path) {
-            // 创建新的模板处理器实例避免借用冲突
-            let mut template_processor = TemplateProcessor::new()?;
-            self.render_embedded_templates(
-                &mut template_processor,
+        println!("Generating {} structure", self.name());
+
+        // 检查嵌入式模板目录是否存在
+        if crate::template_engine::embedded_template_dir_exists(template_path) {
+            template_processor.process_embedded_template_directory(
                 template_path,
                 output_path,
                 context,
-                &params,
             )?;
         } else {
-            println!(
-                "{} templates not found at: {}, generating basic structure",
+            return Err(anyhow::anyhow!(
+                "{} embedded templates not found at: {}",
                 self.name(),
                 template_path
-            );
+            ));
         }
 
-        // 执行语言级别的后处理步骤
-        // 1. 初始化 Go 模块
+        // 初始化Go模块
         self.init_go_module(&params, output_path)?;
 
-        // 2. 整理依赖
-        self.setup_dependencies(&params, output_path)?;
+        // 设置依赖
+        self.setup_dependencies(output_path)?;
 
+        println!("Go language generation completed successfully");
         Ok(())
     }
 }
@@ -150,12 +162,12 @@ impl LanguageGeneratorTrait for GoGenerator {
 
     fn setup_environment(&mut self, params: &Self::Params, output_path: &Path) -> Result<()> {
         // 初始化Go模块
-        if params.enable_modules {
+        if params.enable_modules() {
             self.init_go_module(params, output_path)?;
         }
 
         // 整理依赖
-        self.setup_dependencies(params, output_path)?;
+        self.setup_dependencies(output_path)?;
 
         Ok(())
     }
@@ -165,9 +177,12 @@ impl LanguageGeneratorTrait for GoGenerator {
         params: &Self::Params,
         output_path: &Path,
     ) -> Result<()> {
-        // 生成 go.mod 文件
-        if params.enable_modules {
-            self.init_go_module(params, output_path)?;
+        // 如果启用了Go modules，确保go.mod文件存在
+        if params.enable_modules() {
+            let go_mod_path = output_path.join("go.mod");
+            if !go_mod_path.exists() {
+                self.init_go_module(params, output_path)?;
+            }
         }
 
         Ok(())

@@ -69,7 +69,9 @@ impl GeneratorOrchestrator {
         );
 
         // 3. 创建Gin框架级别参数
-        let mut gin_params = GinParams::from_project_and_go(project_params, go_params)
+        let mut gin_params = GinParams::from_project_name(project_name.clone())
+            .with_project(project_params)
+            .with_go(go_params)
             .with_server(
                 options
                     .host

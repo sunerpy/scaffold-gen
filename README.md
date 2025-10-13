@@ -49,6 +49,7 @@ scafgen new my-project
 ```
 
 CLI将引导您完成：
+
 - 语言选择 (Go等)
 - 框架选择 (Gin、Go-Zero等)
 - 项目配置 (主机、端口、功能)
@@ -71,20 +72,26 @@ scafgen new my-gozero-app --framework go-zero
 Scaffold-Gen采用分层的生成器架构，提供清晰的职责分离：
 
 #### 1. 项目级生成器 (ProjectGenerator)
+
 负责通用项目文件的生成：
+
 - LICENSE文件生成
 - Git仓库初始化
 - Pre-commit hooks安装
 - README文件生成
 
 #### 2. 语言级生成器 (LanguageGenerator)
+
 处理特定编程语言的设置：
+
 - **GoGenerator**: Go模块初始化、依赖管理
 - 环境配置和验证
 - 语言特定的配置文件
 
 #### 3. 框架级生成器 (FrameworkGenerator)
+
 生成框架特定的代码结构：
+
 - **GinGenerator**: Gin web框架项目结构
 - **GoZeroGenerator**: Go-Zero微服务框架结构
 - 框架特定的中间件、路由、配置
@@ -107,12 +114,14 @@ Scaffold-Gen采用分层的生成器架构，提供清晰的职责分离：
 ## 快速开始
 
 1. **构建项目**:
+
    ```bash
    # 带自动二进制复制的测试构建
    $env:SCAFFOLD_COPY_BINARY="1"; cargo build
    ```
 
 2. **创建新项目**:
+
    ```bash
    ./scafgen new my-awesome-project
    ```
@@ -144,16 +153,19 @@ templates/
 ### 模板变量
 
 #### 通用变量
+
 - `{{project_name}}` - 项目名称
 - `{{author}}` - 项目作者
 - `{{license}}` - 许可证类型
 - `{{year}}` - 当前年份
 
 #### Go语言变量
+
 - `{{module_name}}` - Go模块名称
 - `{{go_version}}` - Go版本
 
 #### 框架特定变量
+
 - `{{host}}` - 服务器主机 (默认: localhost)
 - `{{port}}` - HTTP端口 (默认: 8080)
 - `{{grpc_port}}` - gRPC端口 (Go-Zero专用, 默认: 9090)
@@ -166,6 +178,7 @@ templates/
 ### 添加新的框架生成器
 
 1. **实现Generator trait**:
+
    ```rust
    pub struct MyFrameworkGenerator {
        template_processor: TemplateProcessor,
@@ -185,6 +198,7 @@ templates/
    ```
 
 2. **实现FrameworkGenerator trait**:
+
    ```rust
    impl FrameworkGenerator for MyFrameworkGenerator {
        fn framework(&self) -> &'static str {
@@ -208,6 +222,7 @@ templates/
 ### 添加新的语言支持
 
 1. **创建语言参数结构**:
+
    ```rust
    #[derive(Debug, Clone)]
    pub struct MyLanguageParams {
@@ -218,6 +233,7 @@ templates/
    ```
 
 2. **实现LanguageGenerator trait**:
+
    ```rust
    impl LanguageGenerator for MyLanguageGenerator {
        fn language(&self) -> &'static str {

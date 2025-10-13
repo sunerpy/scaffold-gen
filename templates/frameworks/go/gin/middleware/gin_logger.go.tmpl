@@ -76,7 +76,7 @@ func logBrokenPipeError(c *gin.Context, logger *zap.Logger, err any, httpRequest
 		zap.Any("error", err),
 		zap.String("request", string(httpRequest)),
 	)
-	c.Error(err.(error))
+	_ = c.Error(err.(error))
 	c.Abort()
 }
 

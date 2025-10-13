@@ -1,228 +1,197 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::generators::core::{Parameters, validation};
-use crate::generators::language::go::parameters::GoParams;
-use crate::generators::project::parameters::ProjectParams;
+use crate::generators::core::{BaseParams, InheritableParams};
+use crate::generators::language::go::GoParams;
+use crate::generators::project::ProjectParams;
 
-/// Gin框架级别参数 - 继承项目级别和语言级别参数
+/// Gin框架参数 - 现在继承自BaseParams
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GinParams {
+    /// 基础参数
+    pub base: BaseParams,
     /// 项目级别参数
     pub project: ProjectParams,
-    /// Go语言级别参数
+    /// Go语言参数
     pub go: GoParams,
-    /// 服务器主机地址
-    pub host: String,
-    /// 服务器端口
-    pub port: u16,
-    /// 是否启用Swagger文档
-    pub enable_swagger: bool,
-    /// 是否启用CORS
-    pub enable_cors: bool,
-    /// 是否启用日志中间件
-    pub enable_logging: bool,
-    /// 是否启用恢复中间件
-    pub enable_recovery: bool,
-    /// 是否启用限流中间件
-    pub enable_rate_limit: bool,
-    /// 是否启用JWT认证
-    pub enable_jwt: bool,
-    /// 是否启用数据库支持
-    pub enable_database: bool,
-    /// 数据库类型
-    pub database_type: Option<String>,
-    /// 是否启用Redis
-    pub enable_redis: bool,
-    /// 是否启用pre-commit hooks
-    pub enable_precommit: bool,
 }
 
 impl Default for GinParams {
     fn default() -> Self {
-        Self {
-            project: ProjectParams::default(),
-            go: GoParams::default(),
-            host: "localhost".to_string(),
-            port: 8080,
+        let base = BaseParams {
+            default_host: Some("127.0.0.1".to_string()),
+            default_port: Some(8080),
             enable_swagger: true,
             enable_cors: true,
+            enable_middleware: true,
             enable_logging: true,
-            enable_recovery: true,
-            enable_rate_limit: false,
-            enable_jwt: false,
-            enable_database: false,
-            database_type: None,
-            enable_redis: false,
-            enable_precommit: true,
+            ..Default::default()
+        };
+
+        Self {
+            base,
+            project: ProjectParams::default(),
+            go: GoParams::default(),
         }
     }
 }
 
-impl Parameters for GinParams {
-    fn validate(&self) -> Result<()> {
-        // 验证继承的参数
-        self.project.validate()?;
-        self.go.validate()?;
-
-        // 验证框架特定参数
-        validation::validate_host(&self.host)?;
-        validation::validate_port(self.port)?;
-
-        if self.enable_database && self.database_type.is_none() {
-            return Err(anyhow::anyhow!(
-                "Database type must be specified when database is enabled"
-            ));
-        }
-
-        Ok(())
+impl InheritableParams for GinParams {
+    fn base_params(&self) -> &BaseParams {
+        &self.base
     }
 
-    fn to_template_context(&self) -> HashMap<String, Value> {
-        let mut context = HashMap::new();
-
-        // 合并项目级别参数
-        let project_context = self.project.to_template_context();
-        context.extend(project_context);
-
-        // 合并Go语言级别参数
-        let go_context = self.go.to_template_context();
-        context.extend(go_context);
-
-        // 添加框架特定参数
-        context.insert("host".to_string(), json!(self.host));
-        context.insert("port".to_string(), json!(self.port));
-        context.insert("enable_swagger".to_string(), json!(self.enable_swagger));
-        context.insert("enable_cors".to_string(), json!(self.enable_cors));
-        context.insert("enable_logging".to_string(), json!(self.enable_logging));
-        context.insert("enable_recovery".to_string(), json!(self.enable_recovery));
-        context.insert(
-            "enable_rate_limit".to_string(),
-            json!(self.enable_rate_limit),
-        );
-        context.insert("enable_jwt".to_string(), json!(self.enable_jwt));
-        context.insert("enable_database".to_string(), json!(self.enable_database));
-        context.insert("enable_redis".to_string(), json!(self.enable_redis));
-        context.insert("enable_precommit".to_string(), json!(self.enable_precommit));
-
-        if let Some(ref db_type) = self.database_type {
-            context.insert("database_type".to_string(), json!(db_type));
-        }
-
-        // 生成服务器地址
-        context.insert(
-            "server_addr".to_string(),
-            json!(format!("{}:{}", self.host, self.port)),
-        );
-
-        context
+    fn base_params_mut(&mut self) -> &mut BaseParams {
+        &mut self.base
     }
 
-    fn override_from_env(&mut self) -> Result<()> {
-        // 继承的参数也从环境变量覆盖
-        self.project.override_from_env()?;
-        self.go.override_from_env()?;
-
-        // 框架特定的环境变量覆盖
-        if let Ok(host) = std::env::var("SERVER_HOST") {
-            self.host = host;
+    fn from_base(base: BaseParams) -> Self {
+        Self {
+            base,
+            project: ProjectParams::default(),
+            go: GoParams::default(),
         }
-
-        if let Ok(port_str) = std::env::var("SERVER_PORT") {
-            if let Ok(port) = port_str.parse::<u16>() {
-                self.port = port;
-            }
-        }
-
-        if let Ok(db_type) = std::env::var("DATABASE_TYPE") {
-            self.database_type = Some(db_type);
-            self.enable_database = true;
-        }
-
-        Ok(())
     }
+
+    // Gin参数有额外的project和go参数
 }
 
 impl GinParams {
     /// 创建新的Gin参数
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// 从项目参数和Go参数创建
-    pub fn from_project_and_go(project: ProjectParams, go: GoParams) -> Self {
+    /// 从项目名称创建
+    pub fn from_project_name(project_name: String) -> Self {
+        let mut base = BaseParams::new(project_name.clone());
+        // 设置Gin特定的默认值
+        base.default_host = Some("127.0.0.1".to_string());
+        base.default_port = Some(8080);
+        base.enable_swagger = true;
+        base.enable_cors = true;
+        base.enable_middleware = true;
+        base.enable_logging = true;
+
         Self {
-            project,
-            go,
-            ..Default::default()
+            base,
+            project: ProjectParams::from_project_name(project_name.clone()),
+            go: GoParams::from_project_name(project_name),
         }
     }
 
+    /// 设置服务器配置
+    pub fn with_server(mut self, host: String, port: u16) -> Self {
+        self.base.host = Some(host);
+        self.base.port = Some(port);
+        self
+    }
+
+    /// 设置主机地址
+    pub fn with_host(mut self, host: String) -> Self {
+        self.base.host = Some(host);
+        self
+    }
+
+    /// 设置端口
+    pub fn with_port(mut self, port: u16) -> Self {
+        self.base.port = Some(port);
+        self
+    }
+
+    /// 设置是否启用Swagger
+    pub fn with_swagger(mut self, enable_swagger: bool) -> Self {
+        self.base.enable_swagger = enable_swagger;
+        self
+    }
+
+    /// 设置是否启用CORS
+    pub fn with_cors(mut self, enable_cors: bool) -> Self {
+        self.base.enable_cors = enable_cors;
+        self
+    }
+
+    /// 设置是否启用中间件
+    pub fn with_middleware(mut self, enable_middleware: bool) -> Self {
+        self.base.enable_middleware = enable_middleware;
+        self
+    }
+
+    /// 设置是否启用日志
+    pub fn with_logging(mut self, enable_logging: bool) -> Self {
+        self.base.enable_logging = enable_logging;
+        self
+    }
+
     /// 设置项目参数
-    #[allow(dead_code)]
     pub fn with_project(mut self, project: ProjectParams) -> Self {
         self.project = project;
         self
     }
 
     /// 设置Go参数
-    #[allow(dead_code)]
     pub fn with_go(mut self, go: GoParams) -> Self {
         self.go = go;
         self
     }
 
-    /// 设置服务器配置
-    pub fn with_server(mut self, host: String, port: u16) -> Self {
-        self.host = host;
-        self.port = port;
-        self
-    }
-
-    /// 启用Swagger
-    pub fn with_swagger(mut self, enable: bool) -> Self {
-        self.enable_swagger = enable;
-        self
-    }
-
-    /// 启用CORS
-    pub fn with_cors(mut self, enable: bool) -> Self {
-        self.enable_cors = enable;
-        self
-    }
-
-    /// 启用JWT认证
-    pub fn with_jwt(mut self, enable: bool) -> Self {
-        self.enable_jwt = enable;
-        self
-    }
-
-    /// 启用数据库支持
+    /// 设置数据库类型
     pub fn with_database(mut self, db_type: String) -> Self {
-        self.enable_database = true;
-        self.database_type = Some(db_type);
+        self.base.database_type = Some(db_type);
+        self.base.enable_database = true;
         self
     }
 
-    /// 启用Redis
-    pub fn with_redis(mut self, enable: bool) -> Self {
-        self.enable_redis = enable;
+    /// 设置是否启用Redis
+    pub fn with_redis(mut self, enable_redis: bool) -> Self {
+        self.base.enable_redis = enable_redis;
         self
     }
 
-    /// 启用限流
-    #[allow(dead_code)]
-    pub fn with_rate_limit(mut self, enable: bool) -> Self {
-        self.enable_rate_limit = enable;
+    /// 设置是否启用JWT
+    pub fn with_jwt(mut self, enable_jwt: bool) -> Self {
+        self.base.enable_jwt = enable_jwt;
         self
     }
 
-    /// 启用pre-commit hooks
-    pub fn with_precommit(mut self, enable: bool) -> Self {
-        self.enable_precommit = enable;
+    /// 设置是否启用pre-commit
+    pub fn with_precommit(mut self, enable_precommit: bool) -> Self {
+        self.base.enable_precommit = enable_precommit;
         self
+    }
+
+    // 为了向后兼容，提供访问器方法
+    pub fn host(&self) -> Option<&String> {
+        self.base.host.as_ref()
+    }
+
+    pub fn port(&self) -> Option<u16> {
+        self.base.port
+    }
+
+    pub fn enable_swagger(&self) -> bool {
+        self.base.enable_swagger
+    }
+
+    pub fn enable_cors(&self) -> bool {
+        self.base.enable_cors
+    }
+
+    pub fn enable_middleware(&self) -> bool {
+        self.base.enable_middleware
+    }
+
+    pub fn enable_logging(&self) -> bool {
+        self.base.enable_logging
+    }
+
+    pub fn enable_jwt(&self) -> bool {
+        self.base.enable_jwt
+    }
+
+    pub fn enable_precommit(&self) -> bool {
+        self.base.enable_precommit
     }
 }
