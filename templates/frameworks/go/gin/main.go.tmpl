@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"{{project_name}}/core"
-	"{{project_name}}/middleware"
+	"{{project_name}}/middlewares"
 	"{{project_name}}/routers"
 
 	"go.uber.org/zap"
@@ -22,9 +22,9 @@ func initialize() {
 	logger.Info("Initializing application...")
 	// 设置中间件
 	routers.AddMiddleware(
-		middleware.CORS(),
-		middleware.GinLogger(logger),
-		middleware.GinRecovery(logger, true),
+		middlewares.CORS(),
+		middlewares.GinLogger(logger),
+		middlewares.GinRecovery(logger, true),
 	)
 	logger.Info("Initialization completed")
 }
@@ -41,7 +41,7 @@ func initialize() {
 func main() {
 	// 初始化应用
 	app := core.GetApp()
-	defer logger.Sync() //nolint:errcheck
+	defer logger.Sync()  //nolint:errcheck
 	defer sLogger.Sync() //nolint:errcheck
 	globalCtx, globalCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer globalCancel()
