@@ -1,11 +1,15 @@
 package config
 
-import "context"
+import (
+	"context"
+
+	"{{project_name}}/pkg/logging"
+)
 
 // Config 应用配置结构
 type Config struct {
-	Server ServerConfig `mapstructure:"server"`
-	Zap    ZapConfig    `mapstructure:"zap"`
+	Server ServerConfig      `mapstructure:"server"`
+	Zap    logging.ZapConfig `mapstructure:"zap"`
 }
 
 // ServerConfig 服务器配置

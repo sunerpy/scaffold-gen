@@ -1,10 +1,8 @@
-package utils
+package logging
 
 import (
 	"os"
 	"path/filepath"
-
-	"{{project_name}}/config"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -19,7 +17,7 @@ const (
 )
 
 // NewZapLogger 创建一个新的zap logger实例
-func NewZapLogger(zapConfig *config.ZapConfig) (*zap.Logger, error) {
+func NewZapLogger(zapConfig *ZapConfig) (*zap.Logger, error) {
 	if err := os.MkdirAll(zapConfig.Directory, os.ModePerm); err != nil {
 		return nil, err
 	}

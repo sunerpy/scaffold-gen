@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"{{project_name}}/config"
-	"{{project_name}}/utils"
+	"{{project_name}}/pkg/logging"
 
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -72,7 +72,7 @@ func initializeApp() (*App, error) {
 	}
 
 	// 初始化logger
-	logger, err := utils.NewZapLogger(&cfg.Zap)
+	logger, err := logging.NewZapLogger(&cfg.Zap)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize logger: %w", err)
 	}
