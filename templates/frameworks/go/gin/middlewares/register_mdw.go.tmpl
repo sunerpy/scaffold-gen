@@ -1,0 +1,11 @@
+package middlewares
+
+import (
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+)
+
+func RegisterMiddlewares(e *gin.Engine, logger *zap.Logger) {
+	AddMiddleware(CORS(), GinLogger(logger), GinRecovery(logger, true))
+	e.Use(middlewares...)
+}

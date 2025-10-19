@@ -18,12 +18,6 @@ import (
 
 type Option func(*gin.RouterGroup)
 
-var middlewares = []gin.HandlerFunc{}
-
-func AddMiddleware(middleware ...gin.HandlerFunc) {
-	middlewares = append(middlewares, middleware...)
-}
-
 var swaggerRouter func(*gin.Engine) = nil
 
 {{#if enable_swagger}}
@@ -34,7 +28,9 @@ func initSwaggerRouter() {
 }
 {{/if}}
 
-func InitRouters() *gin.Engine {
+// CreateRouter 创建 Gin 引擎（不注册路由）
+// 这样可以在注册路由之前先注册中间件
+func CreateRouter() *gin.Engine {
 	mode := os.Getenv("GIN_MODE")
 	switch mode {
 	case gin.ReleaseMode:
@@ -48,19 +44,20 @@ func InitRouters() *gin.Engine {
 	// 设置Swagger文档的BasePath
 	docs.SwaggerInfo.BasePath = "/"
 	initSwaggerRouter()
+
 {{/if}}
-	initMiddlewares(r)
+	return r
+}
+
+// RegisterAllRoutes 注册所有路由
+// 必须在中间件注册之后调用
+func RegisterAllRoutes(r *gin.Engine) {
 	registerRoutes(r)
 	registerMetrics(r)
 {{#if enable_swagger}}
 	registerSwagger(r)
 {{/if}}
 	handleNotFoundRoutes(r)
-	return r
-}
-
-func initMiddlewares(r *gin.Engine) {
-	r.Use(middlewares...)
 }
 
 func registerRoutes(r *gin.Engine) {

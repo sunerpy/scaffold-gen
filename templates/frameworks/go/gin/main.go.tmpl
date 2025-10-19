@@ -17,18 +17,6 @@ import (
 
 var logger, sLogger = core.GetLoggers()
 
-func initialize() {
-	// 初始化日志、Redis 连接等
-	logger.Info("Initializing application...")
-	// 设置中间件
-	routers.AddMiddleware(
-		middlewares.CORS(),
-		middlewares.GinLogger(logger),
-		middlewares.GinRecovery(logger, true),
-	)
-	logger.Info("Initialization completed")
-}
-
 {{#if enable_swagger}}
 // @title                      {{project_name_pascal}} API
 // @version                    {{cargo_version}}
@@ -46,10 +34,12 @@ func main() {
 	globalCtx, globalCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer globalCancel()
 	app.Config.Server.Context = globalCtx
-	initialize()
-	// 创建路由并注册
-	r := routers.InitRouters()
-
+	// 创建路由器（不包含路由）
+	r := routers.CreateRouter()
+	// 注册中间件（必须在路由注册之前）
+	middlewares.RegisterMiddlewares(r, logger)
+	// 注册所有路由
+	routers.RegisterAllRoutes(r)
 	// 创建 HTTP 服务器
 	srv := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", app.Config.Server.Host, app.Config.Server.Port),
