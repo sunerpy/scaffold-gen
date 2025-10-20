@@ -3,7 +3,7 @@ use std::path::Path;
 use std::process::Command;
 
 use super::parameters::GoParams;
-use crate::constants::{Framework, Language};
+use crate::constants::Language;
 use crate::generators::core::{
     Generator, InheritableParams, LanguageGenerator as LanguageGeneratorTrait, Parameters,
     TemplateProcessor,

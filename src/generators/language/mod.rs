@@ -1,9 +1,7 @@
 pub mod go;
-// pub mod rust;
-// pub mod python;
+pub mod python;
 
-// 具体导出避免命名冲突
-#[allow(unused_imports)]
+// 明确导出各语言生成器和参数类型
 pub use go::{GoGenerator, GoParams};
-// pub use rust::*;
-// pub use python::*;
+// Python模块暂时没有完整实现，先不导出
+// pub use python::{PythonGenerator, PythonParams};

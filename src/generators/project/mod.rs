@@ -1,5 +1,6 @@
 pub mod generator;
 pub mod parameters;
 
-pub use generator::*;
-pub use parameters::*;
+// 明确导出具体类型，避免通配符导入
+pub use generator::ProjectGenerator;
+pub use parameters::ProjectParams;
