@@ -1,0 +1,78 @@
+# {{project_name}}
+
+{{project_description}}
+
+## Requirements
+
+- Python {{python_version}}+
+- [uv](https://docs.astral.sh/uv/) - Fast Python package installer and resolver
+
+## Installation
+
+Install dependencies using uv:
+
+```bash
+uv sync
+```
+
+## Development
+
+### Running the application
+
+```bash
+uv run python -m {{package_name}}
+```
+
+### Running tests
+
+```bash
+uv run pytest
+```
+
+### Code formatting and linting
+
+This project uses [Ruff](https://docs.astral.sh/ruff/) for linting and formatting.
+
+```bash
+# Run linter
+uv run ruff check .
+
+# Run formatter
+uv run ruff format .
+```
+
+{{#if enable_precommit}}
+### Pre-commit hooks
+
+This project uses pre-commit hooks to ensure code quality.
+
+Install pre-commit hooks:
+
+```bash
+uv run pre-commit install
+```
+
+Run pre-commit on all files:
+
+```bash
+uv run pre-commit run --all-files
+```
+{{/if}}
+
+## Project Structure
+
+```
+{{project_name}}/
+├── src/
+│   └── {{package_name}}/
+│       ├── __init__.py
+│       ├── config/          # Configuration files
+│       └── utils/           # Utility functions
+├── tests/                   # Test files
+├── pyproject.toml          # Project metadata and dependencies
+└── README.md
+```
+
+## License
+
+{{license}}

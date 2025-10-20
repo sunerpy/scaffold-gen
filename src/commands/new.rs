@@ -104,7 +104,7 @@ impl NewCommand {
         let (host, port, _grpc_port) = self.configure_network_settings(&framework)?;
         let enable_precommit = self.configure_precommit()?;
         let license = self.configure_license()?;
-        let enable_swagger = self.configure_swagger(&framework).await?;
+        let enable_swagger = self.configure_swagger(&framework, &language).await?;
 
         // 确定项目路径
         let project_path = self.determine_project_path()?;
@@ -156,10 +156,15 @@ impl NewCommand {
                 }
                 Err(e) => return Err(anyhow::anyhow!("Go version check failed: {e}")),
             },
-            Language::Python => {
-                // TODO: 实现 Python 环境检查
-                println!("  Python: Environment check not implemented yet");
-            }
+            Language::Python => match env_checker.check_uv().await {
+                Ok(true) => println!("  uv: Available"),
+                Ok(false) => {
+                    return Err(anyhow::anyhow!(
+                        "uv is not available. Please install uv first: https://docs.astral.sh/uv/"
+                    ));
+                }
+                Err(e) => return Err(anyhow::anyhow!("uv check failed: {e}")),
+            },
             Language::Rust => {
                 // TODO: 实现 Rust 环境检查
                 println!("  Rust: Environment check not implemented yet");
@@ -174,13 +179,14 @@ impl NewCommand {
         if let Some(language_str) = &self.language {
             return match language_str.to_lowercase().as_str() {
                 "go" => Ok(Language::Go),
+                "python" => Ok(Language::Python),
                 _ => Err(anyhow::anyhow!(
-                    "Unsupported language: {language_str}. Supported languages: go"
+                    "Unsupported language: {language_str}. Supported languages: go, python"
                 )),
             };
         }
 
-        let languages = vec![Language::Go];
+        let languages = vec![Language::Go, Language::Python];
 
         // 当只有一个选项时，直接返回该选项
         if languages.len() == 1 {
@@ -195,7 +201,13 @@ impl NewCommand {
         Ok(selected)
     }
 
-    fn select_framework(&self, _language: &Language) -> Result<Framework> {
+    fn select_framework(&self, language: &Language) -> Result<Framework> {
+        // Python 语言目前不需要选择框架
+        if matches!(language, Language::Python) {
+            // 返回一个默认值，但实际不会使用
+            return Ok(Framework::Gin);
+        }
+
         // 如果通过命令行参数指定了框架，直接使用
         if let Some(framework_str) = &self.framework {
             return Framework::parse_from_str(framework_str).ok_or_else(|| {
@@ -296,13 +308,13 @@ impl NewCommand {
         }
     }
 
-    async fn configure_swagger(&self, framework: &Framework) -> Result<bool> {
+    async fn configure_swagger(&self, framework: &Framework, language: &Language) -> Result<bool> {
         if let Some(enable_swagger) = self.enable_swagger {
             return Ok(enable_swagger);
         }
 
-        // 只有Gin框架支持Swagger
-        if !matches!(framework, Framework::Gin) {
+        // 只有 Go 语言的 Gin 框架支持 Swagger
+        if !matches!(language, Language::Go) || !matches!(framework, Framework::Gin) {
             return Ok(false);
         }
 
@@ -380,8 +392,14 @@ impl NewCommand {
                 return Err(anyhow::anyhow!("GoZero 项目生成尚未实现"));
             }
             (Language::Python, _) => {
-                // TODO: 实现 Python 项目生成
-                return Err(anyhow::anyhow!("Python 项目生成尚未实现"));
+                orchestrator
+                    .generate_python_project(
+                        self.project_name.clone(),
+                        &params.project_path,
+                        params.license.clone(),
+                        params.enable_precommit,
+                    )
+                    .await?;
             }
             (Language::Rust, _) => {
                 // TODO: 实现 Rust 项目生成

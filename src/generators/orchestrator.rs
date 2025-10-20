@@ -6,13 +6,16 @@ use crate::generators::{
     framework::gin::{GinGenerator, GinParams},
     framework::go_zero::GoZeroGenerator,
     language::go::{GoGenerator, GoParams},
+    language::python::{PythonGenerator, PythonParams},
     project::{ProjectGenerator, ProjectParams},
 };
+use crate::utils::env_checker::EnvironmentChecker;
 
 /// 生成器编排器，负责协调三层架构的生成器
 pub struct GeneratorOrchestrator {
     project_generator: ProjectGenerator,
     go_generator: GoGenerator,
+    python_generator: PythonGenerator,
     gin_generator: GinGenerator,
     #[allow(dead_code)]
     go_zero_generator: GoZeroGenerator,
@@ -24,6 +27,7 @@ impl GeneratorOrchestrator {
         Ok(Self {
             project_generator: ProjectGenerator::new()?,
             go_generator: GoGenerator::new()?,
+            python_generator: PythonGenerator::new()?,
             gin_generator: GinGenerator::new()?,
             go_zero_generator: GoZeroGenerator::new()?,
         })
@@ -133,6 +137,57 @@ impl GeneratorOrchestrator {
             .context("Failed to execute Gin post-processing")?;
 
         println!("Gin project generation completed successfully!");
+        println!("Project created at: {}", output_path.display());
+
+        Ok(())
+    }
+
+    /// 生成完整的Python项目
+    pub async fn generate_python_project(
+        &mut self,
+        project_name: String,
+        output_path: &Path,
+        license: String,
+        enable_precommit: bool,
+    ) -> Result<()> {
+        println!("Starting Python project generation: {project_name}");
+
+        // 获取实际的 uv 版本
+        let env_checker = EnvironmentChecker::new();
+        let uv_version = env_checker
+            .get_uv_version()
+            .await
+            .unwrap_or_else(|_| "uv 0.5.11".to_string());
+
+        // 从 "uv x.y.z" 格式中提取版本号
+        let uv_version = uv_version
+            .strip_prefix("uv ")
+            .unwrap_or(&uv_version)
+            .trim()
+            .to_string();
+
+        // 1. 语言级别生成 (Python) - 使用 uv init 创建项目
+        let python_params = PythonParams::new(project_name.clone())
+            .with_version("3.11".to_string())
+            .with_uv_version(uv_version)
+            .with_precommit(enable_precommit);
+
+        self.python_generator
+            .generate(python_params, output_path)
+            .context("Failed to generate Python files")?;
+
+        // 2. 项目级别生成 - 生成 LICENSE、README 等
+        let project_params = ProjectParams::new(project_name.clone())
+            .with_license(license)
+            .with_git(true)
+            .with_precommit(enable_precommit)
+            .with_description(format!("A Python project: {project_name}"));
+
+        self.project_generator
+            .generate(project_params, output_path)
+            .context("Failed to generate project files")?;
+
+        println!("Python project generation completed successfully!");
         println!("Project created at: {}", output_path.display());
 
         Ok(())

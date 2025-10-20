@@ -193,8 +193,7 @@ impl EnvironmentChecker {
     }
 
     /// 检查uv工具是否可用
-    #[allow(dead_code)]
-    async fn check_uv(&self) -> Result<bool> {
+    pub async fn check_uv(&self) -> Result<bool> {
         match which("uv") {
             Ok(_) => {
                 let output = Command::new("uv").arg("--version").output()?;
@@ -209,5 +208,17 @@ impl EnvironmentChecker {
                 "uv command is not available. Please install uv for Python package management"
             )),
         }
+    }
+
+    /// 获取uv版本字符串
+    pub async fn get_uv_version(&self) -> Result<String> {
+        let output = Command::new("uv").arg("--version").output()?;
+
+        if !output.status.success() {
+            return Err(anyhow!("Failed to get uv version"));
+        }
+
+        let version_str = String::from_utf8_lossy(&output.stdout);
+        Ok(version_str.trim().to_string())
     }
 }

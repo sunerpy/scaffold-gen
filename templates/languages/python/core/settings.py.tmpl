@@ -1,0 +1,81 @@
+"""Application settings for {{project_name}}."""
+
+import os
+import tomllib
+from typing import Any
+
+from dotenv import load_dotenv
+from pydantic import BaseModel, Field
+
+from common.files import get_project_path
+
+BASE_DIR = get_project_path()
+
+# 自动加载项目根目录的 .env 文件
+load_dotenv(BASE_DIR.joinpath(".env"), override=False)
+env_name = os.getenv("ENV", "dev").lower()
+env_file = BASE_DIR.joinpath(f".env.{env_name}")
+load_dotenv(env_file, override=True)
+
+
+class LoggerConfig(BaseModel):
+    """Logger configuration."""
+
+    level: str = Field(default="INFO")
+    log_file: str = Field(default="app.log")
+    max_bytes: int = Field(default=10485760)  # 10 MB
+    backup_count: int = Field(default=10)
+    enable_rich: bool = Field(default=True)
+    enable_json: bool = Field(default=False)
+    enable_console: bool = Field(default=True)
+
+
+class Settings:
+    """Application settings."""
+
+    def __init__(self) -> None:
+        """Initialize settings."""
+        self.project_name = "{{project_name}}"
+        self.version = "{{project_version}}"
+        self.debug = self._get_bool_env("DEBUG", False)
+
+        # Paths
+        self.base_dir = BASE_DIR
+        self.src_dir = self.base_dir / "src"
+        self.config_dir = self.base_dir / "config"
+
+        # Load config from TOML
+        self._load_config()
+
+    def _load_config(self) -> None:
+        """Load configuration from TOML file."""
+        config_file = self.config_dir / f"config.{env_name}.toml"
+        if not config_file.exists():
+            config_file = self.config_dir / "config.example.toml"
+
+        if config_file.exists():
+            with open(config_file, "rb") as f:
+                config_data = tomllib.load(f)
+                # Load logger config
+                if "logger" in config_data:
+                    self.logger = LoggerConfig(**config_data["logger"])
+                else:
+                    self.logger = LoggerConfig()
+        else:
+            # Default logger config
+            self.logger = LoggerConfig()
+
+    @staticmethod
+    def _get_bool_env(key: str, default: bool = False) -> bool:
+        """Get boolean environment variable."""
+        value = os.getenv(key, str(default)).lower()
+        return value in ("true", "1", "yes", "on")
+
+    @staticmethod
+    def _get_env(key: str, default: Any = None) -> Any:
+        """Get environment variable with default."""
+        return os.getenv(key, default)
+
+
+# Global settings instance
+settings = Settings()

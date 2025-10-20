@@ -1,0 +1,29 @@
+from logging.handlers import QueueListener
+
+
+class LoggingState:
+    """全局日志监听器状态管理."""
+
+    _listener: QueueListener | None = None
+
+    @classmethod
+    def set_listener(cls, listener: QueueListener) -> None:
+        """Set the listener."""
+        cls._listener = listener
+
+    @classmethod
+    def get_listener(cls) -> QueueListener | None:
+        """Get the listener.
+
+        Returns:
+            QueueListener | None: The listener.
+
+        """
+        return cls._listener
+
+    @classmethod
+    def stop_listener(cls) -> None:
+        """Stop the listener."""
+        if cls._listener:
+            cls._listener.stop()
+            cls._listener = None

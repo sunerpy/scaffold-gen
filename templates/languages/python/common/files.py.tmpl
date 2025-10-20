@@ -1,0 +1,15 @@
+from pathlib import Path
+
+
+def get_project_path() -> Path:
+    """获取项目根目录路径."""
+    current_path = Path(__file__).resolve()
+    # __file__ 是 common/files.py, parents[0] 是 common/, parents[1] 是项目根目录
+    return current_path.parents[1]
+
+
+def get_log_path(file_name: str) -> Path:
+    project_path = get_project_path()
+    logs_dir = project_path.joinpath("logs")
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    return logs_dir.joinpath(file_name)

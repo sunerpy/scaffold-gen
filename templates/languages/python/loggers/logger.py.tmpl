@@ -1,0 +1,391 @@
+import atexit
+import json
+import logging
+import socket
+from datetime import UTC, datetime
+from functools import lru_cache
+from logging.handlers import QueueHandler, QueueListener, TimedRotatingFileHandler
+from pathlib import Path
+from queue import Queue
+from typing import Any, Literal, Unpack
+from zoneinfo import ZoneInfo
+
+from pydantic import BaseModel, Field, FieldValidationInfo, field_validator
+from rich.console import Console
+from rich.logging import RichHandler
+from typing_extensions import TypedDict
+
+from common.files import get_log_path
+from core import settings
+from loggers.logger_state import LoggingState
+
+# 异步日志队列
+_log_queue = Queue(-1)
+log_cfg = settings.logger
+formatter_str = "[%(asctime)s] [%(levelname)s] [%(threadName)s] [%(filename)s:%(lineno)d] %(message)s"
+
+RolloverWhen = Literal[
+    "S",  # 每秒
+    "M",  # 每分钟
+    "H",  # 每小时
+    "D",  # 每天
+    "MIDNIGHT",  # 午夜
+    "W0",
+    "W1",
+    "W2",
+    "W3",
+    "W4",
+    "W5",
+    "W6",  # 每周几
+]
+
+
+class SizeAndTimeRotatingFileHandler(TimedRotatingFileHandler):
+    """按时间 + 文件大小切割日志的 Handler."""
+
+    def __init__(
+        self,
+        filename: str,
+        when: RolloverWhen = "MIDNIGHT",
+        interval: int = 1,
+        backup_count: int = 7,
+        encoding: str | None = None,
+        *,
+        delay: bool = False,
+        utc: bool = False,
+        at_time=None,
+        max_bytes: int = 10 * 1024 * 1024,
+    ):
+        super().__init__(
+            filename,
+            when,
+            interval,
+            backup_count,
+            encoding,
+            delay,
+            utc,
+            at_time,
+        )
+        self.maxBytes = max_bytes
+
+    def shouldRollover(self, record):
+        # 首先检查时间是否应轮转（调用父类）
+        time_rollover = super().shouldRollover(record)
+
+        # 再检查大小是否超出
+        if self.stream is None:  # 日志尚未打开
+            self.stream = self._open()
+
+        self.stream.flush()
+        if Path.stat(self.baseFilename).st_size >= self.maxBytes:
+            return 1  # 尺寸超出，也需要轮转
+
+        return time_rollover
+
+
+class LoggingKwargs(TypedDict, total=False):
+    """日志参数."""
+
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+    log_file: str | None
+    max_bytes: int | None
+    backup_count: int | None
+    enable_rich: bool | None
+    enable_json: bool | None
+
+
+class LoggingConfig(BaseModel):
+    """日志配置参数."""
+
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
+        default="INFO",
+        description="日志级别.",
+    )
+
+    log_file: str | None = Field(
+        default=None,
+        description="日志文件路径 (None = 不写文件).",
+    )
+
+    max_bytes: int | None = Field(
+        default=10 * 1024 * 1024,  # 10 MB
+        ge=0,
+        description="单个日志文件最大字节数 (None = 不轮转).",
+    )
+
+    backup_count: int | None = Field(
+        default=10,
+        ge=0,
+        description="保留的轮转文件数量.",
+    )
+
+    enable_rich: bool | None = Field(
+        default=None,
+        description="是否用 Rich 控制台输出 (None = 按配置文件).",
+    )
+
+    enable_json: bool | None = Field(
+        default=None,
+        description="是否使用 JSON 输出 (None = 按配置文件).",
+    )
+
+    # 可选：校验逻辑示例
+    @field_validator("max_bytes")
+    @classmethod
+    def _bytes_and_count_must_both_exist(
+        cls,
+        v: int | None,
+        info: FieldValidationInfo,
+    ) -> int | None:
+        """如果指定了 max_bytes, backup_count 也必须 >0;反之亦然.
+
+        Args:
+            v: int | None
+            info: FieldValidationInfo
+
+        Raises:
+            ValueError: [description]
+
+        Returns:
+                int | None
+
+        """
+        if v is None and info.data.get("backup_count"):
+            msg = "指定了 max_bytes, 但 backup_count 为 None"
+            raise ValueError(msg)
+        return v
+
+
+class HostInfoFilter(logging.Filter):
+    """日志记录中添加主机名和 IP 地址."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.hostname = socket.gethostname()
+        try:
+            self.ip_address = socket.gethostbyname(self.hostname)
+        except socket.gaierror:
+            self.ip_address = "127.0.0.1"
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.hostname = self.hostname
+        record.ip_address = self.ip_address
+        return True
+
+
+RESERVED = {
+    # logging.LogRecord 自带的常见属性
+    "name",
+    "msg",
+    "args",
+    "levelname",
+    "levelno",
+    "pathname",
+    "filename",
+    "module",
+    "exc_info",
+    "exc_text",
+    "stack_info",
+    "lineno",
+    "funcName",
+    "created",
+    "msecs",
+    "relativeCreated",
+    "thread",
+    "threadName",
+    "process",
+    "processName",
+    "hostname",
+    "ip_address",
+}
+
+
+class JSONFormatter(logging.Formatter):
+    """将日志格式化为结构化 JSON 格式."""
+
+    @staticmethod
+    def format_time(
+        record: logging.LogRecord,
+    ) -> str:
+        """覆写默认时间格式 -> ISO-8601 毫秒精度.
+
+        Returns:
+            ISO-8601 毫秒精度时间字符串
+
+        """
+        dt = datetime.fromtimestamp(record.created, tz=UTC).astimezone(
+            ZoneInfo("Asia/Shanghai"),
+        )
+        return dt.isoformat(timespec="milliseconds")
+
+    def format(self, record: logging.LogRecord) -> str:
+        base: dict[str, Any] = {
+            "time": JSONFormatter.format_time(record),
+            "level": record.levelname.lower(),
+            "msg": record.getMessage(),
+            "logger": record.name,
+            "mod": record.module,
+            "func": record.funcName,
+            "line": record.lineno,
+        }
+
+        # 层级信息
+        base["thread"] = {"id": record.thread, "name": record.threadName}
+        base["process"] = {"id": record.process, "name": record.processName}
+        base["host"] = {
+            "name": getattr(record, "hostname", "unknown"),
+            "ip": getattr(record, "ip_address", "unknown"),
+        }
+
+        # 异常信息
+        if record.exc_info:
+            etype = record.exc_info[0].__name__
+            emsg = str(record.exc_info[1])
+            base["exc"] = {
+                "type": etype,
+                "msg": emsg,
+                "stack": self.formatException(record.exc_info),
+            }
+        # 把 LoggerAdapter.extra 注入的字段并入
+        base.update({k: v for k, v in record.__dict__.items() if k not in RESERVED})
+        return json.dumps(base, ensure_ascii=False)
+
+
+@lru_cache(maxsize=1)
+def init_logger() -> None:
+    """显式初始化日志,只会执行一次."""
+    configure_logging()
+
+
+def get_logger(
+    name: str | None = None,
+    extra: dict[str, Any] | None = None,
+):
+    """获取 logger,自动触发一次性初始化."""
+    init_logger()  # lru_cache 确保只调用一次
+    return _real_get_logger(name=name, extra=extra)
+
+
+def _real_get_logger(
+    name: str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> logging.Logger:
+    """获取带有主机信息和可选附加字段的 logger.
+
+    Args:
+        name: logger 名称
+        extra: 附加字段,作为上下文信息插入日志
+
+    Returns:
+        logger 实例(可能为 LoggerAdapter)
+
+    """
+    logger = logging.getLogger(name)
+    if not any(isinstance(f, HostInfoFilter) for f in logger.filters):
+        logger.addFilter(HostInfoFilter())
+
+    if extra:
+        return logging.LoggerAdapter(logger, extra)
+    return logger
+
+
+def build_console_handler(*, enable_rich: bool, enable_json: bool) -> logging.Handler:
+    if enable_json:
+        handler = logging.StreamHandler()
+        handler.setFormatter(JSONFormatter())
+        return handler
+    if enable_rich:
+        try:
+            handler = RichHandler(
+                console=Console(stderr=True),
+                rich_tracebacks=True,
+                tracebacks_show_locals=True,  # 显示局部变量
+                show_path=True,  # 显示调用文件和行号
+                show_time=True,
+                markup=True,
+                log_time_format="[%Y-%m-%d %H:%M:%S.%f]",
+            )
+        except ImportError:
+            handler = logging.StreamHandler()
+            handler.setFormatter(logging.Formatter(formatter_str))
+        return handler
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(formatter_str))
+    return handler
+
+
+def configure_logging(
+    config: LoggingConfig | None = None,
+    **kwargs: Unpack[LoggingKwargs],
+) -> None:
+    """初始化日志系统,支持文件、JSON、Rich 输出.
+
+    Args:
+        config (LoggingConfig | None, optional): 日志配置. Defaults to None.
+        **kwargs: 日志配置参数.
+        config (LoggingConfig): 日志配置
+            @config.level: 日志级别
+            @config.log_file: 日志文件路径(为空时使用配置默认路径)
+            @config.max_bytes: 文件轮转最大大小(单位字节)
+            @config.backup_count: 最多保留多少个历史文件
+            @config.enable_rich: 是否启用 Rich 控制台格式
+            @config.enable_json: 是否启用 JSON 格式(为空时自动判断)
+
+    Raises:
+        ValueError: 日志配置参数错误
+
+    """
+    if config and kwargs:
+        msg = "不能同时传入 config 对象和其他关键字参数"
+        raise ValueError(msg)
+
+    config = config or LoggingConfig(**kwargs)
+    level = config.level or log_cfg.level
+    log_file = config.log_file or log_cfg.log_file
+    max_bytes = config.max_bytes or log_cfg.max_bytes
+    backup_count = config.backup_count or log_cfg.backup_count
+    enable_rich = (
+        config.enable_rich if config.enable_rich is not None else log_cfg.enable_rich
+    )
+    enable_json = (
+        config.enable_json if config.enable_json is not None else log_cfg.enable_json
+    )
+    # 控制台 handler 创建
+    console_handler = build_console_handler(
+        enable_rich=enable_rich,
+        enable_json=enable_json,
+    )
+    handlers: list[logging.Handler] = [console_handler]
+    # 若未指定 log_file,则使用默认配置路径
+    log_file_path = get_log_path(log_file)
+    file_handler = SizeAndTimeRotatingFileHandler(
+        filename=log_file_path,
+        when="MIDNIGHT",
+        interval=1,
+        backup_count=backup_count or log_cfg.backup_count,
+        max_bytes=max_bytes or log_cfg.max_bytes,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(JSONFormatter())
+    handlers.append(file_handler)
+
+    # 设置异步日志监听器
+    listener = QueueListener(_log_queue, *handlers, respect_handler_level=True)
+    listener.start()
+    LoggingState.set_listener(listener)
+
+    # 配置 root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    root_logger.addHandler(QueueHandler(_log_queue))
+    # 针对特定模块的日志级别设置 logging.getLogger("asyncssh").setLevel("WARNING")
+
+    # 程序退出时清理日志资源
+    atexit.register(stop_logging)
+
+
+def stop_logging() -> None:
+    """停止日志监听器并关闭日志系统."""
+    LoggingState.stop_listener()
+    logging.shutdown()

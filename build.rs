@@ -7,10 +7,11 @@ fn main() {
     // 重新构建条件
     println!("cargo:rerun-if-changed=src/");
     println!("cargo:rerun-if-changed=Cargo.toml");
+    println!("cargo:rerun-if-changed=templates/");
 
     // 设置构建后钩子环境变量
     println!("cargo:rustc-env=ENABLE_BINARY_COPY=1");
-    // 如果设置了环境变量，则在构建后复制二进制文
+    // 如果设置了环境变量,则在构建后复制二进制文
     // if env::var("SCAFFOLD_COPY_BINARY").unwrap_or_default() == "1" {
     copy_binary_to_root();
     // }

@@ -1,0 +1,108 @@
+import asyncio
+from asyncio import Task
+from collections.abc import Coroutine
+from contextlib import suppress
+
+
+class AsyncCancelContext:
+    """支持异步上下文管理的取消控制器."""
+
+    def __init__(self) -> None:
+        self._event = asyncio.Event()
+        self._tasks: set[asyncio.Task] = set()
+        self._lock = asyncio.Lock()  # 保护任务集合的锁
+        self._internal_tasks: set[asyncio.Task] = set()  # 存储所有内部任务
+
+    async def __aenter__(self) -> "AsyncCancelContext":
+        """创建一个异步上下文管理器."""
+        return self
+
+    async def __aexit__(self, *exc_info) -> None:
+        """退出异步上下文管理器."""
+        await self.cancel_and_wait()
+
+    def cancel(self) -> Task[None] | None:
+        """触发取消信号并取消所有已注册任务."""
+        if self._event.is_set():
+            return
+        self._event.set()
+
+        async def _cancel_tasks():
+            async with self._lock:
+                tasks = self._tasks.copy()
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+
+        cancel_task = asyncio.create_task(_cancel_tasks())
+        self._track_internal_task(cancel_task)
+
+    def is_cancelled(self) -> bool:
+        return self._event.is_set()
+
+    async def wait(self) -> None:
+        await self._event.wait()
+
+    async def _safe_remove_task(self, task: asyncio.Task) -> None:
+        """安全地从任务集合中移除任务."""
+        async with self._lock:
+            if task in self._tasks:
+                self._tasks.discard(task)
+
+    def _track_internal_task(self, task: asyncio.Task) -> None:
+        """跟踪内部任务并添加清理回调."""
+
+        async def _remove_internal_task():
+            async with self._lock:
+                if task in self._internal_tasks:
+                    self._internal_tasks.discard(task)
+
+        self._internal_tasks.add(task)
+        task.add_done_callback(lambda _: asyncio.create_task(_remove_internal_task()))
+
+    async def _register_task(self, task: asyncio.Task) -> None:
+        """内部任务注册方法."""
+        if self.is_cancelled():
+            if not task.done():
+                task.cancel()
+            return
+
+        async with self._lock:
+            self._tasks.add(task)
+
+        def _remove_task(_):
+            # 创建并存储清理任务
+            cleanup_task = asyncio.create_task(self._safe_remove_task(task))
+            self._track_internal_task(cleanup_task)
+
+        task.add_done_callback(_remove_task)
+
+    def spawn(self, coro: Coroutine, name: str | None = None) -> asyncio.Task:
+        """创建并注册任务(推荐使用此方法)."""
+        task = asyncio.create_task(coro, name=name)
+
+        # 创建并存储注册任务
+        reg_task = asyncio.create_task(self._register_task(task))
+        self._track_internal_task(reg_task)
+
+        return task
+
+    # 保持旧方法名兼容性
+    create_task = spawn
+
+    async def cancel_and_wait(self, timeout: float | None = 5) -> None:
+        """取消任务并等待完成(可自定义超时)."""
+        self.cancel()
+
+        async with self._lock:
+            tasks = self._tasks.copy()
+
+        if not tasks:
+            return
+
+        # 安全等待任务完成
+        with suppress(asyncio.CancelledError, TimeoutError):
+            await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=timeout,
+            )

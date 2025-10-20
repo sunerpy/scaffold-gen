@@ -1,0 +1,12 @@
+repos:
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    # uv version.
+    rev: {{uv_version}}
+    hooks:
+      - id: uv-lock
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v{{ruff_version}}
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
