@@ -1,5 +1,6 @@
 pub mod go;
 pub mod python;
+pub mod rust;
 
 // 明确导出各语言生成器和参数类型
 // Python模块暂时没有完整实现，先不导出

@@ -7,6 +7,7 @@ use crate::generators::{
     framework::go_zero::GoZeroGenerator,
     language::go::{GoGenerator, GoParams},
     language::python::{PythonGenerator, PythonParams},
+    language::rust::{RustGenerator, RustParams},
     project::{ProjectGenerator, ProjectParams},
 };
 use crate::utils::env_checker::EnvironmentChecker;
@@ -16,6 +17,7 @@ pub struct GeneratorOrchestrator {
     project_generator: ProjectGenerator,
     go_generator: GoGenerator,
     python_generator: PythonGenerator,
+    rust_generator: RustGenerator,
     gin_generator: GinGenerator,
     #[allow(dead_code)]
     go_zero_generator: GoZeroGenerator,
@@ -28,6 +30,7 @@ impl GeneratorOrchestrator {
             project_generator: ProjectGenerator::new()?,
             go_generator: GoGenerator::new()?,
             python_generator: PythonGenerator::new()?,
+            rust_generator: RustGenerator::new()?,
             gin_generator: GinGenerator::new()?,
             go_zero_generator: GoZeroGenerator::new()?,
         })
@@ -188,6 +191,41 @@ impl GeneratorOrchestrator {
             .context("Failed to generate project files")?;
 
         println!("Python project generation completed successfully!");
+        println!("Project created at: {}", output_path.display());
+
+        Ok(())
+    }
+
+    /// 生成完整的Rust项目
+    pub fn generate_rust_project(
+        &mut self,
+        project_name: String,
+        output_path: &Path,
+        license: String,
+        enable_precommit: bool,
+    ) -> Result<()> {
+        println!("Starting Rust project generation: {project_name}");
+
+        // 1. 语言级别生成 (Rust) - 使用 cargo init 创建项目
+        let rust_params =
+            RustParams::new(project_name.clone()).with_rust_version("1.75".to_string());
+
+        self.rust_generator
+            .generate(rust_params, output_path)
+            .context("Failed to generate Rust files")?;
+
+        // 2. 项目级别生成 - 生成 LICENSE、README 等
+        let project_params = ProjectParams::new(project_name.clone())
+            .with_license(license)
+            .with_git(true)
+            .with_precommit(enable_precommit)
+            .with_description(format!("A Rust project: {project_name}"));
+
+        self.project_generator
+            .generate(project_params, output_path)
+            .context("Failed to generate project files")?;
+
+        println!("Rust project generation completed successfully!");
         println!("Project created at: {}", output_path.display());
 
         Ok(())

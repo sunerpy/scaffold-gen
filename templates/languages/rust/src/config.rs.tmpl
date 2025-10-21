@@ -1,0 +1,118 @@
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use std::env;
+
+/// 应用配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppConfig {
+    pub logger: Logger,
+}
+
+/// 日志配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Logger {
+    pub level: String,
+    pub directory: String,
+    pub file_name: String,
+    pub enable_console: bool,
+    pub enable_file: bool,
+    /// 日志切割策略: "daily", "hourly", "never"
+    #[serde(default = "default_rotation")]
+    pub rotation: String,
+    /// 最大保留天数 (0 表示不限制)
+    #[serde(default)]
+    pub max_age_days: u32,
+    /// 最大备份数量 (0 表示不限制)
+    #[serde(default)]
+    pub max_backups: u32,
+    /// 是否压缩旧日志
+    #[serde(default)]
+    pub compress: bool,
+    /// 控制台是否显示文件名和行号
+    #[serde(default = "default_true")]
+    pub show_location: bool,
+}
+
+fn default_rotation() -> String {
+    "daily".to_string()
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl AppConfig {
+    /// 加载配置文件
+    pub fn load() -> Result<Self> {
+        // 获取环境变量,默认为 dev
+        let env = env::var("APP_ENV").unwrap_or_else(|_| "dev".to_string());
+        
+        // 构建配置文件路径
+        let config_file = format!("config/config.{env}.toml");
+        
+        // 如果指定环境的配置文件不存在,尝试使用 example 配置
+        let config_path = if std::path::Path::new(&config_file).exists() {
+            config_file
+        } else {
+            "config/config.example.toml".to_string()
+        };
+
+        // 读取配置文件
+        let config = config::Config::builder()
+            .add_source(config::File::with_name(&config_path.replace(".toml", "")))
+            .add_source(
+                config::Environment::with_prefix("APP")
+                    .separator("_")
+                    .try_parsing(true),
+            )
+            .build()
+            .context(format!("Failed to load config from {config_path}"))?;
+
+        // 反序列化配置
+        let app_config: AppConfig = config
+            .try_deserialize()
+            .context("Failed to deserialize config")?;
+
+        Ok(app_config)
+    }
+
+    /// 获取当前环境
+    pub fn env(&self) -> String {
+        env::var("APP_ENV").unwrap_or_else(|_| "dev".to_string())
+    }
+
+    /// 获取项目名称(从 Cargo.toml)
+    pub fn project_name(&self) -> &str {
+        env!("CARGO_PKG_NAME")
+    }
+
+    /// 获取项目版本(从 Cargo.toml)
+    pub fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    /// 获取日志级别
+    pub fn log_level(&self) -> &str {
+        &self.logger.level
+    }
+
+    /// 是否启用控制台输出
+    pub fn enable_console(&self) -> bool {
+        self.logger.enable_console
+    }
+
+    /// 是否启用文件输出
+    pub fn enable_file(&self) -> bool {
+        self.logger.enable_file
+    }
+
+    /// 获取日志目录
+    pub fn log_directory(&self) -> &str {
+        &self.logger.directory
+    }
+
+    /// 获取日志文件名
+    pub fn log_file_name(&self) -> &str {
+        &self.logger.file_name
+    }
+}

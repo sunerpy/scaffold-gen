@@ -1,0 +1,43 @@
+mod config;
+mod logger;
+
+use tracing::{debug, error, info, warn};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. 加载配置
+    let config = config::AppConfig::load()?;
+    
+    // 2. 初始化日志系统
+    logger::init(&config)?;
+    
+    // 3. 应用启动信息
+    info!("Starting {}...", config.project_name());
+    info!("Version: {}", config.version());
+    info!("Environment: {}", config.env());
+    info!("Log level: {}", config.log_level());
+
+    // 4. 测试不同级别的日志输出
+    debug!("This is a debug message - detailed information for debugging");
+    info!("This is an info message - general information about application flow");
+    warn!("This is a warning message - something unexpected but not critical");
+    
+    // 5. 模拟一些应用逻辑
+    info!("Application is running...");
+    
+    // 测试结构化日志
+    info!(
+        user = "system",
+        action = "startup",
+        status = "success",
+        "Application started successfully"
+    );
+
+    // 6. 演示错误日志（不会真正退出）
+    error!("This is an error message example - something went wrong");
+
+    // 7. 应用结束
+    info!("Application completed successfully");
+    info!("Check logs in '{}' directory", config.log_directory());
+
+    Ok(())
+}

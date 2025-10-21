@@ -101,7 +101,7 @@ impl NewCommand {
         let framework = self.select_framework(&language)?;
 
         // 配置选项
-        let (host, port, _grpc_port) = self.configure_network_settings(&framework)?;
+        let (host, port, _grpc_port) = self.configure_network_settings(&framework, &language)?;
         let enable_precommit = self.configure_precommit()?;
         let license = self.configure_license()?;
         let enable_swagger = self.configure_swagger(&framework, &language).await?;
@@ -165,10 +165,15 @@ impl NewCommand {
                 }
                 Err(e) => return Err(anyhow::anyhow!("uv check failed: {e}")),
             },
-            Language::Rust => {
-                // TODO: 实现 Rust 环境检查
-                println!("  Rust: Environment check not implemented yet");
-            }
+            Language::Rust => match env_checker.check_cargo().await {
+                Ok(true) => println!("  Cargo: Available"),
+                Ok(false) => {
+                    return Err(anyhow::anyhow!(
+                        "Cargo is not available. Please install Rust first: https://rustup.rs/"
+                    ));
+                }
+                Err(e) => return Err(anyhow::anyhow!("Cargo check failed: {e}")),
+            },
         }
 
         Ok(())
@@ -180,13 +185,14 @@ impl NewCommand {
             return match language_str.to_lowercase().as_str() {
                 "go" => Ok(Language::Go),
                 "python" => Ok(Language::Python),
+                "rust" => Ok(Language::Rust),
                 _ => Err(anyhow::anyhow!(
-                    "Unsupported language: {language_str}. Supported languages: go, python"
+                    "Unsupported language: {language_str}. Supported languages: go, python, rust"
                 )),
             };
         }
 
-        let languages = vec![Language::Go, Language::Python];
+        let languages = vec![Language::Go, Language::Python, Language::Rust];
 
         // 当只有一个选项时，直接返回该选项
         if languages.len() == 1 {
@@ -202,8 +208,8 @@ impl NewCommand {
     }
 
     fn select_framework(&self, language: &Language) -> Result<Framework> {
-        // Python 语言目前不需要选择框架
-        if matches!(language, Language::Python) {
+        // Python 和 Rust 语言目前不需要选择框架
+        if matches!(language, Language::Python | Language::Rust) {
             // 返回一个默认值，但实际不会使用
             return Ok(Framework::Gin);
         }
@@ -227,7 +233,16 @@ impl NewCommand {
         Ok(selected)
     }
 
-    fn configure_network_settings(&self, framework: &Framework) -> Result<(String, u16, u16)> {
+    fn configure_network_settings(
+        &self,
+        framework: &Framework,
+        language: &Language,
+    ) -> Result<(String, u16, u16)> {
+        // Rust 和 Python 语言不需要网络配置
+        if matches!(language, Language::Rust | Language::Python) {
+            return Ok(("0.0.0.0".to_string(), 8080, 9000));
+        }
+
         println!("Configuring network settings...");
 
         let host = if let Some(ref h) = self.host {
@@ -402,8 +417,12 @@ impl NewCommand {
                     .await?;
             }
             (Language::Rust, _) => {
-                // TODO: 实现 Rust 项目生成
-                return Err(anyhow::anyhow!("Rust 项目生成尚未实现"));
+                orchestrator.generate_rust_project(
+                    self.project_name.clone(),
+                    &params.project_path,
+                    params.license.clone(),
+                    params.enable_precommit,
+                )?;
             }
         }
 

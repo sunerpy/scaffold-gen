@@ -223,13 +223,12 @@ pub fn get_embedded_template_files(relative_path: &str) -> Result<Vec<String>> {
     if relative_path.is_empty() {
         Ok(all_files)
     } else {
+        let normalized_prefix = normalize_path(relative_path);
+        let prefix_with_slash = format!("{normalized_prefix}/");
+
         let filtered_files: Vec<String> = all_files
             .into_iter()
-            .filter(|file| {
-                file.starts_with(relative_path)
-                    && file.len() > relative_path.len()
-                    && file.chars().nth(relative_path.len()) == Some('/')
-            })
+            .filter(|file| file.starts_with(&prefix_with_slash))
             .collect();
         Ok(filtered_files)
     }

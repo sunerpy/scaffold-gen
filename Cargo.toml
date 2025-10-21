@@ -1,6 +1,6 @@
 [package]
 name = "scaffold-gen"
-version = "0.0.5"
+version = "0.0.6"
 license = "MIT"
 edition = "2024"
 description = "A modern scaffolding generator for creating project templates"

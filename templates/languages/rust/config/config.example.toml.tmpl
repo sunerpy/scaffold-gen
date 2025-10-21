@@ -1,0 +1,16 @@
+[logger]
+level = "info"
+directory = "logs"
+file_name = "app.log"
+enable_console = true
+enable_file = true
+# 日志切割策略: "daily" (按天), "hourly" (按小时), "never" (不切割)
+rotation = "daily"
+# 最大保留天数 (0 表示不限制)
+max_age_days = 7
+# 最大备份数量 (0 表示不限制)
+max_backups = 10
+# 是否压缩旧日志
+compress = false
+# 控制台是否显示文件名和行号
+show_location = true

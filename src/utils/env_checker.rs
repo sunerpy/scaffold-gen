@@ -221,4 +221,31 @@ impl EnvironmentChecker {
         let version_str = String::from_utf8_lossy(&output.stdout);
         Ok(version_str.trim().to_string())
     }
+
+    /// 检查 Cargo 是否可用
+    pub async fn check_cargo(&self) -> Result<bool> {
+        match which("cargo") {
+            Ok(_) => {
+                // 验证cargo命令是否可以正常执行
+                match Command::new("cargo").args(["--version"]).output() {
+                    Ok(output) => Ok(output.status.success()),
+                    Err(_) => Ok(false),
+                }
+            }
+            Err(_) => Ok(false),
+        }
+    }
+
+    /// 获取Cargo版本字符串
+    #[allow(dead_code)]
+    pub async fn get_cargo_version(&self) -> Result<String> {
+        let output = Command::new("cargo").arg("--version").output()?;
+
+        if !output.status.success() {
+            return Err(anyhow!("Failed to get cargo version"));
+        }
+
+        let version_str = String::from_utf8_lossy(&output.stdout);
+        Ok(version_str.trim().to_string())
+    }
 }

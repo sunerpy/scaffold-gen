@@ -1,0 +1,194 @@
+# {{project_name}}
+
+A Rust project generated with scaffold-gen.
+
+## Features
+
+- ✅ Configuration management with TOML files
+- ✅ Environment-based configuration (dev/test/prod)
+- ✅ Tracing-based logging system
+- ✅ Dual output: console (pretty) + file (JSON)
+- ✅ Daily log rotation
+- ✅ Configurable log levels and formats
+
+## Prerequisites
+
+- Rust 1.75 or later
+- Cargo
+
+## Project Structure
+
+```
+{{project_name}}/
+├── src/
+│   ├── main.rs          # Application entry point
+│   ├── config.rs        # Configuration management
+│   └── logger.rs        # Logging configuration
+├── config/              # Configuration files
+│   ├── config.example.toml  # Example configuration
+│   ├── config.dev.toml      # Development environment
+│   ├── config.test.toml     # Test environment
+│   └── config.prod.toml     # Production environment
+├── logs/                # Log files (created at runtime)
+├── Cargo.toml           # Project dependencies
+└── README.md            # This file
+```
+
+## Configuration
+
+The application uses TOML configuration files located in the `config/` directory.
+
+### Configuration Files
+
+- `config.dev.toml` - Development environment (default)
+- `config.test.toml` - Test environment
+- `config.prod.toml` - Production environment
+- `config.example.toml` - Example/fallback configuration
+
+### Configuration Structure
+
+```toml
+[logger]
+level = "debug"              # trace, debug, info, warn, error
+directory = "logs"
+file_name = "app.log"
+enable_console = true
+enable_file = true
+```
+
+**Note:** Project name and version are automatically read from `Cargo.toml`. Environment is determined by the config file name or `APP_ENV` environment variable.
+
+### Environment Selection
+
+Set the `APP_ENV` environment variable to choose the configuration:
+
+```bash
+# Use development config (default)
+cargo run
+
+# Use test config
+APP_ENV=test cargo run
+
+# Use production config
+APP_ENV=prod cargo run
+```
+
+### Environment Variable Override
+
+You can override any configuration value using environment variables with the `APP_` prefix:
+
+```bash
+# Override log level
+APP_LOGGER_LEVEL=trace cargo run
+
+# Override console output
+APP_LOGGER_ENABLE_CONSOLE=false cargo run
+```
+
+## Getting Started
+
+### Build
+
+```bash
+cargo build
+```
+
+### Run
+
+```bash
+# Run with default configuration (dev)
+cargo run
+
+# Run with specific environment
+APP_ENV=prod cargo run
+
+# Run with custom log level
+RUST_LOG=debug cargo run
+```
+
+### Development
+
+```bash
+# Run with debug logging
+RUST_LOG=debug cargo run
+
+# Run tests
+cargo test
+
+# Format code
+cargo fmt
+
+# Lint code
+cargo clippy
+
+# Update dependencies
+cargo update
+```
+
+## Logging
+
+The project uses `tracing` for structured logging with configurable output.
+
+### Log Levels
+
+Configure log level in `config/*.toml` or use environment variables:
+
+```bash
+# Via config file
+[logger]
+level = "debug"
+
+# Via RUST_LOG environment variable (takes precedence)
+RUST_LOG=debug cargo run
+
+# Via APP_LOGGER_LEVEL environment variable
+APP_LOGGER_LEVEL=trace cargo run
+```
+
+Available levels: `trace`, `debug`, `info`, `warn`, `error`
+
+### Output Formats
+
+**Console Output:**
+- `pretty` - Human-readable format with colors (default for dev)
+- `json` - Structured JSON format
+
+**File Output:**
+- `json` - Structured JSON format (default, recommended)
+- `pretty` - Human-readable format
+
+### Log Files
+
+- Location: `logs/` directory (configurable)
+- Rotation: Daily rotation
+- Format: JSON for easy parsing and analysis
+- File naming: `app.log.YYYY-MM-DD`
+
+### Example Log Output
+
+**Console (pretty format):**
+```
+2024-01-20T10:30:45.123456Z  INFO main: Starting {{project_name}}...
+2024-01-20T10:30:45.234567Z  INFO main: Application running successfully
+```
+
+**File (JSON format):**
+```json
+{"timestamp":"2024-01-20T10:30:45.123456Z","level":"INFO","target":"main","fields":{"message":"Starting {{project_name}}..."}}
+```
+
+## Dependencies
+
+Key dependencies used in this project:
+
+- `tracing` - Structured logging framework
+- `tracing-subscriber` - Log formatting and output
+- `tracing-appender` - File output and rotation
+- `config` - Configuration management
+- `serde` - Serialization/deserialization
+- `tokio` - Async runtime
+- `anyhow` - Error handling
+
+## License
+
+{{license}}

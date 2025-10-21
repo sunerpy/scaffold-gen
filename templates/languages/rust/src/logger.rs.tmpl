@@ -1,0 +1,140 @@
+use crate::config::AppConfig;
+use std::io;
+use tracing_appender::{non_blocking, rolling::{self, RollingFileAppender, Rotation}};
+use tracing_subscriber::{
+    EnvFilter, Layer,
+    fmt::{self, format::FmtSpan, time::ChronoUtc},
+    layer::SubscriberExt,
+    util::SubscriberInitExt,
+};
+
+/// 获取日志级别配置
+fn get_log_level(config: &AppConfig) -> EnvFilter {
+    EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(config.log_level()))
+}
+
+/// 根据配置获取日志切割策略
+fn get_rotation(config: &AppConfig) -> Rotation {
+    match config.logger.rotation.as_str() {
+        "hourly" => Rotation::HOURLY,
+        "daily" => Rotation::DAILY,
+        "never" => Rotation::NEVER,
+        _ => Rotation::DAILY, // 默认按天切割
+    }
+}
+
+/// 创建文件 appender
+fn create_file_appender(config: &AppConfig) -> RollingFileAppender {
+    let rotation = get_rotation(config);
+    rolling::RollingFileAppender::new(
+        rotation,
+        config.log_directory(),
+        config.log_file_name(),
+    )
+}
+
+{{{{raw}}}}/// 宏：创建层的通用配置
+macro_rules! create_layer {
+    ($writer:expr, $log_level:expr, $show_location:expr, json) => {
+        fmt::layer()
+            .json()
+            .with_writer($writer)
+            .with_timer(ChronoUtc::rfc_3339())
+            .with_target(true)
+            .with_thread_ids(true)
+            .with_thread_names(true)
+            .with_filter($log_level)
+    };
+    ($writer:expr, $log_level:expr, $show_location:expr, pretty) => {{
+        let layer = fmt::layer()
+            .with_writer($writer)
+            .with_timer(ChronoUtc::rfc_3339())
+            .with_target(true)
+            .with_thread_ids(false)
+            .with_ansi(true)
+            .with_level(true)
+            .with_span_events(FmtSpan::NONE);
+        
+        if $show_location {
+            layer
+                .with_line_number(true)
+                .with_file(true)
+                .with_filter($log_level)
+        } else {
+            layer
+                .with_line_number(false)
+                .with_file(false)
+                .with_filter($log_level)
+        }
+    }};
+}{{{{/raw}}}}
+
+/// 初始化日志系统 - 根据配置动态启用输出
+pub fn init(config: &AppConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let enable_console = config.enable_console();
+    let enable_file = config.enable_file();
+    
+    match (enable_console, enable_file) {
+        (true, true) => init_dual(config),
+        (true, false) => init_console_only(config),
+        (false, true) => init_file_only(config),
+        (false, false) => {
+            eprintln!("Warning: Both console and file logging are disabled!");
+            Ok(())
+        }
+    }
+}
+
+/// 初始化日志系统 - 双输出模式
+#[allow(dead_code)]
+fn init_dual(config: &AppConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let log_level = get_log_level(config);
+    let show_location = config.logger.show_location;
+    
+    std::fs::create_dir_all(config.log_directory())?;
+    let (console_writer, console_guard) = non_blocking(io::stdout());
+    
+    let file_appender = create_file_appender(config);
+    let (file_writer, file_guard) = non_blocking(file_appender);
+    
+    let console_layer = create_layer!(console_writer, log_level.clone(), show_location, pretty);
+    let file_layer = create_layer!(file_writer, log_level, false, json);
+
+    tracing_subscriber::registry()
+        .with(console_layer)
+        .with(file_layer)
+        .init();
+
+    std::mem::forget(console_guard);
+    std::mem::forget(file_guard);
+    Ok(())
+}
+
+/// 仅控制台输出
+#[allow(dead_code)]
+pub fn init_console_only(config: &AppConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let log_level = get_log_level(config);
+    let show_location = config.logger.show_location;
+    let (writer, guard) = non_blocking(io::stdout());
+    let layer = create_layer!(writer, log_level, show_location, pretty);
+    
+    tracing_subscriber::registry().with(layer).init();
+    std::mem::forget(guard);
+    Ok(())
+}
+
+/// 仅文件输出
+#[allow(dead_code)]
+pub fn init_file_only(config: &AppConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let log_level = get_log_level(config);
+    std::fs::create_dir_all(config.log_directory())?;
+    
+    let file_appender = create_file_appender(config);
+    let (writer, guard) = non_blocking(file_appender);
+    let layer = create_layer!(writer, log_level, false, json);
+    
+    tracing_subscriber::registry().with(layer).init();
+    std::mem::forget(guard);
+    Ok(())
+}
