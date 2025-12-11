@@ -1,0 +1,88 @@
+import { createI18n } from "vue-i18n";
+import type { App } from "vue";
+
+// 语言包
+const messages = {
+  zh: {
+    common: {
+      dashboard: "主页",
+      settings: "设置",
+      theme: "主题",
+      language: "语言",
+      save: "保存",
+      cancel: "取消",
+      confirm: "确认",
+      loading: "加载中...",
+      success: "成功",
+      error: "错误",
+      warning: "警告"
+    },
+    settings: {
+      title: "设置",
+      appearance: "外观",
+      themeLight: "明亮",
+      themeDark: "深色",
+      themeSystem: "跟随系统",
+      fontSize: "字体大小",
+      languageZh: "简体中文",
+      languageEn: "English"
+    }
+  },
+  en: {
+    common: {
+      dashboard: "Dashboard",
+      settings: "Settings",
+      theme: "Theme",
+      language: "Language",
+      save: "Save",
+      cancel: "Cancel",
+      confirm: "Confirm",
+      loading: "Loading...",
+      success: "Success",
+      error: "Error",
+      warning: "Warning"
+    },
+    settings: {
+      title: "Settings",
+      appearance: "Appearance",
+      themeLight: "Light",
+      themeDark: "Dark",
+      themeSystem: "System",
+      fontSize: "Font Size",
+      languageZh: "简体中文",
+      languageEn: "English"
+    }
+  }
+};
+
+// 创建 i18n 实例
+const i18n = createI18n({
+  legacy: false,
+  locale: "zh",
+  fallbackLocale: "en",
+  messages
+});
+
+// 设置语言
+export const setLocale = (locale: "zh" | "en") => {
+  i18n.global.locale.value = locale;
+};
+
+// 获取当前语言
+export const getLocale = () => {
+  return i18n.global.locale.value;
+};
+
+// 翻译函数
+export const $t = (key: string) => {
+  return i18n.global.t(key);
+};
+
+// Vue 插件
+export const useI18n = {
+  install(app: App) {
+    app.use(i18n);
+  }
+};
+
+export default i18n;

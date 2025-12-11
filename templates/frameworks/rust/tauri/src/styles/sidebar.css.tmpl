@@ -1,0 +1,270 @@
+/* Sidebar组件样式 */
+
+/* 侧栏触发区域 */
+.sidebar-trigger-area {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 200;
+  height: 100vh;
+  width: 5px;
+  background: transparent;
+}
+
+/* 主侧栏容器 */
+.sidebar {
+  position: relative;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  backdrop-filter: blur(25px);
+  transition: all 0.3s ease-in-out;
+  color: var(--text-primary);
+  box-shadow: 4px 0 30px rgba(0, 0, 0, 0.12);
+}
+
+/* 深色模式侧栏样式 */
+.dark .sidebar {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 50%, #1a1a1a 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 4px 0 30px rgba(0, 0, 0, 0.5);
+}
+
+/* 侧栏隐藏状态 */
+.sidebar.hidden {
+  pointer-events: none;
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+/* 悬停时显示 */
+.sidebar.hidden.hover-visible {
+  pointer-events: auto;
+  transform: translateX(0);
+  opacity: 1;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 150;
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+}
+
+/* 侧栏收缩状态 */
+.sidebar.collapsed {
+  width: 64px;
+}
+
+/* 侧栏头部 */
+.sidebar-header {
+  display: flex;
+  min-height: 60px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 20px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* Logo样式 */
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo-text {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.logo-icon {
+  font-size: 24px;
+  color: var(--el-color-primary);
+}
+
+/* 侧栏菜单 */
+.sidebar-menu {
+  flex: 1;
+  border-right: none !important;
+  background-color: transparent !important;
+  padding: 0 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.sidebar-menu::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-menu::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 9999px;
+}
+
+.sidebar-menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* 菜单项样式 */
+.sidebar-menu :deep(.el-menu-item) {
+  margin: 4px 0;
+  height: 48px;
+  border-radius: 8px;
+  padding: 0 16px;
+  transition: all 0.3s ease-in-out;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-menu :deep(.el-menu-item:hover) {
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.15),
+    rgba(147, 51, 234, 0.12)
+  );
+  color: var(--text-primary);
+  transform: translateX(4px);
+  border-left: 2px solid rgba(59, 130, 246, 0.6);
+}
+
+.sidebar-menu :deep(.el-menu-item.is-active) {
+  color: var(--el-color-primary);
+  font-weight: 600;
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.25),
+    rgba(147, 51, 234, 0.2)
+  );
+  border-left: 4px solid var(--el-color-primary);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+}
+
+/* 菜单图标 */
+.sidebar-menu :deep(.el-menu-item .el-icon) {
+  margin-right: 12px;
+  font-size: 18px;
+  transition: transform 0.3s;
+}
+
+/* 菜单占位区域 */
+.menu-spacer {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 侧栏底部 */
+.sidebar-footer {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  margin-top: auto;
+  border-top: 1px solid var(--border-color);
+}
+
+/* 主题切换包装器 */
+.theme-toggle-wrapper {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+/* 底部菜单 */
+.footer-menu {
+  border-right: none !important;
+  background-color: transparent !important;
+  padding: 0 8px;
+}
+
+.footer-menu :deep(.el-menu-item) {
+  margin: 4px 0;
+  height: 44px;
+  border-radius: 8px;
+  padding: 0 12px;
+  transition: all 0.3s ease-in-out;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+}
+
+.footer-menu :deep(.el-menu-item:hover) {
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.15),
+    rgba(147, 51, 234, 0.12)
+  );
+  color: var(--text-primary);
+}
+
+.footer-menu :deep(.el-menu-item .el-icon) {
+  margin-right: 12px;
+  font-size: 18px;
+}
+
+/* 收缩状态样式 */
+.sidebar.collapsed .sidebar-header {
+  justify-content: center;
+  padding: 12px;
+}
+
+.sidebar.collapsed .logo-text {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-menu :deep(.el-menu-item) {
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-menu :deep(.el-menu-item span) {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-menu :deep(.el-menu-item .el-icon) {
+  margin-right: 0;
+}
+
+.sidebar.collapsed .footer-menu :deep(.el-menu-item) {
+  justify-content: center;
+}
+
+.sidebar.collapsed .footer-menu :deep(.el-menu-item span) {
+  display: none;
+}
+
+.sidebar.collapsed .footer-menu :deep(.el-menu-item .el-icon) {
+  margin-right: 0;
+}
+
+/* Element Plus菜单折叠样式 */
+:deep(.el-menu--collapse) {
+  width: 64px;
+}
+
+:deep(.el-menu--collapse .el-menu-item) {
+  justify-content: center;
+}
+
+:deep(.el-menu--collapse .el-menu-item .el-icon) {
+  margin-right: 0;
+}

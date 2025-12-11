@@ -1,0 +1,50 @@
+<template>
+  <div class="app-layout">
+    <el-container>
+      <!-- 侧边栏 -->
+      <el-aside :width="layoutStore.actualSidebarWidth" class="app-sidebar">
+        <Sidebar />
+      </el-aside>
+
+      <!-- 主内容区域 -->
+      <el-main class="app-main">
+        <div class="main-content-wrapper">
+          <router-view />
+        </div>
+      </el-main>
+    </el-container>
+
+    <!-- 设置弹窗 -->
+    <SettingsDialog v-model="showSettingsDialog" />
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted } from "vue";
+import { useLayoutStore } from "@/stores/layoutStore";
+import { useSettingsStore } from "@/stores/settingsStore";
+import Sidebar from "./Sidebar.vue";
+import SettingsDialog from "@/components/Settings/SettingsDialog.vue";
+import { debug } from "@tauri-apps/plugin-log";
+
+const layoutStore = useLayoutStore();
+const settingsStore = useSettingsStore();
+const showSettingsDialog = ref(false);
+
+// 暴露给全局使用
+window.__openSettings = () => {
+  showSettingsDialog.value = true;
+};
+
+// 应用启动时初始化
+onMounted(async () => {
+  await settingsStore.loadSettings();
+  settingsStore.applyTheme();
+  settingsStore.applyFontSize();
+  debug("[AppLayout] 组件挂载完成");
+});
+</script>
+
+<style scoped>
+@import "@/styles/app-layout.css";
+</style>

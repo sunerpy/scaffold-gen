@@ -57,6 +57,7 @@ impl InheritableParams for GinParams {
 
 impl GinParams {
     /// 创建新的Gin参数
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::default()
     }
@@ -87,12 +88,14 @@ impl GinParams {
     }
 
     /// 设置主机地址
+    #[allow(dead_code)]
     pub fn with_host(mut self, host: String) -> Self {
         self.base.host = Some(host);
         self
     }
 
     /// 设置端口
+    #[allow(dead_code)]
     pub fn with_port(mut self, port: u16) -> Self {
         self.base.port = Some(port);
         self
@@ -111,12 +114,14 @@ impl GinParams {
     }
 
     /// 设置是否启用中间件
+    #[allow(dead_code)]
     pub fn with_middleware(mut self, enable_middleware: bool) -> Self {
         self.base.enable_middleware = enable_middleware;
         self
     }
 
     /// 设置是否启用日志
+    #[allow(dead_code)]
     pub fn with_logging(mut self, enable_logging: bool) -> Self {
         self.base.enable_logging = enable_logging;
         self
@@ -160,30 +165,37 @@ impl GinParams {
     }
 
     // 为了向后兼容，提供访问器方法
+    #[allow(dead_code)]
     pub fn host(&self) -> Option<&String> {
         self.base.host.as_ref()
     }
 
+    #[allow(dead_code)]
     pub fn port(&self) -> Option<u16> {
         self.base.port
     }
 
+    #[allow(dead_code)]
     pub fn enable_swagger(&self) -> bool {
         self.base.enable_swagger
     }
 
+    #[allow(dead_code)]
     pub fn enable_cors(&self) -> bool {
         self.base.enable_cors
     }
 
+    #[allow(dead_code)]
     pub fn enable_middleware(&self) -> bool {
         self.base.enable_middleware
     }
 
+    #[allow(dead_code)]
     pub fn enable_logging(&self) -> bool {
         self.base.enable_logging
     }
 
+    #[allow(dead_code)]
     pub fn enable_jwt(&self) -> bool {
         self.base.enable_jwt
     }

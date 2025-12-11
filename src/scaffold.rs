@@ -275,12 +275,11 @@ impl Scaffold {
     /// 检查是否应该跳过文件
     fn should_skip_file(&self, file_name: &str) -> bool {
         // 检查 pre-commit 配置文件
-        if file_name == ".pre-commit-config.yaml.tmpl" || file_name == ".pre-commit-config.yaml" {
-            if let Some(enable_precommit) = self.params.get("enable_precommit") {
-                if let Some(enabled) = enable_precommit.as_bool() {
-                    return !enabled;
-                }
-            }
+        if (file_name == ".pre-commit-config.yaml.tmpl" || file_name == ".pre-commit-config.yaml")
+            && let Some(enable_precommit) = self.params.get("enable_precommit")
+            && let Some(enabled) = enable_precommit.as_bool()
+        {
+            return !enabled;
         }
 
         // 可以在这里添加更多的条件检查

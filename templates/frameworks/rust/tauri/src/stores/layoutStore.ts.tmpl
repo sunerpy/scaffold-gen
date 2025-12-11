@@ -1,0 +1,64 @@
+import { defineStore } from "pinia";
+import { computed, ref } from "vue";
+import { useSettingsStore } from "./settingsStore";
+
+export const useLayoutStore = defineStore("layout", () => {
+  const settingsStore = useSettingsStore();
+
+  // 侧栏完全隐藏状态（不持久化，仅会话期间有效）
+  const sidebarHidden = ref(false);
+
+  // 切换侧边栏收缩状态
+  const toggleSidebar = async () => {
+    await settingsStore.setSidebarCollapsed(
+      !settingsStore.settings.sidebarCollapsed
+    );
+  };
+
+  // 切换侧栏完全隐藏状态
+  const toggleSidebarHidden = () => {
+    sidebarHidden.value = !sidebarHidden.value;
+  };
+
+  // 设置侧栏完全隐藏状态
+  const setSidebarHidden = (hidden: boolean) => {
+    sidebarHidden.value = hidden;
+  };
+
+  // 设置侧边栏宽度
+  const setSidebarWidth = async (width: number) => {
+    await settingsStore.setSidebarWidth(width);
+  };
+
+  // 计算侧边栏实际宽度
+  const actualSidebarWidth = computed(() => {
+    if (sidebarHidden.value) {
+      return "0px";
+    }
+    return settingsStore.settings.sidebarCollapsed
+      ? "64px"
+      : `${settingsStore.settings.sidebarWidth}%`;
+  });
+
+  // 计算主内容区域宽度
+  const mainContentWidth = computed(() => {
+    if (sidebarHidden.value) {
+      return "100%";
+    }
+    return settingsStore.settings.sidebarCollapsed
+      ? "calc(100% - 64px)"
+      : `${100 - settingsStore.settings.sidebarWidth}%`;
+  });
+
+  return {
+    sidebarCollapsed: computed(() => settingsStore.settings.sidebarCollapsed),
+    sidebarWidth: computed(() => settingsStore.settings.sidebarWidth),
+    sidebarHidden: computed(() => sidebarHidden.value),
+    actualSidebarWidth,
+    mainContentWidth,
+    toggleSidebar,
+    toggleSidebarHidden,
+    setSidebarHidden,
+    setSidebarWidth
+  };
+});

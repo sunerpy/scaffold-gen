@@ -1,0 +1,76 @@
+[workspace]
+resolver = "2"
+members = [
+    ".",
+    "tools/proto-gen",
+]
+
+[package]
+name = "{{project_name}}"
+version = "0.1.0"
+edition = "2024"
+authors = ["{{author}}"]
+license = "{{license}}"
+
+[[bin]]
+name = "{{project_name}}"
+path = "src/main.rs"
+
+[dependencies]
+# Core dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+thiserror = "2.0"
+tokio = { version = "1", features = ["full"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "chrono"] }
+tracing-appender = "0.2"
+
+# Configuration
+config = "0.15"
+
+# Protobuf (for generated code)
+prost = "0.13"
+prost-types = "0.13"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["{{author}}"]
+license = "{{license}}"
+
+[workspace.dependencies]
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Protobuf and gRPC
+prost = "0.13"
+prost-build = "0.13"
+prost-types = "0.13"
+tonic = "0.12"
+tonic-build = "0.12"
+
+# Regex
+regex = "1.12"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "chrono"] }
+tracing-appender = "0.2"
+
+# Configuration
+config = "0.15"

@@ -254,6 +254,7 @@ impl BaseParams {
     }
 
     /// 设置服务器配置
+    #[allow(dead_code)]
     pub fn with_server(mut self, host: String, port: u16) -> Self {
         self.host = Some(host);
         self.port = Some(port);
@@ -261,6 +262,7 @@ impl BaseParams {
     }
 
     /// 设置数据库配置
+    #[allow(dead_code)]
     pub fn with_database(mut self, db_type: String) -> Self {
         self.enable_database = true;
         self.database_type = Some(db_type);
@@ -268,12 +270,14 @@ impl BaseParams {
     }
 
     /// 设置语言版本
+    #[allow(dead_code)]
     pub fn with_language_version(mut self, version: String) -> Self {
         self.language_version = Some(version);
         self
     }
 
     /// 启用功能
+    #[allow(dead_code)]
     pub fn enable_feature(mut self, feature: &str) -> Self {
         match feature {
             "swagger" => self.enable_swagger = true,
@@ -295,6 +299,7 @@ impl BaseParams {
     }
 
     /// 禁用功能
+    #[allow(dead_code)]
     pub fn disable_feature(mut self, feature: &str) -> Self {
         match feature {
             "swagger" => self.enable_swagger = false,
@@ -322,9 +327,11 @@ pub trait InheritableParams: Parameters {
     fn base_params(&self) -> &BaseParams;
 
     /// 获取基础参数的可变引用
+    #[allow(dead_code)]
     fn base_params_mut(&mut self) -> &mut BaseParams;
 
     /// 从基础参数创建
+    #[allow(dead_code)]
     fn from_base(base: BaseParams) -> Self;
 
     /// 获取扩展的模板上下文（子类特有的参数）

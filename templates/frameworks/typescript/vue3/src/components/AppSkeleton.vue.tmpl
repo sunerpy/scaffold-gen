@@ -1,0 +1,25 @@
+<script setup lang="ts">
+// Skeleton loading component for better UX
+defineProps<{
+  width?: string
+  height?: string
+  rounded?: 'none' | 'sm' | 'md' | 'lg' | 'full'
+}>()
+</script>
+
+<template>
+  <div
+    class="animate-pulse bg-gray-200 dark:bg-gray-700"
+    :class="{
+      'rounded-none': rounded === 'none',
+      'rounded-sm': rounded === 'sm',
+      'rounded-md': rounded === 'md' || !rounded,
+      'rounded-lg': rounded === 'lg',
+      'rounded-full': rounded === 'full',
+    }"
+    :style="{
+      width: width || '100%',
+      height: height || '1rem',
+    }"
+  />
+</template>

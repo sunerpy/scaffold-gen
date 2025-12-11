@@ -1,0 +1,23 @@
+[package]
+name = "proto-gen"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "proto-gen"
+path = "src/main.rs"
+
+[dependencies]
+# Protobuf and gRPC build tools
+prost-build = { workspace = true }
+tonic-build = { workspace = true }
+
+# Core dependencies
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+
+# CLI
+clap = { workspace = true }

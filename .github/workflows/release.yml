@@ -1,0 +1,182 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Build job - builds for all platforms using Makefile
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            asset_name: scafgen-linux-x86_64
+            archive_ext: tar.gz
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            asset_name: scafgen-linux-x86_64-musl
+            archive_ext: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            asset_name: scafgen-linux-aarch64
+            archive_ext: tar.gz
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            asset_name: scafgen-darwin-x86_64
+            archive_ext: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            asset_name: scafgen-darwin-aarch64
+            archive_ext: tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            asset_name: scafgen-windows-x86_64
+            archive_ext: zip
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
+      - name: Install musl tools (Linux musl)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Build release binary
+        run: make release-target TARGET=${{ matrix.target }}
+
+      - name: Strip binary (Linux aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: aarch64-linux-gnu-strip dist/scafgen-${{ matrix.target }} || true
+
+      - name: Create archive (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd dist
+          if [ -f "scafgen-${{ matrix.target }}" ]; then
+            tar -czvf ${{ matrix.asset_name }}.${{ matrix.archive_ext }} scafgen-${{ matrix.target }}
+          fi
+
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cd dist
+          if (Test-Path "scafgen-${{ matrix.target }}.exe") {
+            Compress-Archive -Path "scafgen-${{ matrix.target }}.exe" -DestinationPath "${{ matrix.asset_name }}.${{ matrix.archive_ext }}"
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: dist/${{ matrix.asset_name }}.${{ matrix.archive_ext }}
+          retention-days: 1
+
+  # Publish to crates.io
+  publish-crate:
+    name: Publish to crates.io
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --no-verify
+
+  # Create GitHub Release
+  create-release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Extract version from tag
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Generate changelog
+          cat > CHANGELOG.md << 'EOF'
+          ## What's Changed
+
+          Release version $VERSION
+
+          ### Installation
+
+          #### From crates.io
+          ```bash
+          cargo install scaffold-gen
+          ```
+
+          #### From binary
+          Download the appropriate binary for your platform from the assets below.
+
+          | Platform | Architecture | File |
+          |----------|--------------|------|
+          | Linux | x86_64 | `scafgen-linux-x86_64.tar.gz` |
+          | Linux | x86_64 (musl) | `scafgen-linux-x86_64-musl.tar.gz` |
+          | Linux | aarch64 | `scafgen-linux-aarch64.tar.gz` |
+          | macOS | x86_64 | `scafgen-darwin-x86_64.tar.gz` |
+          | macOS | aarch64 (Apple Silicon) | `scafgen-darwin-aarch64.tar.gz` |
+          | Windows | x86_64 | `scafgen-windows-x86_64.zip` |
+          EOF
+          
+          # Replace $VERSION in the file
+          sed -i "s/\$VERSION/$VERSION/g" CHANGELOG.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release v${{ steps.changelog.outputs.version }}
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

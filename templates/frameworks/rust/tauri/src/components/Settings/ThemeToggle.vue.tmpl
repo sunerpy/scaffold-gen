@@ -1,0 +1,51 @@
+<template>
+  <div class="theme-toggle" :class="{ simple: simple }">
+    <el-tooltip :content="themeLabel" placement="right" :disabled="!simple">
+      <el-button
+        :icon="themeIconComponent"
+        :circle="simple"
+        :text="!simple"
+        @click="toggleTheme"
+      >
+        <span v-if="!simple">\{{ themeLabel }}</span>
+      </el-button>
+    </el-tooltip>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed } from "vue";
+import { useTheme } from "@/composables/useTheme";
+import { Sunny, Moon, Monitor } from "@element-plus/icons-vue";
+
+defineProps<{
+  simple?: boolean;
+}>();
+
+const { themeMode, themeLabel, toggleTheme } = useTheme();
+
+const themeIconComponent = computed(() => {
+  switch (themeMode.value) {
+    case "light":
+      return Sunny;
+    case "dark":
+      return Moon;
+    case "system":
+      return Monitor;
+    default:
+      return Monitor;
+  }
+});
+</script>
+
+<style scoped>
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-toggle.simple {
+  width: 100%;
+}
+</style>

@@ -67,11 +67,13 @@ impl InheritableParams for GoZeroParams {
 
 impl GoZeroParams {
     /// 创建新的Go-Zero参数
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// 从项目名称创建
+    #[allow(dead_code)]
     pub fn from_project_name(project_name: String) -> Self {
         let mut base = BaseParams::new(project_name.clone());
         // 设置Go-Zero特定的默认值
@@ -94,100 +96,119 @@ impl GoZeroParams {
     }
 
     /// 设置主机地址
+    #[allow(dead_code)]
     pub fn with_host(mut self, host: String) -> Self {
         self.base.default_host = Some(host);
         self
     }
 
     /// 设置端口
+    #[allow(dead_code)]
     pub fn with_port(mut self, port: u16) -> Self {
         self.base.default_port = Some(port);
         self
     }
 
     /// 设置是否启用Swagger
+    #[allow(dead_code)]
     pub fn with_swagger(mut self, enable_swagger: bool) -> Self {
         self.base.enable_swagger = enable_swagger;
         self
     }
 
     /// 设置是否启用CORS
+    #[allow(dead_code)]
     pub fn with_cors(mut self, enable_cors: bool) -> Self {
         self.base.enable_cors = enable_cors;
         self
     }
 
     /// 设置是否启用中间件
+    #[allow(dead_code)]
     pub fn with_middleware(mut self, enable_middleware: bool) -> Self {
         self.base.enable_middleware = enable_middleware;
         self
     }
 
     /// 设置是否启用日志
+    #[allow(dead_code)]
     pub fn with_logging(mut self, enable_logging: bool) -> Self {
         self.base.enable_logging = enable_logging;
         self
     }
 
     /// 设置是否启用gRPC
+    #[allow(dead_code)]
     pub fn with_grpc(mut self, enable_grpc: bool) -> Self {
         self.base.enable_grpc = enable_grpc;
         self
     }
 
     /// 设置是否启用Admin服务
+    #[allow(dead_code)]
     pub fn with_admin(mut self, enable_admin: bool) -> Self {
         self.enable_admin = enable_admin;
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_api(mut self, enable_api: bool) -> Self {
         self.enable_api = enable_api;
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_rpc(mut self, enable_rpc: bool) -> Self {
         self.enable_rpc = enable_rpc;
         self
     }
 
     /// 设置项目参数
+    #[allow(dead_code)]
     pub fn with_project(mut self, project: ProjectParams) -> Self {
         self.project = project;
         self
     }
 
     /// 设置Go参数
+    #[allow(dead_code)]
     pub fn with_go(mut self, go: GoParams) -> Self {
         self.go = go;
         self
     }
 
     // 为了向后兼容，提供访问器方法
+    #[allow(dead_code)]
     pub fn host(&self) -> Option<&String> {
         self.base.default_host.as_ref()
     }
 
+    #[allow(dead_code)]
     pub fn port(&self) -> Option<u16> {
         self.base.port
     }
 
+    #[allow(dead_code)]
     pub fn enable_swagger(&self) -> bool {
         self.base.enable_swagger
     }
 
+    #[allow(dead_code)]
     pub fn enable_cors(&self) -> bool {
         self.base.enable_cors
     }
 
+    #[allow(dead_code)]
     pub fn enable_middleware(&self) -> bool {
         self.base.enable_middleware
     }
 
+    #[allow(dead_code)]
     pub fn enable_logging(&self) -> bool {
         self.base.enable_logging
     }
 
+    #[allow(dead_code)]
     pub fn enable_grpc(&self) -> bool {
         self.base.enable_grpc
     }

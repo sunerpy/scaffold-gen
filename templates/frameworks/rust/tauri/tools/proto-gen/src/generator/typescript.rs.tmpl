@@ -1,0 +1,156 @@
+//! TypeScript code generator for protobuf files
+
+use anyhow::{Context, Result};
+use regex::Regex;
+use std::path::PathBuf;
+
+/// TypeScript protobuf code generator
+pub struct TypeScriptGenerator {
+    project_root: PathBuf,
+}
+
+impl TypeScriptGenerator {
+    /// Create a new TypeScript generator
+    pub fn new(project_root: PathBuf) -> Self {
+        Self { project_root }
+    }
+
+    /// Generate TypeScript code from proto files
+    pub fn generate(&self) -> Result<()> {
+        let proto_dir = self.project_root.join("protos");
+        let output_dir = self.project_root.join("src").join("protos");
+
+        // Ensure output directory exists
+        std::fs::create_dir_all(&output_dir)
+            .context("Failed to create TypeScript output directory")?;
+
+        // Find all .proto files
+        let proto_files = self.find_proto_files(&proto_dir)?;
+
+        if proto_files.is_empty() {
+            println!("⚠️  No .proto files found in {}", proto_dir.display());
+            return Ok(());
+        }
+
+        println!("📁 Found {} proto file(s)", proto_files.len());
+
+        // Generate TypeScript interfaces for each proto file
+        let mut all_interfaces = String::new();
+        all_interfaces.push_str("// Auto-generated TypeScript interfaces from protobuf definitions\n");
+        all_interfaces.push_str("// Do not edit manually\n\n");
+
+        for proto_file in &proto_files {
+            let content = std::fs::read_to_string(proto_file)
+                .with_context(|| format!("Failed to read proto file: {}", proto_file.display()))?;
+
+            let interfaces = self.parse_proto_to_typescript(&content)?;
+            all_interfaces.push_str(&interfaces);
+            all_interfaces.push('\n');
+        }
+
+        // Write the generated TypeScript file
+        let output_file = output_dir.join("app.ts");
+        std::fs::write(&output_file, all_interfaces)
+            .context("Failed to write TypeScript file")?;
+
+        println!("📝 Generated TypeScript code in {}", output_file.display());
+
+        Ok(())
+    }
+
+    /// Find all .proto files in the given directory
+    fn find_proto_files(&self, dir: &PathBuf) -> Result<Vec<PathBuf>> {
+        let mut proto_files = Vec::new();
+
+        if !dir.exists() {
+            return Ok(proto_files);
+        }
+
+        for entry in std::fs::read_dir(dir).context("Failed to read proto directory")? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "proto") {
+                proto_files.push(path);
+            }
+        }
+
+        Ok(proto_files)
+    }
+
+    /// Parse proto content and generate TypeScript interfaces
+    fn parse_proto_to_typescript(&self, content: &str) -> Result<String> {
+        let mut output = String::new();
+
+        // Parse message definitions
+        let message_re = Regex::new(r"message\s+(\w+)\s*\{([^}]*)\}")
+            .context("Failed to compile message regex")?;
+
+        for cap in message_re.captures_iter(content) {
+            let message_name = &cap[1];
+            let fields_content = &cap[2];
+
+            output.push_str(&format!("export interface {message_name} {{\n"));
+
+            // Parse fields
+            let field_re = Regex::new(r"(?:optional\s+|repeated\s+)?(\w+)\s+(\w+)\s*=\s*\d+")
+                .context("Failed to compile field regex")?;
+
+            for field_cap in field_re.captures_iter(fields_content) {
+                let proto_type = &field_cap[1];
+                let field_name = &field_cap[2];
+                let ts_type = self.proto_type_to_typescript(proto_type);
+
+                // Check if it's a repeated field
+                let is_repeated = fields_content.contains(&format!("repeated {proto_type} {field_name}"));
+                let final_type = if is_repeated {
+                    format!("{ts_type}[]")
+                } else {
+                    ts_type
+                };
+
+                output.push_str(&format!("  {field_name}: {final_type};\n"));
+            }
+
+            output.push_str("}\n\n");
+        }
+
+        // Parse enum definitions
+        let enum_re = Regex::new(r"enum\s+(\w+)\s*\{([^}]*)\}")
+            .context("Failed to compile enum regex")?;
+
+        for cap in enum_re.captures_iter(content) {
+            let enum_name = &cap[1];
+            let values_content = &cap[2];
+
+            output.push_str(&format!("export enum {enum_name} {{\n"));
+
+            // Parse enum values
+            let value_re = Regex::new(r"(\w+)\s*=\s*(\d+)")
+                .context("Failed to compile enum value regex")?;
+
+            for value_cap in value_re.captures_iter(values_content) {
+                let value_name = &value_cap[1];
+                let value_num = &value_cap[2];
+                output.push_str(&format!("  {value_name} = {value_num},\n"));
+            }
+
+            output.push_str("}\n\n");
+        }
+
+        Ok(output)
+    }
+
+    /// Convert protobuf type to TypeScript type
+    fn proto_type_to_typescript(&self, proto_type: &str) -> String {
+        match proto_type {
+            "string" => "string".to_string(),
+            "bool" => "boolean".to_string(),
+            "int32" | "int64" | "uint32" | "uint64" | "sint32" | "sint64" |
+            "fixed32" | "fixed64" | "sfixed32" | "sfixed64" | "float" | "double" => "number".to_string(),
+            "bytes" => "Uint8Array".to_string(),
+            // Custom message types
+            other => other.to_string(),
+        }
+    }
+}

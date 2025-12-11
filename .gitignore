@@ -1,3 +1,4 @@
+.clinerules
 .trae
 .vscode
 
@@ -6,3 +7,5 @@ target
 
 scafgen
 scafgen.exe
+
+tmp

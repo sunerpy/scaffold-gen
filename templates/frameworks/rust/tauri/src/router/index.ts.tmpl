@@ -1,0 +1,39 @@
+import { createRouter, createWebHistory } from "vue-router";
+
+// 路由组件
+const AppLayout = () => import("@/components/Layout/AppLayout.vue");
+const Dashboard = () => import("@/views/Dashboard.vue");
+
+// 路由配置
+const routes = [
+  {
+    path: "/",
+    component: AppLayout,
+    children: [
+      {
+        path: "",
+        name: "Dashboard",
+        component: Dashboard,
+        meta: {
+          title: "主页"
+        }
+      }
+      // 在此添加更多路由
+    ]
+  }
+];
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes
+});
+
+// 路由后置守卫 - 设置页面标题
+router.afterEach(to => {
+  const title = to.meta?.title;
+  if (typeof title === "string" && title) {
+    document.title = `${title} - App`;
+  }
+});
+
+export default router;

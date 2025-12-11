@@ -17,6 +17,7 @@ pub trait Parameters: Clone + Default + Send + Sync {
     }
 
     /// 从环境变量覆盖参数（可选实现）
+    #[allow(dead_code)]
     fn override_from_env(&mut self) -> Result<()> {
         Ok(())
     }

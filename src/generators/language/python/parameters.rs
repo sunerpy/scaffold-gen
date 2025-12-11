@@ -92,6 +92,7 @@ impl PythonParams {
     }
 
     /// 从项目名称创建
+    #[allow(dead_code)]
     pub fn from_project_name(project_name: String) -> Self {
         Self::new(project_name)
     }
@@ -109,6 +110,7 @@ impl PythonParams {
     }
 
     /// 设置 ruff 版本
+    #[allow(dead_code)]
     pub fn with_ruff_version(mut self, version: String) -> Self {
         self.ruff_version = version;
         self
@@ -121,16 +123,19 @@ impl PythonParams {
     }
 
     /// 设置许可证
+    #[allow(dead_code)]
     pub fn with_license(mut self, license: String) -> Self {
         self.base.license = license;
         self
     }
 
     // 访问器方法
+    #[allow(dead_code)]
     pub fn version(&self) -> Option<&String> {
         self.base.language_version.as_ref()
     }
 
+    #[allow(dead_code)]
     pub fn package_name(&self) -> String {
         self.base
             .project_name
@@ -138,6 +143,7 @@ impl PythonParams {
             .replace(['-', ' '], "_")
     }
 
+    #[allow(dead_code)]
     pub fn enable_precommit(&self) -> bool {
         self.base.enable_precommit
     }

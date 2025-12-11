@@ -5,6 +5,9 @@ use crate::generators::{
     core::Generator,
     framework::gin::{GinGenerator, GinParams},
     framework::go_zero::GoZeroGenerator,
+    framework::react::{ReactGenerator, ReactParams},
+    framework::tauri::{TauriGenerator, TauriParams},
+    framework::vue3::{Vue3Generator, Vue3Params},
     language::go::{GoGenerator, GoParams},
     language::python::{PythonGenerator, PythonParams},
     language::rust::{RustGenerator, RustParams},
@@ -17,10 +20,17 @@ pub struct GeneratorOrchestrator {
     project_generator: ProjectGenerator,
     go_generator: GoGenerator,
     python_generator: PythonGenerator,
+    #[allow(dead_code)]
     rust_generator: RustGenerator,
     gin_generator: GinGenerator,
     #[allow(dead_code)]
     go_zero_generator: GoZeroGenerator,
+    #[allow(dead_code)]
+    tauri_generator: TauriGenerator,
+    #[allow(dead_code)]
+    vue3_generator: Vue3Generator,
+    #[allow(dead_code)]
+    react_generator: ReactGenerator,
 }
 
 impl GeneratorOrchestrator {
@@ -33,6 +43,9 @@ impl GeneratorOrchestrator {
             rust_generator: RustGenerator::new()?,
             gin_generator: GinGenerator::new()?,
             go_zero_generator: GoZeroGenerator::new()?,
+            tauri_generator: TauriGenerator::new()?,
+            vue3_generator: Vue3Generator::new()?,
+            react_generator: ReactGenerator::new()?,
         })
     }
 
@@ -155,12 +168,13 @@ impl GeneratorOrchestrator {
     ) -> Result<()> {
         println!("Starting Python project generation: {project_name}");
 
-        // 获取实际的 uv 版本
+        // 获取实际的 uv 版本和 Python 版本
         let env_checker = EnvironmentChecker::new();
+
         let uv_version = env_checker
             .get_uv_version()
             .await
-            .unwrap_or_else(|_| "uv 0.5.11".to_string());
+            .unwrap_or_else(|_| "uv 0.9.5".to_string());
 
         // 从 "uv x.y.z" 格式中提取版本号
         let uv_version = uv_version
@@ -169,9 +183,15 @@ impl GeneratorOrchestrator {
             .trim()
             .to_string();
 
+        // 获取系统 Python 版本，如果获取失败则使用默认值
+        let python_version = env_checker
+            .get_python_version()
+            .await
+            .unwrap_or_else(|_| "3.12".to_string());
+
         // 1. 语言级别生成 (Python) - 使用 uv init 创建项目
         let python_params = PythonParams::new(project_name.clone())
-            .with_version("3.11".to_string())
+            .with_version(python_version)
             .with_uv_version(uv_version)
             .with_precommit(enable_precommit);
 
@@ -197,7 +217,8 @@ impl GeneratorOrchestrator {
     }
 
     /// 生成完整的Rust项目
-    pub fn generate_rust_project(
+    #[allow(dead_code)]
+    pub async fn generate_rust_project(
         &mut self,
         project_name: String,
         output_path: &Path,
@@ -206,9 +227,15 @@ impl GeneratorOrchestrator {
     ) -> Result<()> {
         println!("Starting Rust project generation: {project_name}");
 
+        // 获取实际的 Rust 版本
+        let env_checker = EnvironmentChecker::new();
+        let rust_version = env_checker
+            .get_rust_version()
+            .await
+            .unwrap_or_else(|_| crate::constants::defaults::RUST_VERSION.to_string());
+
         // 1. 语言级别生成 (Rust) - 使用 cargo init 创建项目
-        let rust_params =
-            RustParams::new(project_name.clone()).with_rust_version("1.75".to_string());
+        let rust_params = RustParams::new(project_name.clone()).with_rust_version(rust_version);
 
         self.rust_generator
             .generate(rust_params, output_path)
@@ -227,6 +254,212 @@ impl GeneratorOrchestrator {
 
         println!("Rust project generation completed successfully!");
         println!("Project created at: {}", output_path.display());
+
+        Ok(())
+    }
+
+    /// 生成完整的Tauri项目
+    pub async fn generate_tauri_project(
+        &mut self,
+        project_name: String,
+        output_path: &Path,
+        license: String,
+        enable_precommit: bool,
+    ) -> Result<()> {
+        println!("Starting Tauri project generation: {project_name}");
+
+        // 1. 环境预检查
+        println!("🔍 Checking environment prerequisites...");
+
+        // 检查 pnpm
+        if !TauriGenerator::check_pnpm()? {
+            return Err(anyhow::anyhow!(
+                "pnpm is not installed. Please install pnpm first:\n  npm install -g pnpm\n  or visit: https://pnpm.io/installation"
+            ));
+        }
+        println!("  ✅ pnpm: Available");
+
+        // 检查 create-tauri-app
+        if !TauriGenerator::check_create_tauri_app()? {
+            println!("  ⚠️ create-tauri-app not found, installing...");
+            TauriGenerator::install_create_tauri_app()?;
+        }
+        println!("  ✅ create-tauri-app: Available");
+
+        // 2. 删除已存在的目录（如果存在）
+        if output_path.exists() {
+            std::fs::remove_dir_all(output_path).context("Failed to remove existing directory")?;
+        }
+
+        // 3. 使用 create-tauri-app 创建项目
+        TauriGenerator::create_tauri_project(&project_name, output_path)?;
+
+        // 4. 安装前端依赖
+        TauriGenerator::install_dependencies(output_path)?;
+
+        // 5. 创建项目参数
+        let project_params = ProjectParams::new(project_name.clone())
+            .with_license(license.clone())
+            .with_git(true)
+            .with_precommit(enable_precommit)
+            .with_description(format!("A Tauri desktop application: {project_name}"));
+
+        // 6. 创建 Tauri 参数
+        let tauri_params = TauriParams::from_project_name(project_name.clone())
+            .with_project(project_params.clone())
+            .with_precommit(enable_precommit);
+
+        // 7. 覆盖模板文件 - 添加骨架屏、Tailwind CSS 等功能
+        println!("📝 Applying enhanced templates...");
+        self.tauri_generator
+            .generate(tauri_params, output_path)
+            .context("Failed to apply Tauri templates")?;
+
+        // 8. 重新安装依赖（因为 package.json 可能已更新）
+        println!("📦 Reinstalling dependencies with updated package.json...");
+        TauriGenerator::install_dependencies(output_path)?;
+
+        // 9. 项目级别生成 - 生成 LICENSE 等
+        self.project_generator
+            .generate(project_params, output_path)
+            .context("Failed to generate project files")?;
+
+        println!("✅ Tauri project generation completed successfully!");
+        println!("📁 Project created at: {}", output_path.display());
+        println!("\n📋 Next steps:");
+        println!("  cd {project_name}");
+        println!("  cargo tauri dev    # Start development server");
+        println!("  cargo tauri build  # Build for production");
+
+        Ok(())
+    }
+
+    /// 生成完整的Vue3项目
+    pub async fn generate_vue3_project(
+        &mut self,
+        project_name: String,
+        output_path: &Path,
+        license: String,
+        enable_precommit: bool,
+    ) -> Result<()> {
+        println!("Starting Vue3 project generation: {project_name}");
+
+        // 1. 环境预检查
+        println!("🔍 Checking environment prerequisites...");
+
+        // 检查 pnpm
+        if !Vue3Generator::check_pnpm()? {
+            return Err(anyhow::anyhow!(
+                "pnpm is not installed. Please install pnpm first:\n  npm install -g pnpm\n  or visit: https://pnpm.io/installation"
+            ));
+        }
+        println!("  ✅ pnpm: Available");
+
+        // 2. 删除已存在的目录（如果存在）
+        if output_path.exists() {
+            std::fs::remove_dir_all(output_path).context("Failed to remove existing directory")?;
+        }
+
+        // 3. 使用 pnpm create vue 创建项目
+        Vue3Generator::create_vue3_project(&project_name, output_path)?;
+
+        // 4. 安装前端依赖
+        Vue3Generator::install_dependencies(output_path)?;
+
+        // 5. 安装 Tailwind CSS
+        Vue3Generator::install_tailwind(output_path)?;
+
+        // 6. 创建项目参数
+        let project_params = ProjectParams::new(project_name.clone())
+            .with_license(license.clone())
+            .with_git(true)
+            .with_precommit(enable_precommit)
+            .with_description(format!("A Vue3 frontend application: {project_name}"));
+
+        // 7. 创建 Vue3 参数
+        let _vue3_params = Vue3Params::from_project_name(project_name.clone())
+            .with_project(project_params.clone())
+            .with_precommit(enable_precommit);
+
+        // 8. 项目级别生成 - 生成 LICENSE 等
+        self.project_generator
+            .generate(project_params, output_path)
+            .context("Failed to generate project files")?;
+
+        println!("✅ Vue3 project generation completed successfully!");
+        println!("📁 Project created at: {}", output_path.display());
+        println!("\n📋 Next steps:");
+        println!("  cd {project_name}");
+        println!("  pnpm dev    # Start development server");
+        println!("  pnpm build  # Build for production");
+
+        Ok(())
+    }
+
+    /// 生成完整的React项目
+    pub async fn generate_react_project(
+        &mut self,
+        project_name: String,
+        output_path: &Path,
+        license: String,
+        enable_precommit: bool,
+    ) -> Result<()> {
+        println!("Starting React project generation: {project_name}");
+
+        // 1. 环境预检查
+        println!("🔍 Checking environment prerequisites...");
+
+        // 检查 pnpm
+        if !ReactGenerator::check_pnpm()? {
+            return Err(anyhow::anyhow!(
+                "pnpm is not installed. Please install pnpm first:\n  npm install -g pnpm\n  or visit: https://pnpm.io/installation"
+            ));
+        }
+        println!("  ✅ pnpm: Available");
+
+        // 2. 删除已存在的目录（如果存在）
+        if output_path.exists() {
+            std::fs::remove_dir_all(output_path).context("Failed to remove existing directory")?;
+        }
+
+        // 3. 使用 pnpm create vite 创建项目
+        ReactGenerator::create_react_project(&project_name, output_path)?;
+
+        // 4. 安装前端依赖
+        ReactGenerator::install_dependencies(output_path)?;
+
+        // 5. 安装 Tailwind CSS
+        ReactGenerator::install_tailwind(output_path)?;
+
+        // 6. 安装 React Router
+        ReactGenerator::install_router(output_path)?;
+
+        // 7. 安装状态管理库 (默认使用 zustand)
+        ReactGenerator::install_state_management(output_path, "zustand")?;
+
+        // 8. 创建项目参数
+        let project_params = ProjectParams::new(project_name.clone())
+            .with_license(license.clone())
+            .with_git(true)
+            .with_precommit(enable_precommit)
+            .with_description(format!("A React frontend application: {project_name}"));
+
+        // 9. 创建 React 参数
+        let _react_params = ReactParams::from_project_name(project_name.clone())
+            .with_project(project_params.clone())
+            .with_precommit(enable_precommit);
+
+        // 10. 项目级别生成 - 生成 LICENSE 等
+        self.project_generator
+            .generate(project_params, output_path)
+            .context("Failed to generate project files")?;
+
+        println!("✅ React project generation completed successfully!");
+        println!("📁 Project created at: {}", output_path.display());
+        println!("\n📋 Next steps:");
+        println!("  cd {project_name}");
+        println!("  pnpm dev    # Start development server");
+        println!("  pnpm build  # Build for production");
 
         Ok(())
     }

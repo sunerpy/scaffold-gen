@@ -103,26 +103,32 @@ impl GoParams {
     }
 
     // 为了向后兼容，提供访问器方法
+    #[allow(dead_code)]
     pub fn version(&self) -> Option<&String> {
         self.base.language_version.as_ref()
     }
 
+    #[allow(dead_code)]
     pub fn module_name(&self) -> Option<&String> {
         self.base.module_name.as_ref()
     }
 
+    #[allow(dead_code)]
     pub fn enable_modules(&self) -> bool {
         self.base.enable_modules
     }
 
+    #[allow(dead_code)]
     pub fn enable_cgo(&self) -> bool {
         self.base.enable_cgo
     }
 
+    #[allow(dead_code)]
     pub fn build_tags(&self) -> &Vec<String> {
         &self.base.build_tags
     }
 
+    #[allow(dead_code)]
     pub fn enable_vendor(&self) -> bool {
         self.base.enable_vendor
     }

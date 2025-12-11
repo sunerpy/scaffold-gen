@@ -1,0 +1,124 @@
+<template>
+  <el-dialog
+    v-model="dialogVisible"
+    :title="$t('settings.title')"
+    width="500px"
+    :close-on-click-modal="false"
+    destroy-on-close
+  >
+    <el-form label-width="120px" label-position="left">
+      <!-- 外观设置 -->
+      <el-divider content-position="left">\{{ $t("settings.appearance") }}</el-divider>
+
+      <!-- 主题设置 -->
+      <el-form-item :label="$t('common.theme')">
+        <el-radio-group v-model="localSettings.theme" @change="handleThemeChange">
+          <el-radio-button value="light">\{{ $t("settings.themeLight") }}</el-radio-button>
+          <el-radio-button value="dark">\{{ $t("settings.themeDark") }}</el-radio-button>
+          <el-radio-button value="system">\{{ $t("settings.themeSystem") }}</el-radio-button>
+        </el-radio-group>
+      </el-form-item>
+
+      <!-- 语言设置 -->
+      <el-form-item :label="$t('common.language')">
+        <el-select v-model="localSettings.language" @change="handleLanguageChange">
+          <el-option value="zh-CN" :label="$t('settings.languageZh')" />
+          <el-option value="en-US" :label="$t('settings.languageEn')" />
+        </el-select>
+      </el-form-item>
+
+      <!-- 字体大小 -->
+      <el-form-item :label="$t('settings.fontSize')">
+        <el-slider
+          v-model="localSettings.fontSize"
+          :min="12"
+          :max="20"
+          :step="1"
+          show-stops
+          @change="handleFontSizeChange"
+        />
+      </el-form-item>
+    </el-form>
+
+    <template #footer>
+      <el-button @click="dialogVisible = false">\{{ $t("common.cancel") }}</el-button>
+      <el-button type="primary" @click="handleSave">\{{ $t("common.save") }}</el-button>
+    </template>
+  </el-dialog>
+</template>
+
+<script setup lang="ts">
+import { ref, watch, reactive } from "vue";
+import { useSettingsStore } from "@/stores/settingsStore";
+import { $t } from "@/utils/i18n";
+import { ElMessage } from "element-plus";
+
+const props = defineProps<{
+  modelValue: boolean;
+}>();
+
+const emit = defineEmits<{
+  "update:modelValue": [value: boolean];
+}>();
+
+const settingsStore = useSettingsStore();
+
+const dialogVisible = ref(props.modelValue);
+
+// 本地设置副本
+const localSettings = reactive({
+  theme: settingsStore.settings.theme,
+  language: settingsStore.settings.language,
+  fontSize: settingsStore.settings.fontSize
+});
+
+// 同步 props
+watch(
+  () => props.modelValue,
+  val => {
+    dialogVisible.value = val;
+    if (val) {
+      // 打开时同步设置
+      localSettings.theme = settingsStore.settings.theme;
+      localSettings.language = settingsStore.settings.language;
+      localSettings.fontSize = settingsStore.settings.fontSize;
+    }
+  }
+);
+
+watch(dialogVisible, val => {
+  emit("update:modelValue", val);
+});
+
+// 处理主题变更
+const handleThemeChange = async (value: "light" | "dark" | "system") => {
+  await settingsStore.setTheme(value);
+};
+
+// 处理语言变更
+const handleLanguageChange = async (value: "zh-CN" | "en-US") => {
+  await settingsStore.setLanguage(value);
+};
+
+// 处理字体大小变更
+const handleFontSizeChange = async (value: number) => {
+  await settingsStore.setFontSize(value);
+};
+
+// 保存设置
+const handleSave = async () => {
+  await settingsStore.saveSettings();
+  ElMessage.success($t("common.success"));
+  dialogVisible.value = false;
+};
+</script>
+
+<style scoped>
+.el-divider {
+  margin: 24px 0 16px;
+}
+
+.el-divider:first-child {
+  margin-top: 0;
+}
+</style>

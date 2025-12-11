@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package {{project_name_snake}};
+
+// Example message - customize as needed
+message AppInfo {
+    string name = 1;
+    string version = 2;
+    string description = 3;
+}
+
+// Example request/response messages
+message GetInfoRequest {
+    // Empty request
+}
+
+message GetInfoResponse {
+    AppInfo info = 1;
+}
+
+// Example service definition (for gRPC)
+// service AppService {
+//     rpc GetInfo(GetInfoRequest) returns (GetInfoResponse);
+// }

@@ -1,0 +1,85 @@
+.PHONY: all build run test clean proto fmt lint check release help
+
+# Project name
+PROJECT_NAME := {{project_name}}
+
+# Default target
+all: build
+
+# Build the project in debug mode
+build:
+	@echo "🔨 Building $(PROJECT_NAME)..."
+	cargo build
+
+# Build the project in release mode
+release:
+	@echo "🚀 Building $(PROJECT_NAME) in release mode..."
+	cargo build --release
+
+# Run the application
+run:
+	@echo "▶️  Running $(PROJECT_NAME)..."
+	cargo run -p $(PROJECT_NAME)
+
+# Run tests
+test:
+	@echo "🧪 Running tests..."
+	cargo test
+
+# Clean build artifacts
+clean:
+	@echo "🧹 Cleaning build artifacts..."
+	cargo clean
+
+# Generate protobuf code
+proto:
+	@echo "📦 Generating protobuf code..."
+	cargo run -p proto-gen -- all
+
+# Generate Rust protobuf code only
+proto-rust:
+	@echo "🦀 Generating Rust protobuf code..."
+	cargo run -p proto-gen -- rust
+
+# Format code
+fmt:
+	@echo "✨ Formatting code..."
+	cargo fmt
+
+# Run linter
+lint:
+	@echo "🔍 Running linter..."
+	cargo clippy -- -D warnings
+
+# Check code without building
+check:
+	@echo "✅ Checking code..."
+	cargo check
+
+# Run all checks (format, lint, test)
+ci: fmt lint test
+	@echo "✅ All CI checks passed!"
+
+# Install development dependencies
+setup:
+	@echo "📦 Installing development dependencies..."
+	rustup component add clippy rustfmt
+	@echo "✅ Setup complete!"
+
+# Show help
+help:
+	@echo "Available targets:"
+	@echo "  all        - Build the project (default)"
+	@echo "  build      - Build in debug mode"
+	@echo "  release    - Build in release mode"
+	@echo "  run        - Run the application"
+	@echo "  test       - Run tests"
+	@echo "  clean      - Clean build artifacts"
+	@echo "  proto      - Generate all protobuf code"
+	@echo "  proto-rust - Generate Rust protobuf code"
+	@echo "  fmt        - Format code"
+	@echo "  lint       - Run linter"
+	@echo "  check      - Check code without building"
+	@echo "  ci         - Run all CI checks"
+	@echo "  setup      - Install development dependencies"
+	@echo "  help       - Show this help message"

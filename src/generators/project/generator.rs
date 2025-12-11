@@ -100,10 +100,10 @@ impl ProjectGeneratorTrait for ProjectGenerator {
         let mut context = params.to_template_context();
 
         // 如果参数中没有作者信息，尝试从Git获取
-        if params.author().is_none() {
-            if let Ok(git_author) = self.get_git_author() {
-                context.insert("author".to_string(), serde_json::json!(git_author));
-            }
+        if params.author().is_none()
+            && let Ok(git_author) = self.get_git_author()
+        {
+            context.insert("author".to_string(), serde_json::json!(git_author));
         }
 
         let mut template_processor =

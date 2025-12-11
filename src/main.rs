@@ -15,6 +15,7 @@ use commands::new::NewCommand;
 #[command(name = env!("CARGO_PKG_NAME"))]
 #[command(about = env!("CARGO_PKG_DESCRIPTION"))]
 #[command(version = env!("CARGO_PKG_VERSION"))]
+#[command(color = clap::ColorChoice::Auto)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

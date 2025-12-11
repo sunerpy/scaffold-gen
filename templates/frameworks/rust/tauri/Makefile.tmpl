@@ -1,0 +1,87 @@
+# {{project_name}} Makefile
+# Simplify common development tasks
+
+.PHONY: help proto-gen proto-rust proto-ts dev build clean install-deps fmt lint test
+
+# Default target
+help:
+	@echo "Available targets:"
+	@echo "  proto-gen     - Generate all protobuf code (Rust and TypeScript)"
+	@echo "  proto-rust    - Generate only Rust protobuf code"
+	@echo "  proto-ts      - Generate only TypeScript protobuf code"
+	@echo "  dev           - Start development server"
+	@echo "  build         - Build project for production"
+	@echo "  clean         - Clean generated files and build artifacts"
+	@echo "  install-deps  - Install all dependencies"
+	@echo "  fmt           - Format code"
+	@echo "  lint          - Run linters"
+	@echo "  test          - Run tests"
+
+# Generate all protobuf code
+proto-gen:
+	@echo "🔄 Generating protobuf code..."
+	@cd tools/proto-gen && cargo run -- all
+	@echo "✅ Protobuf code generation completed!"
+
+# Generate only Rust protobuf code
+proto-rust:
+	@echo "🦀 Generating Rust protobuf code..."
+	@cd tools/proto-gen && cargo run -- rust
+	@echo "✅ Rust protobuf code generation completed!"
+
+# Generate only TypeScript protobuf code
+proto-ts:
+	@echo "📘 Generating TypeScript protobuf code..."
+	@cd tools/proto-gen && cargo run -- typescript
+	@echo "✅ TypeScript protobuf code generation completed!"
+
+# Start development server
+dev: proto-gen
+	@echo "🚀 Starting development server..."
+	cargo tauri dev
+
+# Build project for production
+build: proto-gen
+	@echo "📦 Building project..."
+	cargo tauri build
+
+# Clean generated files and build artifacts
+clean:
+	@echo "🧹 Cleaning generated files..."
+	@rm -f src-tauri/src/protos/*.rs 2>/dev/null || true
+	@rm -f src/protos/*.ts 2>/dev/null || true
+	@cd tools/proto-gen && cargo clean
+	@cd src-tauri && cargo clean
+	@rm -rf node_modules 2>/dev/null || true
+	@rm -rf dist 2>/dev/null || true
+	@echo "✅ Cleanup completed!"
+
+# Install all dependencies
+install-deps:
+	@echo "📦 Installing dependencies..."
+	@echo "Installing Node.js dependencies..."
+	pnpm install
+	@echo "Building proto-gen tool..."
+	@cd tools/proto-gen && cargo build --release
+	@echo "✅ Dependencies installation completed!"
+
+# Format code
+fmt:
+	@echo "🎨 Formatting code..."
+	cargo fmt --all
+	pnpm run format 2>/dev/null || true
+	@echo "✅ Formatting completed!"
+
+# Run linters
+lint:
+	@echo "🔍 Running linters..."
+	cargo clippy --all-targets --all-features -- -D warnings
+	pnpm run lint 2>/dev/null || true
+	@echo "✅ Linting completed!"
+
+# Run tests
+test:
+	@echo "🧪 Running tests..."
+	cargo test --all
+	pnpm run test 2>/dev/null || true
+	@echo "✅ Tests completed!"

@@ -193,19 +193,19 @@ impl GinGenerator {
 
                 // 向 swagger.json 文件末尾添加空白行以符合格式规范
                 let swagger_json_path = output_path.join("docs").join("swagger.json");
-                if swagger_json_path.exists() {
-                    if let Ok(mut content) = std::fs::read_to_string(&swagger_json_path) {
-                        // 检查文件是否以换行符结尾（支持不同平台的换行符）
-                        let needs_newline = !content.ends_with('\n') && !content.ends_with("\r\n");
+                if swagger_json_path.exists()
+                    && let Ok(mut content) = std::fs::read_to_string(&swagger_json_path)
+                {
+                    // 检查文件是否以换行符结尾（支持不同平台的换行符）
+                    let needs_newline = !content.ends_with('\n') && !content.ends_with("\r\n");
 
-                        if needs_newline {
-                            content.push('\n');
+                    if needs_newline {
+                        content.push('\n');
 
-                            if let Err(e) = std::fs::write(&swagger_json_path, content) {
-                                println!("Warning: Failed to add newline to swagger.json: {e}");
-                            } else {
-                                println!("Added newline to swagger.json for proper formatting");
-                            }
+                        if let Err(e) = std::fs::write(&swagger_json_path, content) {
+                            println!("Warning: Failed to add newline to swagger.json: {e}");
+                        } else {
+                            println!("Added newline to swagger.json for proper formatting");
                         }
                     }
                 }

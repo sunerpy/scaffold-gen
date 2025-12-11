@@ -1,0 +1,100 @@
+/* AppLayout组件样式 - 使用Tailwind CSS v4 */
+@reference "tailwindcss";
+
+@layer components {
+  /* 应用布局容器 */
+  .app-layout {
+    @apply h-screen w-screen overflow-hidden;
+    background: var(--app-background);
+    @apply transition-colors duration-300;
+  }
+
+  /* 深色主题下的应用布局 */
+  .dark .app-layout {
+    background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 50%, #0f0f0f 100%);
+  }
+
+  /* Element Plus容器 */
+  .app-layout :deep(.el-container) {
+    @apply h-screen;
+  }
+
+  /* 应用侧边栏 */
+  .app-sidebar {
+    @apply h-screen overflow-hidden;
+    background-color: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(25px);
+    @apply transition-all duration-300 ease-in-out;
+    box-shadow: 4px 0 30px rgba(0, 0, 0, 0.12);
+  }
+
+  /* 侧边栏悬停效果 */
+  .app-sidebar:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 6px 0 40px rgba(0, 0, 0, 0.15);
+  }
+
+  /* 深色主题下的侧边栏 - 与app-main近似的渐变背景 */
+  .dark .app-sidebar {
+    background: linear-gradient(
+      135deg,
+      #121212 0%,
+      #1e1e1e 30%,
+      #181818 70%,
+      #121212 100%
+    );
+    /* 增强阴影效果 */
+    box-shadow: 
+      6px 0 40px rgba(0, 0, 0, 0.6),
+      inset -1px 0 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .dark .app-sidebar:hover {
+    background: linear-gradient(
+      135deg,
+      #141414 0%,
+      #202020 30%,
+      #1a1a1a 70%,
+      #141414 100%
+    );
+    /* 悬停时增强阴影 */
+    box-shadow: 
+      8px 0 50px rgba(0, 0, 0, 0.7),
+      inset -1px 0 0 rgba(255, 255, 255, 0.08);
+  }
+
+  /* 主内容区域 */
+  .app-main {
+    @apply p-0 overflow-hidden bg-transparent;
+    @apply transition-colors duration-300;
+  }
+
+  /* 深色模式主内容区域 */
+  .dark .app-main {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 50%, #1a1a1a 100%);
+  }
+
+  /* 主内容包装器 */
+  .main-content-wrapper {
+    @apply h-full overflow-y-auto p-5;
+    @apply transition-colors duration-300;
+  }
+
+  /* 深色模式主内容包装器 */
+  .dark .main-content-wrapper {
+    @apply text-white;
+  }
+
+  /* 响应式设计 */
+  @media (max-width: 768px) {
+    .main-content-wrapper {
+      @apply px-4 py-4;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .main-content-wrapper {
+      padding: 0.625rem;
+    }
+  }
+}

@@ -12,6 +12,7 @@ use crate::utils::go_tools::GoTools;
 
 /// Go语言级别生成器实现
 pub struct GoGenerator {
+    #[allow(dead_code)]
     template_processor: TemplateProcessor,
 }
 

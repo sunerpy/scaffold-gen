@@ -1,316 +1,228 @@
 # Scaffold-Gen
 
-一个现代化、可扩展的脚手架生成器，支持多种框架和编程语言的项目模板创建。
+[![Crates.io](https://img.shields.io/crates/v/scaffold-gen.svg)](https://crates.io/crates/scaffold-gen)
+[![License](https://img.shields.io/crates/l/scaffold-gen.svg)](LICENSE)
 
-## 特性
+English | [简体中文](docs/readme/README-CN.md)
 
-- **现代化架构**: 基于trait的清洁、模块化设计
-- **三层生成器架构**: 项目级、语言级、框架级分层生成
-- **统一生成器接口**: 所有框架生成器的一致API
-- **后处理管道**: 可扩展的自定义项目设置钩子
-- **交互式CLI**: 用户友好的项目配置提示
-- **环境验证**: 自动检查所需工具和依赖
+A modern, extensible scaffolding generator for creating project templates across multiple frameworks and programming languages.
 
-## 系统要求
+## Features
 
-- **Rust** (1.70 或更高版本)
-- **Go** (1.19 或更高版本) - 用于Go项目生成
+- 🚀 **Modern Architecture**: Clean, modular design based on Rust traits
+- 🏗️ **Three-Layer Generator Architecture**: Project, Language, and Framework level generation
+- 🔌 **Unified Generator Interface**: Consistent API across all framework generators
+- ⚡ **Post-Processing Pipeline**: Extensible hooks for custom project setup
+- 💻 **Interactive CLI**: User-friendly prompts for project configuration
+- ✅ **Environment Validation**: Automatic checking of required tools and dependencies
 
-## 安装
+## Supported Frameworks
 
-### 从源码构建
+| Language | Framework | Status |
+|----------|-----------|--------|
+| Go | Gin | ✅ |
+| Go | Go-Zero | ✅ |
+| Rust | CLI App | ✅ |
+| Rust | Tauri | ✅ |
+| TypeScript | Vue 3 | ✅ |
+| TypeScript | React | ✅ |
+| Python | Basic | ✅ |
+
+## Installation
+
+### From crates.io
 
 ```bash
-git clone <repository-url>
+cargo install scaffold-gen
+```
+
+### From Source
+
+```bash
+git clone https://github.com/sunerpy/scaffold-gen.git
 cd scaffold-gen
-cargo build --release
+make release
 ```
 
-### 快速构建并复制二进制文件
+### Pre-built Binaries
 
-用于开发和测试，可以构建并自动将二进制文件复制到项目根目录：
+Download pre-built binaries from the [Releases](https://github.com/sunerpy/scaffold-gen/releases) page.
 
-```bash
-# Windows
-$env:SCAFFOLD_COPY_BINARY="1"; cargo build
+## Quick Start
 
-# Linux/macOS  
-SCAFFOLD_COPY_BINARY=1 cargo build
-```
-
-这将在项目根目录创建一个 `scafgen` (或Windows上的 `scafgen.exe`) 二进制文件，便于测试。
-
-## 使用方法
-
-### 交互模式 (推荐)
+### Interactive Mode (Recommended)
 
 ```bash
 scafgen new my-project
 ```
 
-CLI将引导您完成：
+The CLI will guide you through:
 
-- 语言选择 (Go等)
-- 框架选择 (Gin、Go-Zero等)
-- 项目配置 (主机、端口、功能)
-- 许可证选择
+- Language selection (Go, Rust, TypeScript, Python)
+- Framework selection (Gin, Go-Zero, Tauri, Vue3, React, etc.)
+- Project configuration (host, port, features)
+- License selection
 
-### 直接指定框架
+### Direct Framework Specification
 
 ```bash
-# 创建Gin项目
+# Create a Gin project
 scafgen new my-gin-app --framework gin
 
-# 创建Go-Zero项目  
+# Create a Go-Zero project
 scafgen new my-gozero-app --framework go-zero
+
+# Create a Tauri project
+scafgen new my-tauri-app --framework tauri
+
+# Create a Vue3 project
+scafgen new my-vue-app --framework vue3
+
+# Create a React project
+scafgen new my-react-app --framework react
 ```
 
-## 架构设计
+## Architecture
 
-### 三层生成器架构
+### Three-Layer Generator Architecture
 
-Scaffold-Gen采用分层的生成器架构，提供清晰的职责分离：
+```
+┌─────────────────────────────────────────┐
+│           GeneratorOrchestrator         │
+│      (Coordinates all generators)       │
+└─────────────────┬───────────────────────┘
+                  │
+    ┌─────────────┼─────────────┐
+    ▼             ▼             ▼
+┌────────┐  ┌──────────┐  ┌───────────┐
+│ Project │  │ Language │  │ Framework │
+│Generator│  │Generator │  │ Generator │
+└────────┘  └──────────┘  └───────────┘
+    │             │             │
+    ▼             ▼             ▼
+ LICENSE      Go/Rust/      Gin/Tauri/
+ Git/README   Python/TS     Vue3/React
+```
 
-#### 1. 项目级生成器 (ProjectGenerator)
+#### 1. Project Generator
 
-负责通用项目文件的生成：
+Handles common project files:
 
-- LICENSE文件生成
-- Git仓库初始化
-- Pre-commit hooks安装
-- README文件生成
+- LICENSE file generation
+- Git repository initialization
+- Pre-commit hooks installation
+- README file generation
 
-#### 2. 语言级生成器 (LanguageGenerator)
+#### 2. Language Generator
 
-处理特定编程语言的设置：
+Sets up language-specific environment:
 
-- **GoGenerator**: Go模块初始化、依赖管理
-- 环境配置和验证
-- 语言特定的配置文件
+- **GoGenerator**: Go module initialization, dependency management
+- **RustGenerator**: Cargo project initialization
+- **PythonGenerator**: Python project structure
+- **TypeScriptGenerator**: Node.js/npm configuration
 
-#### 3. 框架级生成器 (FrameworkGenerator)
+#### 3. Framework Generator
 
-生成框架特定的代码结构：
+Generates framework-specific code structure:
 
-- **GinGenerator**: Gin web框架项目结构
-- **GoZeroGenerator**: Go-Zero微服务框架结构
-- 框架特定的中间件、路由、配置
+- **GinGenerator**: Gin web framework project structure
+- **GoZeroGenerator**: Go-Zero microservice framework structure
+- **TauriGenerator**: Tauri desktop application structure
+- **Vue3Generator**: Vue 3 frontend project structure
+- **ReactGenerator**: React frontend project structure
 
-### 核心组件
+## Template System
 
-- **`Generator` Trait**: 所有生成器的基础接口
-- **`Parameters` Trait**: 类型安全的参数管理
-- **`TemplateProcessor`**: 模板处理和渲染引擎
-- **`GeneratorOrchestrator`**: 协调三层生成器的执行
-
-### 生成流程
-
-1. **参数验证**: 验证用户输入和环境要求
-2. **项目级生成**: 创建基础项目文件和结构
-3. **语言级生成**: 设置语言特定的环境和配置
-4. **框架级生成**: 生成框架特定的代码和结构
-5. **后处理**: 执行依赖安装、Git初始化等
-
-## 快速开始
-
-1. **构建项目**:
-
-   ```bash
-   # 带自动二进制复制的测试构建
-   $env:SCAFFOLD_COPY_BINARY="1"; cargo build
-   ```
-
-2. **创建新项目**:
-
-   ```bash
-   ./scafgen new my-awesome-project
-   ```
-
-3. **按照交互提示** 配置您的项目
-
-4. **进入项目目录** 开始编码！
-
-## 配置
-
-### 模板系统
-
-生成器使用分层模板系统：
+The generator uses a hierarchical template system:
 
 ```
 templates/
-├── frameworks/          # 框架特定模板
+├── frameworks/          # Framework-specific templates
 │   ├── go/
-│   │   ├── gin/        # Gin框架模板
-│   │   └── go-zero/    # Go-Zero框架模板
-├── languages/          # 语言特定模板  
-│   └── go/             # Go语言模板
-└── licenses/           # 许可证模板
+│   │   ├── gin/        # Gin framework templates
+│   │   └── go-zero/    # Go-Zero framework templates
+│   ├── rust/
+│   │   └── tauri/      # Tauri framework templates
+│   └── typescript/
+│       ├── vue3/       # Vue 3 framework templates
+│       └── react/      # React framework templates
+├── languages/          # Language-specific templates
+│   ├── go/
+│   ├── rust/
+│   ├── python/
+│   └── typescript/
+└── licenses/           # License templates
     ├── MIT.tmpl
     ├── Apache-2.0.tmpl
     └── GPL-3.0.tmpl
 ```
 
-### 模板变量
+### Template Variables
 
-#### 通用变量
+#### Common Variables
 
-- `{{project_name}}` - 项目名称
-- `{{author}}` - 项目作者
-- `{{license}}` - 许可证类型
-- `{{year}}` - 当前年份
+- `{{project_name}}` - Project name
+- `{{author}}` - Project author
+- `{{license}}` - License type
+- `{{year}}` - Current year
 
-#### Go语言变量
+#### Framework-Specific Variables
 
-- `{{module_name}}` - Go模块名称
-- `{{go_version}}` - Go版本
+- `{{host}}` - Server host (default: localhost)
+- `{{port}}` - HTTP port (default: 8080)
+- `{{grpc_port}}` - gRPC port (Go-Zero specific)
+- `{{enable_swagger}}` - Enable Swagger documentation
+- `{{enable_database}}` - Enable database support
 
-#### 框架特定变量
+## Development
 
-- `{{host}}` - 服务器主机 (默认: localhost)
-- `{{port}}` - HTTP端口 (默认: 8080)
-- `{{grpc_port}}` - gRPC端口 (Go-Zero专用, 默认: 9090)
-- `{{enable_swagger}}` - 是否启用Swagger文档
-- `{{enable_database}}` - 是否启用数据库支持
-- `{{database_type}}` - 数据库类型 (mysql, postgres, sqlite)
+### Build Commands
 
-## 扩展系统
+```bash
+# Debug build
+make build
 
-### 添加新的框架生成器
+# Release build
+make release
 
-1. **实现Generator trait**:
+# Run tests
+make test
 
-   ```rust
-   pub struct MyFrameworkGenerator {
-       template_processor: TemplateProcessor,
-   }
-   
-   impl Generator for MyFrameworkGenerator {
-       type Params = MyFrameworkParams;
-       
-       fn name(&self) -> &'static str {
-           "MyFramework"
-       }
-       
-       fn get_template_path(&self) -> &'static str {
-           "frameworks/my-language/my-framework"
-       }
-   }
-   ```
+# Run linter
+make lint
 
-2. **实现FrameworkGenerator trait**:
+# Format code
+make fmt
 
-   ```rust
-   impl FrameworkGenerator for MyFrameworkGenerator {
-       fn framework(&self) -> &'static str {
-           "my-framework"
-       }
-       
-       fn language(&self) -> &'static str {
-           "my-language"
-       }
-       
-       fn generate_basic_structure(&mut self, params: &Self::Params, output_path: &Path) -> Result<()> {
-           // 实现框架特定的结构生成
-       }
-   }
-   ```
+# Run all CI checks
+make ci
+```
 
-3. **添加框架模板** 到 `templates/frameworks/my-language/my-framework/`
-
-4. **在编排器中注册** 新的生成器
-
-### 添加新的语言支持
-
-1. **创建语言参数结构**:
-
-   ```rust
-   #[derive(Debug, Clone)]
-   pub struct MyLanguageParams {
-       pub project_name: String,
-       pub version: String,
-       // 其他语言特定参数
-   }
-   ```
-
-2. **实现LanguageGenerator trait**:
-
-   ```rust
-   impl LanguageGenerator for MyLanguageGenerator {
-       fn language(&self) -> &'static str {
-           "my-language"
-       }
-       
-       fn setup_environment(&mut self, params: &Self::Params, output_path: &Path) -> Result<()> {
-           // 实现语言环境设置
-       }
-   }
-   ```
-
-## 开发
-
-### 项目结构
+### Project Structure
 
 ```
 src/
-├── commands/           # CLI命令实现
-├── generators/         # 生成器模块
-│   ├── core/          # 核心生成器traits和工具
-│   ├── project/       # 项目级生成器
-│   ├── language/      # 语言级生成器
-│   │   └── go/        # Go语言生成器
-│   ├── framework/     # 框架级生成器
-│   │   ├── gin/       # Gin框架生成器
-│   │   └── go_zero/   # Go-Zero框架生成器
-│   └── orchestrator.rs # 生成器编排器
-├── scaffold.rs        # 核心脚手架系统
-├── template_engine.rs # 模板处理引擎
-└── utils/             # 工具模块
+├── commands/           # CLI command implementations
+├── generators/         # Generator modules
+│   ├── core/          # Core generator traits and utilities
+│   ├── project/       # Project-level generator
+│   ├── language/      # Language-level generators
+│   ├── framework/     # Framework-level generators
+│   └── orchestrator.rs # Generator orchestrator
+├── scaffold.rs        # Core scaffolding system
+├── template_engine.rs # Template processing engine
+└── utils/             # Utility modules
 ```
 
-### 核心组件
+## Contributing
 
-- **三层生成器架构**: 项目、语言、框架分层处理
-- **`GeneratorOrchestrator`**: 协调各层生成器的执行
-- **模板处理系统**: 基于嵌入式模板的文件生成
-- **参数管理**: 类型安全的参数传递和验证
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-### 构建
+## License
 
-```bash
-# 调试构建
-cargo build
-
-# 发布构建  
-cargo build --release
-
-# 带自动二进制复制的测试构建
-$env:SCAFFOLD_COPY_BINARY="1"; cargo build
-```
-
-### 测试
-
-```bash
-cargo test
-```
-
-### 代码质量
-
-```bash
-# 运行clippy检查
-cargo clippy --all-targets --all-features
-
-# 格式化代码
-cargo fmt
-```
-
-## 贡献
-
-1. Fork 仓库
-2. 创建功能分支
-3. 进行更改
-4. 为新功能添加测试
-5. 提交Pull Request
-
-## 许可证
-
-本项目基于MIT许可证 - 详见LICENSE文件。
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

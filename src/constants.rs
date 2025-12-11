@@ -10,6 +10,7 @@ pub enum Language {
     Go,
     Python,
     Rust,
+    TypeScript,
 }
 
 impl Language {
@@ -19,6 +20,7 @@ impl Language {
             Language::Go => "Go",
             Language::Python => "Python",
             Language::Rust => "Rust",
+            Language::TypeScript => "TypeScript",
         }
     }
 
@@ -29,6 +31,7 @@ impl Language {
             Language::Go => "go",
             Language::Python => "python",
             Language::Rust => "rust",
+            Language::TypeScript => "typescript",
         }
     }
 
@@ -39,6 +42,7 @@ impl Language {
             "go" => Some(Language::Go),
             "python" => Some(Language::Python),
             "rust" => Some(Language::Rust),
+            "typescript" | "ts" => Some(Language::TypeScript),
             _ => None,
         }
     }
@@ -53,24 +57,38 @@ impl std::fmt::Display for Language {
 /// 支持的框架枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Framework {
+    /// 无框架（纯语言项目）
+    None,
     Gin,
     GoZero,
+    Tauri,
+    Vue3,
+    React,
 }
 
 impl Framework {
     /// 获取框架的字符串表示
+    #[allow(dead_code)]
     pub fn as_str(&self) -> &'static str {
         match self {
+            Framework::None => "None",
             Framework::Gin => "Gin",
             Framework::GoZero => "go-zero",
+            Framework::Tauri => "Tauri",
+            Framework::Vue3 => "Vue3",
+            Framework::React => "React",
         }
     }
 
     /// 获取框架的显示名称（用于用户界面）
     pub fn display_name(&self) -> &'static str {
         match self {
+            Framework::None => "None (Pure Language Project)",
             Framework::Gin => "Gin (Web Framework)",
             Framework::GoZero => "go-zero (Microservice Framework)",
+            Framework::Tauri => "Tauri (Desktop App Framework)",
+            Framework::Vue3 => "Vue3 (Frontend Framework)",
+            Framework::React => "React (Frontend Framework)",
         }
     }
 
@@ -78,27 +96,68 @@ impl Framework {
     #[allow(dead_code)]
     pub fn as_lowercase(&self) -> &'static str {
         match self {
+            Framework::None => "none",
             Framework::Gin => "gin",
             Framework::GoZero => "go-zero",
+            Framework::Tauri => "tauri",
+            Framework::Vue3 => "vue3",
+            Framework::React => "react",
         }
     }
 
     /// 从字符串解析框架
     pub fn parse_from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
+            "none" | "" => Some(Framework::None),
             "gin" => Some(Framework::Gin),
             "go-zero" => Some(Framework::GoZero),
+            "tauri" => Some(Framework::Tauri),
+            "vue3" | "vue" => Some(Framework::Vue3),
+            "react" => Some(Framework::React),
             _ => None,
         }
     }
 
     /// 获取框架对应的语言
     #[allow(dead_code)]
-    pub fn language(&self) -> Language {
+    pub fn language(&self) -> Option<Language> {
         match self {
-            Framework::Gin => Language::Go,
-            Framework::GoZero => Language::Go,
+            Framework::None => None,
+            Framework::Gin => Some(Language::Go),
+            Framework::GoZero => Some(Language::Go),
+            Framework::Tauri => Some(Language::Rust),
+            Framework::Vue3 => Some(Language::TypeScript),
+            Framework::React => Some(Language::TypeScript),
         }
+    }
+
+    /// 检查是否为无框架
+    #[allow(dead_code)]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Framework::None)
+    }
+
+    /// 获取指定语言支持的所有框架
+    pub fn frameworks_for_language(language: Language) -> Vec<Framework> {
+        match language {
+            Language::Go => vec![Framework::Gin, Framework::GoZero],
+            Language::Python => vec![], // Python 目前没有框架选项
+            Language::Rust => vec![Framework::None, Framework::Tauri],
+            Language::TypeScript => vec![Framework::Vue3, Framework::React],
+        }
+    }
+
+    /// 获取所有框架
+    #[allow(dead_code)]
+    pub fn all() -> Vec<Framework> {
+        vec![
+            Framework::None,
+            Framework::Gin,
+            Framework::GoZero,
+            Framework::Tauri,
+            Framework::Vue3,
+            Framework::React,
+        ]
     }
 }
 
@@ -132,24 +191,38 @@ pub const API_PORT: &str = "api_port";
 #[allow(dead_code)]
 pub const RPC_PORT: &str = "rpc_port";
 
-// 默认值常量 - 预留用于后期扩展的默认值配置功能
+// 默认值常量 - 用于各种工具和语言的默认版本配置
 #[allow(dead_code)]
 pub mod defaults {
-    // Go 版本配置 - 预留用于后期扩展的 Go 版本管理
-    #[allow(dead_code)]
+    // ===== 语言版本 =====
+    /// Go 默认版本
     pub const GO_VERSION: &str = "1.24";
-    // 主机配置 - 预留用于后期扩展的网络配置
-    #[allow(dead_code)]
+    /// Python 默认版本
+    pub const PYTHON_VERSION: &str = "3.12";
+    /// Rust 默认版本
+    pub const RUST_VERSION: &str = "1.75";
+    /// Node.js 默认版本
+    pub const NODE_VERSION: &str = "20";
+    /// TypeScript 默认版本
+    pub const TYPESCRIPT_VERSION: &str = "5.0";
+
+    // ===== 工具版本 =====
+    /// uv 默认版本
+    pub const UV_VERSION: &str = "0.9.5";
+
+    // ===== 网络配置 =====
+    /// 默认主机地址
     pub const HOST: &str = "0.0.0.0";
-    // 端口配置 - 预留用于后期扩展的端口管理
-    #[allow(dead_code)]
+    /// 默认 HTTP 端口
     pub const PORT: i32 = 8080;
-    /// API服务端口 (预留给未来的API服务器配置)
-    #[allow(dead_code)]
+    /// API 服务端口
     pub const API_PORT: i32 = 8888;
-    /// RPC服务端口 (预留给未来的RPC服务器配置)
-    #[allow(dead_code)]
+    /// RPC 服务端口
     pub const RPC_PORT: i32 = 9999;
+    /// Vue3/React 开发服务器端口
+    pub const VITE_PORT: i32 = 5173;
+    /// Tauri 开发服务器端口
+    pub const TAURI_PORT: i32 = 1420;
 }
 
 /// 字符串转换工具函数

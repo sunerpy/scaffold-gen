@@ -192,6 +192,28 @@ impl EnvironmentChecker {
         }
     }
 
+    /// 获取Python版本字符串（用于模板参数）
+    pub async fn get_python_version(&self) -> Result<String> {
+        let output = Command::new("python").arg("--version").output()?;
+
+        if !output.status.success() {
+            return Err(anyhow!("Failed to get Python version"));
+        }
+
+        let version_str = String::from_utf8_lossy(&output.stdout);
+        let re = Regex::new(r"Python (\d+)\.(\d+)(?:\.(\d+))?")?;
+
+        if let Some(captures) = re.captures(&version_str) {
+            let major = captures.get(1).unwrap().as_str();
+            let minor = captures.get(2).unwrap().as_str();
+
+            // 返回格式化的版本字符串，如 "3.12"
+            Ok(format!("{major}.{minor}"))
+        } else {
+            Err(anyhow!("Unable to parse Python version"))
+        }
+    }
+
     /// 检查uv工具是否可用
     pub async fn check_uv(&self) -> Result<bool> {
         match which("uv") {
@@ -247,5 +269,63 @@ impl EnvironmentChecker {
 
         let version_str = String::from_utf8_lossy(&output.stdout);
         Ok(version_str.trim().to_string())
+    }
+
+    /// 获取Rust版本字符串（用于模板参数）
+    #[allow(dead_code)]
+    pub async fn get_rust_version(&self) -> Result<String> {
+        let output = Command::new("rustc").arg("--version").output()?;
+
+        if !output.status.success() {
+            return Err(anyhow!("Failed to get Rust version"));
+        }
+
+        let version_str = String::from_utf8_lossy(&output.stdout);
+        let re = Regex::new(r"rustc (\d+)\.(\d+)(?:\.(\d+))?")?;
+
+        if let Some(captures) = re.captures(&version_str) {
+            let major = captures.get(1).unwrap().as_str();
+            let minor = captures.get(2).unwrap().as_str();
+
+            // 返回格式化的版本字符串，如 "1.75"
+            Ok(format!("{major}.{minor}"))
+        } else {
+            Err(anyhow!("Unable to parse Rust version"))
+        }
+    }
+
+    /// 获取Node.js版本字符串（用于模板参数）
+    #[allow(dead_code)]
+    pub async fn get_node_version(&self) -> Result<String> {
+        let output = Command::new("node").arg("--version").output()?;
+
+        if !output.status.success() {
+            return Err(anyhow!("Failed to get Node.js version"));
+        }
+
+        let version_str = String::from_utf8_lossy(&output.stdout);
+        // Node.js 版本格式为 "v20.10.0"
+        let re = Regex::new(r"v(\d+)\.(\d+)(?:\.(\d+))?")?;
+
+        if let Some(captures) = re.captures(&version_str) {
+            let major = captures.get(1).unwrap().as_str();
+            let minor = captures.get(2).unwrap().as_str();
+
+            // 返回格式化的版本字符串，如 "20.10"
+            Ok(format!("{major}.{minor}"))
+        } else {
+            Err(anyhow!("Unable to parse Node.js version"))
+        }
+    }
+
+    /// 检查 pnpm 是否可用
+    pub async fn check_pnpm(&self) -> Result<bool> {
+        match which("pnpm") {
+            Ok(_) => match Command::new("pnpm").args(["--version"]).output() {
+                Ok(output) => Ok(output.status.success()),
+                Err(_) => Ok(false),
+            },
+            Err(_) => Ok(false),
+        }
     }
 }

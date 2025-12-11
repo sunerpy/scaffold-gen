@@ -1,0 +1,80 @@
+<template>
+  <div
+    class="sidebar"
+    :class="{
+      collapsed: layoutStore.sidebarCollapsed,
+      hidden: layoutStore.sidebarHidden
+    }"
+  >
+    <!-- 侧边栏头部 -->
+    <div class="sidebar-header">
+      <div class="logo" v-if="!layoutStore.sidebarCollapsed">
+        <span class="logo-text">App</span>
+      </div>
+      <el-icon v-else class="logo-icon">
+        <House />
+      </el-icon>
+    </div>
+
+    <!-- 导航菜单 -->
+    <el-menu
+      :default-active="$route.path"
+      :collapse="layoutStore.sidebarCollapsed"
+      :unique-opened="true"
+      router
+      class="sidebar-menu"
+    >
+      <el-menu-item index="/">
+        <el-icon>
+          <House />
+        </el-icon>
+        <template #title>\{{ $t("common.dashboard") }}</template>
+      </el-menu-item>
+
+      <!-- 在此添加更多菜单项 -->
+    </el-menu>
+
+    <!-- 占位区域 -->
+    <div class="menu-spacer"></div>
+
+    <!-- 侧边栏底部 -->
+    <div class="sidebar-footer">
+      <!-- 主题切换按钮 -->
+      <div class="theme-toggle-wrapper">
+        <ThemeToggle :simple="layoutStore.sidebarCollapsed" />
+      </div>
+
+      <!-- 设置项 -->
+      <el-menu
+        :collapse="layoutStore.sidebarCollapsed"
+        :collapse-transition="false"
+        class="footer-menu"
+      >
+        <el-menu-item @click="openSettings">
+          <el-icon>
+            <Setting />
+          </el-icon>
+          <template #title>\{{ $t("common.settings") }}</template>
+        </el-menu-item>
+      </el-menu>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { useLayoutStore } from "@/stores/layoutStore";
+import { House, Setting } from "@element-plus/icons-vue";
+import ThemeToggle from "@/components/Settings/ThemeToggle.vue";
+import { $t } from "@/utils/i18n";
+
+const layoutStore = useLayoutStore();
+
+// 打开设置弹窗
+const openSettings = () => {
+  window.__openSettings?.();
+};
+</script>
+
+<style scoped>
+@import "@/styles/sidebar.css";
+</style>

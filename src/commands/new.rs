@@ -165,15 +165,54 @@ impl NewCommand {
                 }
                 Err(e) => return Err(anyhow::anyhow!("uv check failed: {e}")),
             },
-            Language::Rust => match env_checker.check_cargo().await {
-                Ok(true) => println!("  Cargo: Available"),
-                Ok(false) => {
-                    return Err(anyhow::anyhow!(
-                        "Cargo is not available. Please install Rust first: https://rustup.rs/"
-                    ));
+            Language::Rust => {
+                // 检查 Cargo
+                match env_checker.check_cargo().await {
+                    Ok(true) => println!("  Cargo: Available"),
+                    Ok(false) => {
+                        return Err(anyhow::anyhow!(
+                            "Cargo is not available. Please install Rust first: https://rustup.rs/"
+                        ));
+                    }
+                    Err(e) => return Err(anyhow::anyhow!("Cargo check failed: {e}")),
                 }
-                Err(e) => return Err(anyhow::anyhow!("Cargo check failed: {e}")),
-            },
+
+                // 如果选择了 Tauri 框架，还需要检查 pnpm
+                if self.framework.as_ref().map(|f| f.to_lowercase()) == Some("tauri".to_string()) {
+                    match env_checker.check_pnpm().await {
+                        Ok(true) => println!("  pnpm: Available"),
+                        Ok(false) => {
+                            return Err(anyhow::anyhow!(
+                                "pnpm is not available. Please install pnpm first:\n  npm install -g pnpm\n  or visit: https://pnpm.io/installation"
+                            ));
+                        }
+                        Err(e) => return Err(anyhow::anyhow!("pnpm check failed: {e}")),
+                    }
+                }
+            }
+            Language::TypeScript => {
+                // 检查 Node.js
+                match env_checker.check_node().await {
+                    Ok(true) => println!("  Node.js: Available"),
+                    Ok(false) => {
+                        return Err(anyhow::anyhow!(
+                            "Node.js is not available. Please install Node.js first: https://nodejs.org/"
+                        ));
+                    }
+                    Err(e) => return Err(anyhow::anyhow!("Node.js check failed: {e}")),
+                }
+
+                // 检查 pnpm
+                match env_checker.check_pnpm().await {
+                    Ok(true) => println!("  pnpm: Available"),
+                    Ok(false) => {
+                        return Err(anyhow::anyhow!(
+                            "pnpm is not available. Please install pnpm first:\n  npm install -g pnpm\n  or visit: https://pnpm.io/installation"
+                        ));
+                    }
+                    Err(e) => return Err(anyhow::anyhow!("pnpm check failed: {e}")),
+                }
+            }
         }
 
         Ok(())
@@ -186,13 +225,19 @@ impl NewCommand {
                 "go" => Ok(Language::Go),
                 "python" => Ok(Language::Python),
                 "rust" => Ok(Language::Rust),
+                "typescript" | "ts" => Ok(Language::TypeScript),
                 _ => Err(anyhow::anyhow!(
-                    "Unsupported language: {language_str}. Supported languages: go, python, rust"
+                    "Unsupported language: {language_str}. Supported languages: go, python, rust, typescript"
                 )),
             };
         }
 
-        let languages = vec![Language::Go, Language::Python, Language::Rust];
+        let languages = vec![
+            Language::Go,
+            Language::Python,
+            Language::Rust,
+            Language::TypeScript,
+        ];
 
         // 当只有一个选项时，直接返回该选项
         if languages.len() == 1 {
@@ -208,23 +253,44 @@ impl NewCommand {
     }
 
     fn select_framework(&self, language: &Language) -> Result<Framework> {
-        // Python 和 Rust 语言目前不需要选择框架
-        if matches!(language, Language::Python | Language::Rust) {
-            // 返回一个默认值，但实际不会使用
-            return Ok(Framework::Gin);
+        // 获取该语言支持的框架列表
+        let frameworks = Framework::frameworks_for_language(*language);
+
+        // 如果没有可用框架（如 Python），返回 None
+        if frameworks.is_empty() {
+            return Ok(Framework::None);
         }
 
-        // 如果通过命令行参数指定了框架，直接使用
+        // 如果通过命令行参数指定了框架，验证并使用
         if let Some(framework_str) = &self.framework {
-            return Framework::parse_from_str(framework_str).ok_or_else(|| {
+            let framework = Framework::parse_from_str(framework_str).ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Unsupported framework: {framework_str}. Supported frameworks: gin, go-zero"
+                    "Unsupported framework: {framework_str}. Supported frameworks: gin, go-zero, tauri, vue3, react, none"
                 )
-            });
+            })?;
+
+            // 验证框架是否适用于当前语言
+            if !frameworks.contains(&framework) && framework != Framework::None {
+                return Err(anyhow::anyhow!(
+                    "Framework '{}' is not supported for {} language. Available frameworks: {}",
+                    framework_str,
+                    language,
+                    frameworks
+                        .iter()
+                        .map(|f| f.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+
+            return Ok(framework);
         }
 
-        // 否则使用交互式选择
-        let frameworks = vec![Framework::Gin, Framework::GoZero];
+        // 如果只有一个框架选项，直接返回
+        if frameworks.len() == 1 {
+            println!("Framework: {}", frameworks[0]);
+            return Ok(frameworks[0]);
+        }
 
         let selected = Select::new("Choose your framework:", frameworks)
             .prompt()
@@ -238,8 +304,11 @@ impl NewCommand {
         framework: &Framework,
         language: &Language,
     ) -> Result<(String, u16, u16)> {
-        // Rust 和 Python 语言不需要网络配置
-        if matches!(language, Language::Rust | Language::Python) {
+        // Rust、Python 和 TypeScript 语言不需要网络配置
+        if matches!(
+            language,
+            Language::Rust | Language::Python | Language::TypeScript
+        ) {
             return Ok(("0.0.0.0".to_string(), 8080, 9000));
         }
 
@@ -261,8 +330,12 @@ impl NewCommand {
             p
         } else {
             let default_port = match framework {
+                Framework::None => 8080,
                 Framework::Gin => 8080,
                 Framework::GoZero => 8888,
+                Framework::Tauri => 1420,
+                Framework::Vue3 => 5173,
+                Framework::React => 5173,
             };
             println!("Prompting for HTTP port...");
             Text::new("HTTP port:")
@@ -378,6 +451,24 @@ impl NewCommand {
     async fn generate_project(&self, params: ProjectParams) -> Result<()> {
         println!("{}", "正在生成项目...".green());
 
+        // 验证语言和框架组合是否有效
+        let valid_frameworks = Framework::frameworks_for_language(params.language);
+        if !valid_frameworks.is_empty()
+            && !valid_frameworks.contains(&params.framework)
+            && params.framework != Framework::None
+        {
+            return Err(anyhow::anyhow!(
+                "Framework '{}' is not supported for {} language. Available frameworks: {}",
+                params.framework.as_str(),
+                params.language,
+                valid_frameworks
+                    .iter()
+                    .map(|f| f.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+
         // 创建项目目录
         std::fs::create_dir_all(&params.project_path).with_context(|| {
             format!(
@@ -388,8 +479,9 @@ impl NewCommand {
 
         let mut orchestrator = GeneratorOrchestrator::new()?;
 
-        match (&params.language, &params.framework) {
-            (Language::Go, Framework::Gin) => {
+        // 根据框架类型生成项目
+        match params.framework {
+            Framework::Gin => {
                 let options = GinProjectOptions::new()
                     .with_license(params.license.clone())
                     .with_server(params.host.clone(), params.port)
@@ -402,13 +494,13 @@ impl NewCommand {
                     options,
                 )?;
             }
-            (Language::Go, Framework::GoZero) => {
+            Framework::GoZero => {
                 // TODO: 实现 GoZero 项目生成
                 return Err(anyhow::anyhow!("GoZero 项目生成尚未实现"));
             }
-            (Language::Python, _) => {
+            Framework::Tauri => {
                 orchestrator
-                    .generate_python_project(
+                    .generate_tauri_project(
                         self.project_name.clone(),
                         &params.project_path,
                         params.license.clone(),
@@ -416,13 +508,61 @@ impl NewCommand {
                     )
                     .await?;
             }
-            (Language::Rust, _) => {
-                orchestrator.generate_rust_project(
-                    self.project_name.clone(),
-                    &params.project_path,
-                    params.license.clone(),
-                    params.enable_precommit,
-                )?;
+            Framework::Vue3 => {
+                orchestrator
+                    .generate_vue3_project(
+                        self.project_name.clone(),
+                        &params.project_path,
+                        params.license.clone(),
+                        params.enable_precommit,
+                    )
+                    .await?;
+            }
+            Framework::React => {
+                orchestrator
+                    .generate_react_project(
+                        self.project_name.clone(),
+                        &params.project_path,
+                        params.license.clone(),
+                        params.enable_precommit,
+                    )
+                    .await?;
+            }
+            Framework::None => {
+                // 根据语言生成纯语言项目
+                match params.language {
+                    Language::Python => {
+                        orchestrator
+                            .generate_python_project(
+                                self.project_name.clone(),
+                                &params.project_path,
+                                params.license.clone(),
+                                params.enable_precommit,
+                            )
+                            .await?;
+                    }
+                    Language::Rust => {
+                        orchestrator
+                            .generate_rust_project(
+                                self.project_name.clone(),
+                                &params.project_path,
+                                params.license.clone(),
+                                params.enable_precommit,
+                            )
+                            .await?;
+                    }
+                    _ => {
+                        return Err(anyhow::anyhow!(
+                            "{} language requires a framework. Please choose one from: {}",
+                            params.language,
+                            valid_frameworks
+                                .iter()
+                                .map(|f| f.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ));
+                    }
+                }
             }
         }
 

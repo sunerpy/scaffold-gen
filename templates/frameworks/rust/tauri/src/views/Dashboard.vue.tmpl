@@ -1,0 +1,187 @@
+<template>
+  <div class="dashboard">
+    <div class="page-header">
+      <h1 class="page-title">\{{ $t("common.dashboard") }}</h1>
+      <p class="page-description">欢迎使用 Tauri Vue 模板</p>
+    </div>
+
+    <!-- 骨架屏示例 -->
+    <div class="skeleton-demo">
+      <h2 class="section-title">骨架屏组件</h2>
+      <div class="skeleton-grid">
+        <div class="skeleton-card">
+          <div class="skeleton skeleton-avatar"></div>
+          <div class="skeleton-content">
+            <div class="skeleton skeleton-title"></div>
+            <div class="skeleton skeleton-text"></div>
+            <div class="skeleton skeleton-text short"></div>
+          </div>
+        </div>
+        <div class="skeleton-card">
+          <div class="skeleton skeleton-avatar"></div>
+          <div class="skeleton-content">
+            <div class="skeleton skeleton-title"></div>
+            <div class="skeleton skeleton-text"></div>
+            <div class="skeleton skeleton-text short"></div>
+          </div>
+        </div>
+        <div class="skeleton-card">
+          <div class="skeleton skeleton-avatar"></div>
+          <div class="skeleton-content">
+            <div class="skeleton skeleton-title"></div>
+            <div class="skeleton skeleton-text"></div>
+            <div class="skeleton skeleton-text short"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 卡片示例 -->
+    <div class="cards-demo">
+      <h2 class="section-title">卡片组件</h2>
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-card shadow="hover">
+            <template #header>
+              <div class="card-header">
+                <span>功能一</span>
+                <el-button type="primary" text>操作</el-button>
+              </div>
+            </template>
+            <p>这是一个示例卡片，展示基础的卡片布局。</p>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card shadow="hover">
+            <template #header>
+              <div class="card-header">
+                <span>功能二</span>
+                <el-button type="primary" text>操作</el-button>
+              </div>
+            </template>
+            <p>这是一个示例卡片，展示基础的卡片布局。</p>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card shadow="hover">
+            <template #header>
+              <div class="card-header">
+                <span>功能三</span>
+                <el-button type="primary" text>操作</el-button>
+              </div>
+            </template>
+            <p>这是一个示例卡片，展示基础的卡片布局。</p>
+          </el-card>
+        </el-col>
+      </el-row>
+    </div>
+
+    <!-- 按钮示例 -->
+    <div class="buttons-demo">
+      <h2 class="section-title">按钮组件</h2>
+      <el-space wrap>
+        <el-button>默认按钮</el-button>
+        <el-button type="primary">主要按钮</el-button>
+        <el-button type="success">成功按钮</el-button>
+        <el-button type="warning">警告按钮</el-button>
+        <el-button type="danger">危险按钮</el-button>
+        <el-button type="info">信息按钮</el-button>
+      </el-space>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { $t } from "@/utils/i18n";
+</script>
+
+<style scoped>
+.dashboard {
+  padding: 20px;
+}
+
+.page-header {
+  margin-bottom: 32px;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+}
+
+.page-description {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin: 0 0 16px 0;
+}
+
+.skeleton-demo,
+.cards-demo,
+.buttons-demo {
+  margin-bottom: 32px;
+}
+
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.skeleton-card {
+  display: flex;
+  gap: 16px;
+  padding: 20px;
+  background-color: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.skeleton-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.skeleton-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton-title {
+  height: 20px;
+  width: 60%;
+}
+
+.skeleton-text {
+  height: 14px;
+  width: 100%;
+}
+
+.skeleton-text.short {
+  width: 40%;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .skeleton-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

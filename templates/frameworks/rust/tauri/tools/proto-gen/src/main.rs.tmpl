@@ -1,0 +1,94 @@
+//! Proto-gen: Protobuf code generator for {{project_name}}
+//!
+//! This tool generates Rust and TypeScript code from .proto files.
+
+use anyhow::{Context, Result};
+use clap::{Parser, Subcommand};
+use std::path::PathBuf;
+
+mod generator;
+
+use generator::{RustGenerator, TypeScriptGenerator};
+
+/// Proto-gen CLI - Generate code from protobuf definitions
+#[derive(Parser, Debug)]
+#[command(name = "proto-gen")]
+#[command(author, version, about, long_about = None)]
+#[command(color = clap::ColorChoice::Auto)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Generate all code (Rust and TypeScript)
+    All,
+    /// Generate Rust protobuf code
+    Rust,
+    /// Generate TypeScript protobuf code
+    #[command(alias = "ts")]
+    Typescript,
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+
+    // Get project root directory
+    let project_root = get_project_root()?;
+
+    match cli.command {
+        Commands::All => {
+            println!("🔄 Generating all protobuf code...");
+            generate_rust(&project_root)?;
+            generate_typescript(&project_root)?;
+            println!("✅ All protobuf code generated successfully!");
+        }
+        Commands::Rust => {
+            println!("🦀 Generating Rust protobuf code...");
+            generate_rust(&project_root)?;
+            println!("✅ Rust protobuf code generated successfully!");
+        }
+        Commands::Typescript => {
+            println!("📘 Generating TypeScript protobuf code...");
+            generate_typescript(&project_root)?;
+            println!("✅ TypeScript protobuf code generated successfully!");
+        }
+    }
+
+    Ok(())
+}
+
+/// Get the project root directory
+fn get_project_root() -> Result<PathBuf> {
+    // Navigate from tools/proto-gen to project root
+    let current_dir = std::env::current_dir().context("Failed to get current directory")?;
+
+    // If we're in tools/proto-gen, go up two levels
+    if current_dir.ends_with("proto-gen") {
+        Ok(current_dir
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.to_path_buf())
+            .unwrap_or(current_dir))
+    } else if current_dir.ends_with("tools") {
+        Ok(current_dir
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or(current_dir))
+    } else {
+        Ok(current_dir)
+    }
+}
+
+/// Generate Rust protobuf code
+fn generate_rust(project_root: &PathBuf) -> Result<()> {
+    let generator = RustGenerator::new(project_root.clone());
+    generator.generate()
+}
+
+/// Generate TypeScript protobuf code
+fn generate_typescript(project_root: &PathBuf) -> Result<()> {
+    let generator = TypeScriptGenerator::new(project_root.clone());
+    generator.generate()
+}

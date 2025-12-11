@@ -1,0 +1,53 @@
+<template>
+  <el-config-provider :locale="currentLocale">
+    <div id="app-container" :class="themeClasses">
+      <router-view />
+    </div>
+  </el-config-provider>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from "vue";
+import { useTheme } from "@/composables/useTheme";
+
+// 初始化主题系统
+const { themeClasses, initTheme } = useTheme();
+
+// 当前语言包 - 可扩展为多语言支持
+const currentLocale = undefined;
+
+const showSettings = ref(false);
+
+// 全局键盘快捷键
+const handleKeydown = (event: KeyboardEvent) => {
+  // Ctrl/Cmd + , 打开设置
+  if ((event.ctrlKey || event.metaKey) && event.key === ",") {
+    event.preventDefault();
+    showSettings.value = true;
+  }
+};
+
+onMounted(async () => {
+  document.addEventListener("keydown", handleKeydown);
+  await initTheme();
+});
+
+onUnmounted(() => {
+  document.removeEventListener("keydown", handleKeydown);
+});
+
+// 暴露给全局使用
+declare global {
+  interface Window {
+    __openSettings: () => void;
+  }
+}
+
+window.__openSettings = () => {
+  showSettings.value = true;
+};
+</script>
+
+<style>
+@import "@/styles/global.css";
+</style>
