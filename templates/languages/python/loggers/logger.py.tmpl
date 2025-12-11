@@ -340,17 +340,27 @@ def configure_logging(
         msg = "不能同时传入 config 对象和其他关键字参数"
         raise ValueError(msg)
 
-    config = config or LoggingConfig(**kwargs)
-    level = config.level or log_cfg.level
-    log_file = config.log_file or log_cfg.log_file
-    max_bytes = config.max_bytes or log_cfg.max_bytes
-    backup_count = config.backup_count or log_cfg.backup_count
-    enable_rich = (
-        config.enable_rich if config.enable_rich is not None else log_cfg.enable_rich
-    )
-    enable_json = (
-        config.enable_json if config.enable_json is not None else log_cfg.enable_json
-    )
+    # 如果没有传入 config 且没有 kwargs，直接使用配置文件的值
+    if config is None and not kwargs:
+        level = log_cfg.level
+        log_file = log_cfg.log_file
+        max_bytes = log_cfg.max_bytes
+        backup_count = log_cfg.backup_count
+        enable_rich = log_cfg.enable_rich
+        enable_json = log_cfg.enable_json
+    else:
+        # 有传入参数时，创建 LoggingConfig 并合并配置
+        config = config or LoggingConfig(**kwargs)
+        level = config.level or log_cfg.level
+        log_file = config.log_file or log_cfg.log_file
+        max_bytes = config.max_bytes or log_cfg.max_bytes
+        backup_count = config.backup_count or log_cfg.backup_count
+        enable_rich = (
+            config.enable_rich if config.enable_rich is not None else log_cfg.enable_rich
+        )
+        enable_json = (
+            config.enable_json if config.enable_json is not None else log_cfg.enable_json
+        )
     # 控制台 handler 创建
     console_handler = build_console_handler(
         enable_rich=enable_rich,
