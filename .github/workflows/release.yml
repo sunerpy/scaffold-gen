@@ -1,18 +1,45 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - "v*"
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
 jobs:
+  # Check if this is a tag push and CI passed
+  check-trigger:
+    name: Check Trigger
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      tag_name: ${{ steps.check.outputs.tag_name }}
+    steps:
+      - name: Check if should release
+        id: check
+        run: |
+          echo "Event: ${{ github.event.workflow_run.event }}"
+          echo "Conclusion: ${{ github.event.workflow_run.conclusion }}"
+          echo "Head branch: ${{ github.event.workflow_run.head_branch }}"
+
+          if [[ "${{ github.event.workflow_run.conclusion }}" == "success" && "${{ github.event.workflow_run.head_branch }}" == v* ]]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "tag_name=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
   # Build job - builds for all platforms using Makefile
   build:
     name: Build ${{ matrix.target }}
+    needs: check-trigger
+    if: needs.check-trigger.outputs.should_release == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -46,11 +73,24 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check-trigger.outputs.tag_name }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-release-
 
       - name: Install cross-compilation tools (Linux aarch64)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
@@ -99,11 +139,14 @@ jobs:
   # Publish to crates.io
   publish-crate:
     name: Publish to crates.io
-    needs: build
+    needs: [check-trigger, build]
+    if: needs.check-trigger.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check-trigger.outputs.tag_name }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -116,13 +159,16 @@ jobs:
   # Create GitHub Release
   create-release:
     name: Create GitHub Release
-    needs: build
+    needs: [check-trigger, build]
+    if: needs.check-trigger.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check-trigger.outputs.tag_name }}
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -135,12 +181,11 @@ jobs:
       - name: Generate changelog
         id: changelog
         run: |
-          # Extract version from tag
-          VERSION=${GITHUB_REF#refs/tags/v}
+          VERSION=${{ needs.check-trigger.outputs.tag_name }}
+          VERSION=${VERSION#v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          
-          # Generate changelog
-          cat > CHANGELOG.md << 'EOF'
+
+          cat > CHANGELOG.md << EOF
           ## What's Changed
 
           Release version $VERSION
@@ -148,33 +193,31 @@ jobs:
           ### Installation
 
           #### From crates.io
-          ```bash
+          \`\`\`bash
           cargo install scaffold-gen
-          ```
+          \`\`\`
 
           #### From binary
           Download the appropriate binary for your platform from the assets below.
 
           | Platform | Architecture | File |
           |----------|--------------|------|
-          | Linux | x86_64 | `scafgen-linux-x86_64.tar.gz` |
-          | Linux | x86_64 (musl) | `scafgen-linux-x86_64-musl.tar.gz` |
-          | Linux | aarch64 | `scafgen-linux-aarch64.tar.gz` |
-          | macOS | x86_64 | `scafgen-darwin-x86_64.tar.gz` |
-          | macOS | aarch64 (Apple Silicon) | `scafgen-darwin-aarch64.tar.gz` |
-          | Windows | x86_64 | `scafgen-windows-x86_64.zip` |
+          | Linux | x86_64 | \`scafgen-linux-x86_64.tar.gz\` |
+          | Linux | x86_64 (musl) | \`scafgen-linux-x86_64-musl.tar.gz\` |
+          | Linux | aarch64 | \`scafgen-linux-aarch64.tar.gz\` |
+          | macOS | x86_64 | \`scafgen-darwin-x86_64.tar.gz\` |
+          | macOS | aarch64 (Apple Silicon) | \`scafgen-darwin-aarch64.tar.gz\` |
+          | Windows | x86_64 | \`scafgen-windows-x86_64.zip\` |
           EOF
-          
-          # Replace $VERSION in the file
-          sed -i "s/\$VERSION/$VERSION/g" CHANGELOG.md
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.check-trigger.outputs.tag_name }}
           name: Release v${{ steps.changelog.outputs.version }}
           body_path: CHANGELOG.md
           draft: false
-          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          prerelease: ${{ contains(needs.check-trigger.outputs.tag_name, 'alpha') || contains(needs.check-trigger.outputs.tag_name, 'beta') || contains(needs.check-trigger.outputs.tag_name, 'rc') }}
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.zip
