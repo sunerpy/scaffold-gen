@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/sunerpy/scaffold-gen/compare/v0.1.0...v0.1.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* **ci:** 发布到 crates.io 时允许工作区脏状态 ([99ae34a](https://github.com/sunerpy/scaffold-gen/commit/99ae34a475b91d5e5866ae2e88bc7250a21ced37))
+* 修复真实缺陷与错误处理 ([68afe24](https://github.com/sunerpy/scaffold-gen/commit/68afe24a68a6cc1e774bdbc0c37d96e251826f70))
+
 ## [0.1.0](https://github.com/sunerpy/scaffold-gen/compare/v0.0.8...v0.1.0) (2026-06-24)
 
 
