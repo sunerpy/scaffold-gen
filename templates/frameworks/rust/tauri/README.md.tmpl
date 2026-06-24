@@ -1,0 +1,123 @@
+# <<project_name>>
+
+一个基于 **[Tauri](https://tauri.app/)** + **Vue 3 + TypeScript** 的跨平台桌面应用，由
+[scaffold-gen](https://github.com/sunerpy/scaffold-gen) 生成。
+
+---
+
+## 必要说明 (What is this)
+
+这是一个 Tauri 桌面应用脚手架，前端使用 Vue 3 + TypeScript + Tailwind CSS，
+后端使用 Rust（Tauri core）。`create-tauri-app` 生成基础结构，本脚手架在此之上
+叠加了 Tailwind CSS、骨架屏、以及可选的 proto-gen / error-gen 工具链。
+
+```
+<<project_name>>/
+├── src/                   # ★ 前端代码（Vue 3 + TypeScript）
+│   ├── main.ts            # 前端入口
+│   ├── App.vue            # 根组件
+│   └── components/        # 组件目录
+├── src-tauri/             # ★ Rust 后端代码（Tauri core）
+│   ├── src/
+│   │   └── main.rs        # Rust 入口
+│   └── tauri.conf.json    # Tauri 配置（窗口、权限等）
+├── package.json           # 前端依赖（pnpm 管理）
+├── vite.config.ts         # Vite 配置
+└── tailwind.config.ts     # Tailwind CSS 配置
+```
+
+---
+
+## 必要工具 (Requirements)
+
+- **Rust 1.88+**（安装：https://rustup.rs）
+- **Node.js 18+** + **pnpm**（安装：`npm install -g pnpm`）
+- **Tauri CLI**（随 `cargo tauri` 命令一起安装）
+- 系统依赖：参见 [Tauri 先决条件](https://tauri.app/start/prerequisites/)
+
+---
+
+## 使用方法 (Usage)
+
+```bash
+# 开发模式（热重载）
+cargo tauri dev
+
+# 生产构建
+cargo tauri build
+```
+
+### 改窗口标题 / 大小（Change window config）
+
+编辑 `src-tauri/tauri.conf.json`：
+
+```json
+{
+  "app": {
+    "windows": [
+      {
+        "title": "My App",
+        "width": 1200,
+        "height": 800
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 开发流程 (Development)
+
+### 前端开发（Vue 3）
+
+在 `src/` 下新建或编辑 `.vue` 组件，Vite 热重载会自动生效：
+
+```bash
+# 仅运行前端（不启动 Tauri 窗口）
+pnpm dev
+```
+
+### 后端开发（Rust / Tauri commands）
+
+在 `src-tauri/src/` 里用 `#[tauri::command]` 暴露函数给前端：
+
+```rust
+#[tauri::command]
+fn greet(name: &str) -> String {
+    format!("Hello, {}!", name)
+}
+```
+
+然后在 `main.rs` 里注册：`.invoke_handler(tauri::generate_handler![greet])`
+
+### 常用命令
+
+```bash
+pnpm install          # 安装/更新前端依赖
+cargo tauri dev       # 开发模式
+cargo tauri build     # 生产构建
+pnpm lint             # 前端 Lint
+```
+
+---
+
+## 推荐工具：CodeGraph (Recommended)
+
+当项目变大、或你用 AI 编程助手时，推荐集成
+**[codegraph-rust](https://github.com/sunerpy/codegraph-rust)** 作为代码分析工具：
+
+- 基于 **tree-sitter + SQLite/FTS5** 的确定性代码知识图谱，**不含任何 AI/LLM**，输出字节级稳定。
+- 提供符号 / 调用 / 依赖关系图，支持 **CLI 与 MCP server** 两种用法，可直接喂给 AI 编程 Agent。
+- **单一二进制、易用、极高性能**：显著提升开发效率，同时大幅降低 token 消耗。
+
+```bash
+codegraph sync                 # 建立/更新索引
+codegraph explore "your code"  # 探索符号与调用关系
+```
+
+---
+
+## License
+
+<<license>>

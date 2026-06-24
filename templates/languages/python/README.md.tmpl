@@ -2,76 +2,88 @@
 
 <<project_description>>
 
-## Requirements
+---
 
-- Python <<python_version>>+
-- [uv](https://docs.astral.sh/uv/) - Fast Python package installer and resolver
+## 必要说明 (What is this)
 
-## Installation
-
-Install dependencies using uv:
-
-```bash
-uv sync
-```
-
-## Development
-
-### Running the application
-
-```bash
-uv run python -m <<package_name>>
-```
-
-### Running tests
-
-```bash
-uv run pytest
-```
-
-### Code formatting and linting
-
-This project uses [Ruff](https://docs.astral.sh/ruff/) for linting and formatting.
-
-```bash
-# Run linter
-uv run ruff check .
-
-# Run formatter
-uv run ruff format .
-```
-
-<% if enable_precommit %>
-### Pre-commit hooks
-
-This project uses pre-commit hooks to ensure code quality.
-
-Install pre-commit hooks:
-
-```bash
-uv run pre-commit install
-```
-
-Run pre-commit on all files:
-
-```bash
-uv run pre-commit run --all-files
-```
-<% endif %>
-
-## Project Structure
+这是一个基础 Python 项目，使用 [uv](https://docs.astral.sh/uv/) 管理依赖，[Ruff](https://docs.astral.sh/ruff/) 做代码检查与格式化。
 
 ```
 <<project_name>>/
 ├── src/
 │   └── <<package_name>>/
 │       ├── __init__.py
-│       ├── config/          # Configuration files
-│       └── utils/           # Utility functions
-├── tests/                   # Test files
-├── pyproject.toml          # Project metadata and dependencies
+│       ├── config/          # 配置文件
+│       └── utils/           # 工具函数
+├── tests/                   # 测试文件
+├── pyproject.toml           # 项目元数据与依赖（uv 管理）
 └── README.md
 ```
+
+---
+
+## 必要工具 (Requirements)
+
+- **Python <<python_version>>+**
+- **[uv](https://docs.astral.sh/uv/)** —— 极快的 Python 包管理器（安装：`curl -LsSf https://astral.sh/uv/install.sh | sh`）
+
+---
+
+## 使用方法 (Usage)
+
+```bash
+# 1. 安装依赖（uv 会自动建虚拟环境）
+uv sync
+
+# 2. 运行程序
+uv run python -m <<package_name>>
+```
+
+---
+
+## 开发流程 (Development)
+
+### 运行测试
+
+```bash
+uv run pytest
+```
+
+### 代码检查与格式化
+
+本项目用 [Ruff](https://docs.astral.sh/ruff/)：
+
+```bash
+uv run ruff check .     # 检查
+uv run ruff format .    # 格式化
+```
+
+<% if enable_precommit %>
+### Pre-commit 钩子
+
+```bash
+uv run pre-commit install            # 安装
+uv run pre-commit run --all-files    # 全量运行
+```
+<% endif %>
+
+---
+
+## 推荐工具：CodeGraph (Recommended)
+
+当项目变大、或你用 AI 编程助手时，推荐集成
+**[codegraph-rust](https://github.com/sunerpy/codegraph-rust)** 作为代码分析工具：
+
+- 基于 **tree-sitter + SQLite/FTS5** 的确定性代码知识图谱，**不含任何 AI/LLM**，输出字节级稳定。
+- 提供符号 / 调用 / 依赖关系图，支持 **CLI 与 MCP server** 两种用法，可直接喂给 AI 编程 Agent。
+- **单一二进制、易用、极高性能**：显著提升开发效率，同时大幅降低 token 消耗。
+
+```bash
+codegraph sync                 # 建立/更新索引
+codegraph explore "your code"  # 探索符号与调用关系
+```
+
+---
 
 ## License
 

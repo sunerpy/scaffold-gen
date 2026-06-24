@@ -1,96 +1,121 @@
 # <<project_name_pascal>>
 
-A modern Go web application built with the Gin framework.
+一个基于 **[Gin](https://gin-gonic.com/)** 框架的 Go Web 应用，由
+[scaffold-gen](https://github.com/sunerpy/scaffold-gen) 生成。
 
-## Features
+---
 
-- 🚀 Fast HTTP server with Gin framework
-- 📑 Structured logging with Zap
-- ⚙️ Configuration management with Viper
-- 🐳 Docker support
-- 🔧 Clean architecture with separation of concerns
+## 必要说明 (What is this)
 
-## Project Structure
+这是一个配置驱动的 Gin Web 项目：监听地址、端口写在 `configs/config.yaml`，
+通过环境变量可覆盖任意配置项。业务代码按层分布在 `routers/`、`service/`、`model/` 目录下。
 
 ```
 <<project_name_pascal>>/
-├── config/                # Configuration files
-├── core/                  # Core application code
-├── middleware/            # Custom middleware
-├── model/                 # Data models
-├── routers/               # API routes
-├── service/               # Business logic
-├── util/                  # Utility functions
-├── logs/                  # Log files
-└── main.go                # Application entrypoint
+├── config/                # 配置结构体
+├── configs/               # ★ 配置文件写在这里（config.yaml）
+├── core/                  # 核心应用代码
+├── middleware/            # 自定义中间件
+├── model/                 # 数据模型
+├── routers/               # ★ API 路由
+├── service/               # ★ 业务逻辑
+├── util/                  # 工具函数
+├── logs/                  # 运行时日志（自动创建）
+└── main.go                # 应用入口
 ```
 
-## Quick Start
+---
 
-### Prerequisites
+## 必要工具 (Requirements)
 
-- Go <<go_version>> or higher
-- Docker (optional)
+- **Go <<go_version>>+**（安装：https://go.dev/dl）
+- **Docker**（可选，用于容器化部署）
 
-### Development
+---
 
-1. Install dependencies:
+## 使用方法 (Usage)
+
 ```bash
+# 1. 整理依赖
 go mod tidy
-```
 
-2. Run the application:
-```bash
+# 2. 启动服务
 go run main.go
-```
 
-3. Test the API:
-```bash
+# 3. 验证接口
 curl http://<<host>>:<<port>>/health
 curl http://<<host>>:<<port>>/api/v1/ping
 ```
 
-### Docker
+### 改监听地址 / 端口（Change host / port）
 
-1. Build and run with Docker Compose:
-```bash
-docker-compose up -d
+编辑 `configs/config.yaml`，**不要改代码**：
+
+```yaml
+server:
+  host: "<<default_host>>"   # 改这里
+  port: <<default_port>>     # 改这里
+  mode: "debug"              # debug / release
 ```
 
-2. Or build and run with Docker:
+也可通过环境变量覆盖：
+
 ```bash
+SERVER_HOST=0.0.0.0 SERVER_PORT=9000 go run main.go
+```
+
+### Docker 部署
+
+```bash
+# Docker Compose（推荐）
+docker-compose up -d
+
+# 单独构建运行
 docker build -t <<project_name_pascal>> .
 docker run -p <<port>>:<<port>> <<project_name_pascal>>
 ```
 
-## Configuration
+---
 
-Configuration is managed through `configs/config.yaml`. You can also use environment variables:
+## 开发流程 (Development)
 
-- `SERVER_HOST`: Server host (default: <<default_host>>)
-- `SERVER_PORT`: Server port (default: <<default_port>>)
-- `SERVER_MODE`: Gin mode (debug/release)
-- `LOG_LEVEL`: Log level (debug/info/warn/error)
+### 新增路由
 
-## API Endpoints
+1. 在 `routers/` 注册新路由（或新建路由文件）。
+2. 在 `service/` 实现对应业务逻辑。
+3. 在 `model/` 定义数据模型（如需）。
 
-- `GET /health` - Health check
-- `GET /api/v1/ping` - Ping endpoint
+### 新增配置项
 
-## Development
+1. 在 `config/config.go` 里扩展配置结构体。
+2. 在 `configs/config.yaml` 里添加默认值。
 
-### Adding New Routes
+### 常用命令
 
-1. Add your handler in `internal/handler/`
-2. Register the route in `internal/handler/routes.go`
-3. Add business logic in `internal/service/`
+```bash
+go test ./...   # 运行测试
+go vet ./...    # 静态分析
+gofmt -w .      # 格式化代码
+```
 
-### Adding Configuration
+---
 
-1. Update the config struct in `config/config.go`
-2. Add default values in the `setDefaults()` function
-3. Update `configs/config.yaml`
+## 推荐工具：CodeGraph (Recommended)
+
+当项目变大、或你用 AI 编程助手时，推荐集成
+**[codegraph-rust](https://github.com/sunerpy/codegraph-rust)** 作为代码分析工具：
+
+- 基于 **tree-sitter + SQLite/FTS5** 的确定性代码知识图谱，**不含任何 AI/LLM**，输出字节级稳定。
+- 提供符号 / 调用 / 依赖关系图，支持 **CLI 与 MCP server** 两种用法，可直接喂给 AI 编程 Agent。
+- **单一二进制、易用、极高性能**：显著提升开发效率，同时大幅降低 token 消耗。
+
+```bash
+codegraph sync                 # 建立/更新索引
+codegraph explore "your code"  # 探索符号与调用关系
+```
+
+---
 
 ## License
 
-This project is licensed under the MIT License.
+<<license>>

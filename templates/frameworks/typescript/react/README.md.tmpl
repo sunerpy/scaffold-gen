@@ -1,0 +1,109 @@
+# <<project_name>>
+
+一个基于 **React + TypeScript + Vite** 的前端应用，由
+[scaffold-gen](https://github.com/sunerpy/scaffold-gen) 生成。
+
+---
+
+## 必要说明 (What is this)
+
+这是一个 React 前端脚手架，通过 `pnpm create vite` 生成基础结构，在此之上集成了
+Tailwind CSS、React Router 以及 Zustand 状态管理。
+
+```
+<<project_name>>/
+├── src/
+│   ├── main.tsx           # 应用入口
+│   ├── App.tsx            # 根组件
+│   ├── components/        # ★ 组件目录
+│   ├── pages/             # ★ 页面目录
+│   ├── store/             # ★ 状态管理（Zustand）
+│   └── router/            # ★ 路由配置（React Router）
+├── public/                # 静态资源
+├── package.json           # 依赖（pnpm 管理）
+├── vite.config.ts         # Vite 配置
+├── tailwind.config.ts     # Tailwind CSS 配置
+└── tsconfig.json          # TypeScript 配置
+```
+
+---
+
+## 必要工具 (Requirements)
+
+- **Node.js 18+**
+- **pnpm**（安装：`npm install -g pnpm`，或参见 https://pnpm.io/installation）
+
+---
+
+## 使用方法 (Usage)
+
+```bash
+# 1. 安装依赖
+pnpm install
+
+# 2. 启动开发服务器（热重载）
+pnpm dev
+
+# 3. 生产构建
+pnpm build
+
+# 4. 预览生产构建
+pnpm preview
+```
+
+---
+
+## 开发流程 (Development)
+
+### 新增页面
+
+1. 在 `src/pages/` 下创建新页面组件（如 `AboutPage.tsx`）。
+2. 在 `src/router/` 里注册路由。
+
+### 新增状态
+
+在 `src/store/` 下用 Zustand 创建新的 store：
+
+```tsx
+import { create } from 'zustand'
+
+interface CountStore {
+  count: number
+  increment: () => void
+}
+
+export const useCountStore = create<CountStore>((set) => ({
+  count: 0,
+  increment: () => set((s) => ({ count: s.count + 1 })),
+}))
+```
+
+### 常用命令
+
+```bash
+pnpm lint       # ESLint 检查
+pnpm type-check # TypeScript 类型检查
+pnpm build      # 生产构建（输出到 dist/）
+```
+
+---
+
+## 推荐工具：CodeGraph (Recommended)
+
+当项目变大、或你用 AI 编程助手时，推荐集成
+**[codegraph-rust](https://github.com/sunerpy/codegraph-rust)** 作为代码分析工具：
+
+- 基于 **tree-sitter + SQLite/FTS5** 的确定性代码知识图谱，**不含任何 AI/LLM**，输出字节级稳定。
+- 提供符号 / 调用 / 依赖关系图，支持 **CLI 与 MCP server** 两种用法，可直接喂给 AI 编程 Agent。
+- **单一二进制、易用、极高性能**：显著提升开发效率，同时大幅降低 token 消耗。
+
+```bash
+codegraph sync                 # 建立/更新索引
+codegraph explore "your code"  # 探索符号与调用关系
+```
+
+---
+
+## License
+
+<<license>>
