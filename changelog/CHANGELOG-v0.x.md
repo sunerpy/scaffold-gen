@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0](https://github.com/sunerpy/scaffold-gen/compare/v0.1.1...v0.2.0) (2026-06-24)
+
+
+### Features
+
+* Vue3 改为内嵌模板快速脚手架(离线可用) ([7e24858](https://github.com/sunerpy/scaffold-gen/commit/7e2485837d381667d3f5d89d4895eebea59a64ff))
+* 新增 Go + Gin MCP server 脚手架 ([ed0aa68](https://github.com/sunerpy/scaffold-gen/commit/ed0aa681ab36c2594bb298ac3b3966cc7896fe38))
+* 新增 Python + FastAPI 配置驱动脚手架 ([3c9fc06](https://github.com/sunerpy/scaffold-gen/commit/3c9fc06ee29de2358a97e978a13be3e727c1bca5))
+
 ## [0.1.1](https://github.com/sunerpy/scaffold-gen/compare/v0.1.0...v0.1.1) (2026-06-24)
 
 
