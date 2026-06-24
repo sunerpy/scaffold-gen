@@ -3,12 +3,15 @@ name: CI
 on:
   push:
     branches: [main, dev]
-    tags:
-      - 'v*'
   pull_request:
     branches: [main, dev]
-  # Allow this workflow to be called by other workflows
-  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -28,15 +31,15 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-ci-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-ci-
+          node-version: lts/*
+
+      - name: Install oxfmt
+        run: npm install -g oxfmt
 
       - name: Check code formatting
         run: make fmt-check
@@ -47,15 +50,10 @@ jobs:
       - name: Run tests
         run: make test
 
-      - name: Check code
-        run: make check
-
   build-check:
     name: Build Check
     runs-on: ubuntu-latest
     needs: ci
-    # Only run build check for non-tag pushes
-    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -64,15 +62,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-build-
+        uses: Swatinem/rust-cache@v2
 
       - name: Build release
         run: make release

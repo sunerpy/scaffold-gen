@@ -1,51 +1,140 @@
 <template>
-  <div class="theme-toggle" :class="{ simple: simple }">
-    <el-tooltip :content="themeLabel" placement="right" :disabled="!simple">
-      <el-button
-        :icon="themeIconComponent"
-        :circle="simple"
-        :text="!simple"
-        @click="toggleTheme"
-      >
-        <span v-if="!simple">\{{ themeLabel }}</span>
-      </el-button>
-    </el-tooltip>
-  </div>
+  <n-tooltip v-if="simple" placement="right" trigger="hover">
+    <template #trigger>
+      <div class="theme-toggle-btn simple" @click="cycleTheme">
+        <n-icon size="20" class="theme-icon">
+          <component :is="themeIconComponent" />
+        </n-icon>
+      </div>
+    </template>
+    \{{ currentThemeLabel }}
+  </n-tooltip>
+
+  <n-dropdown
+    v-else
+    trigger="click"
+    :options="themeOptions"
+    @select="handleThemeChange"
+  >
+    <div class="theme-toggle-btn">
+      <n-icon size="18" class="theme-icon">
+        <component :is="themeIconComponent" />
+      </n-icon>
+      <span class="theme-label">\{{ currentThemeLabel }}</span>
+    </div>
+  </n-dropdown>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, h, markRaw } from "vue";
 import { useTheme } from "@/composables/useTheme";
-import { Sunny, Moon, Monitor } from "@element-plus/icons-vue";
+import { NTooltip, NDropdown, NIcon } from "naive-ui";
+import { Sun, Moon, Monitor } from "lucide-vue-next";
+import { $t } from "@/utils/i18n";
+import { ThemeMode } from "@/types";
 
 defineProps<{
   simple?: boolean;
 }>();
 
-const { themeMode, themeLabel, toggleTheme } = useTheme();
+const { themeMode, setTheme } = useTheme();
 
 const themeIconComponent = computed(() => {
   switch (themeMode.value) {
-    case "light":
-      return Sunny;
-    case "dark":
-      return Moon;
-    case "system":
-      return Monitor;
-    default:
-      return Monitor;
+    case ThemeMode.Light: return markRaw(Sun);
+    case ThemeMode.Dark: return markRaw(Moon);
+    case ThemeMode.System: return markRaw(Monitor);
+    default: return markRaw(Monitor);
   }
 });
+
+const currentThemeLabel = computed(() => {
+  switch (themeMode.value) {
+    case ThemeMode.Light: return $t('settings.themeLight');
+    case ThemeMode.Dark: return $t('settings.themeDark');
+    case ThemeMode.System: return $t('settings.themeSystem');
+    default: return $t('settings.themeSystem');
+  }
+});
+
+const themeOrder = [
+  ThemeMode.Light,
+  ThemeMode.Dark,
+  ThemeMode.System,
+];
+
+const cycleTheme = () => {
+  const currentIndex = themeOrder.indexOf(themeMode.value);
+  const nextIndex = (currentIndex + 1) % themeOrder.length;
+  setTheme(themeOrder[nextIndex]);
+};
+
+const handleThemeChange = (key: ThemeMode) => {
+  setTheme(key);
+};
+
+const renderIcon = (icon: any) => {
+  return () => h(NIcon, null, { default: () => h(icon) });
+};
+
+const themeOptions = computed(() => [
+  {
+    label: $t('settings.themeLight'),
+    key: ThemeMode.Light,
+    icon: renderIcon(Sun)
+  },
+  {
+    label: $t('settings.themeDark'),
+    key: ThemeMode.Dark,
+    icon: renderIcon(Moon)
+  },
+  {
+    label: $t('settings.themeSystem'),
+    key: ThemeMode.System,
+    icon: renderIcon(Monitor)
+  }
+]);
 </script>
 
 <style scoped>
-.theme-toggle {
+.theme-toggle-btn {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 0;
+  padding: 0 16px;
+  height: 44px;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  width: 100%;
 }
 
-.theme-toggle.simple {
+.theme-toggle-btn:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.theme-toggle-btn.simple {
+  justify-content: center;
+  padding: 0;
   width: 100%;
+  height: 44px;
+}
+
+.theme-icon {
+  margin-right: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.theme-toggle-btn.simple .theme-icon {
+  margin-right: 0;
+}
+
+.theme-label {
+  font-size: 14px;
+  white-space: nowrap;
 }
 </style>

@@ -17,6 +17,8 @@ struct ProjectParams {
     enable_precommit: bool,
     license: String,
     enable_swagger: bool,
+    enable_proto_gen: bool,
+    enable_error_gen: bool,
 }
 
 pub struct NewCommand {
@@ -30,6 +32,8 @@ pub struct NewCommand {
     enable_precommit: Option<bool>,
     license: Option<String>,
     enable_swagger: Option<bool>,
+    enable_proto_gen: Option<bool>,
+    enable_error_gen: Option<bool>,
 }
 
 impl NewCommand {
@@ -45,6 +49,8 @@ impl NewCommand {
             enable_precommit: None,
             license: None,
             enable_swagger: None,
+            enable_proto_gen: None,
+            enable_error_gen: None,
         }
     }
 
@@ -89,6 +95,16 @@ impl NewCommand {
         self
     }
 
+    pub fn with_proto_gen(mut self, enable_proto_gen: Option<bool>) -> Self {
+        self.enable_proto_gen = enable_proto_gen;
+        self
+    }
+
+    pub fn with_error_gen(mut self, enable_error_gen: Option<bool>) -> Self {
+        self.enable_error_gen = enable_error_gen;
+        self
+    }
+
     pub async fn execute(&self) -> Result<()> {
         println!("Welcome to Scaffold-Gen Project Generator!");
 
@@ -106,6 +122,10 @@ impl NewCommand {
         let license = self.configure_license()?;
         let enable_swagger = self.configure_swagger(&framework, &language).await?;
 
+        // 配置 Rust 工具选项 (proto-gen / error-gen)
+        let (enable_proto_gen, enable_error_gen) =
+            self.configure_rust_tools(&language, &framework)?;
+
         // 确定项目路径
         let project_path = self.determine_project_path()?;
 
@@ -119,6 +139,8 @@ impl NewCommand {
             enable_precommit,
             license,
             enable_swagger,
+            enable_proto_gen,
+            enable_error_gen,
         };
 
         self.generate_project(params).await?;
@@ -429,6 +451,45 @@ impl NewCommand {
         Ok(enable_swagger)
     }
 
+    fn configure_rust_tools(
+        &self,
+        language: &Language,
+        framework: &Framework,
+    ) -> Result<(bool, bool)> {
+        if !matches!(language, Language::Rust) {
+            return Ok((false, false));
+        }
+
+        // Tauri 和纯 Rust 项目都支持 proto-gen/error-gen
+        if !matches!(framework, Framework::Tauri | Framework::None) {
+            return Ok((false, false));
+        }
+
+        println!("Configuring Rust code generation tools...");
+
+        let enable_proto_gen = if let Some(enable) = self.enable_proto_gen {
+            println!("Using provided proto-gen setting: {enable}");
+            enable
+        } else {
+            Confirm::new("Enable proto-gen? (Protobuf code generator)")
+                .with_default(false)
+                .prompt()
+                .context("Failed to configure proto-gen")?
+        };
+
+        let enable_error_gen = if let Some(enable) = self.enable_error_gen {
+            println!("Using provided error-gen setting: {enable}");
+            enable
+        } else {
+            Confirm::new("Enable error-gen? (Error type generator)")
+                .with_default(false)
+                .prompt()
+                .context("Failed to configure error-gen")?
+        };
+
+        Ok((enable_proto_gen, enable_error_gen))
+    }
+
     fn determine_project_path(&self) -> Result<PathBuf> {
         let base_path = if let Some(path) = &self.target_path {
             PathBuf::from(path)
@@ -505,6 +566,8 @@ impl NewCommand {
                         &params.project_path,
                         params.license.clone(),
                         params.enable_precommit,
+                        params.enable_proto_gen,
+                        params.enable_error_gen,
                     )
                     .await?;
             }
@@ -548,6 +611,8 @@ impl NewCommand {
                                 &params.project_path,
                                 params.license.clone(),
                                 params.enable_precommit,
+                                params.enable_proto_gen,
+                                params.enable_error_gen,
                             )
                             .await?;
                     }

@@ -1,50 +1,57 @@
 <template>
   <div class="app-layout">
-    <el-container>
-      <!-- 侧边栏 -->
-      <el-aside :width="layoutStore.actualSidebarWidth" class="app-sidebar">
-        <Sidebar />
-      </el-aside>
+    <aside class="app-sidebar" :style="{ width: sidebarWidth }">
+      <Sidebar />
+    </aside>
 
-      <!-- 主内容区域 -->
-      <el-main class="app-main">
-        <div class="main-content-wrapper">
-          <router-view />
-        </div>
-      </el-main>
-    </el-container>
-
-    <!-- 设置弹窗 -->
-    <SettingsDialog v-model="showSettingsDialog" />
+    <main class="app-main">
+      <div class="main-content-wrapper">
+        <router-view v-slot="{ Component }">
+          <transition name="fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
+      </div>
+    </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { onMounted, computed } from "vue";
+import { useRouter } from "vue-router";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import Sidebar from "./Sidebar.vue";
-import SettingsDialog from "@/components/Settings/SettingsDialog.vue";
-import { debug } from "@tauri-apps/plugin-log";
 
 const layoutStore = useLayoutStore();
 const settingsStore = useSettingsStore();
-const showSettingsDialog = ref(false);
+const router = useRouter();
 
-// 暴露给全局使用
+const sidebarWidth = computed(() => {
+  return layoutStore.actualSidebarWidth;
+});
+
 window.__openSettings = () => {
-  showSettingsDialog.value = true;
+  router.push('/settings');
 };
 
-// 应用启动时初始化
 onMounted(async () => {
   await settingsStore.loadSettings();
   settingsStore.applyTheme();
   settingsStore.applyFontSize();
-  debug("[AppLayout] 组件挂载完成");
 });
 </script>
 
 <style scoped>
 @import "@/styles/app-layout.css";
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 </style>

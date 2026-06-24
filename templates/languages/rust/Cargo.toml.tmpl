@@ -2,18 +2,23 @@
 resolver = "2"
 members = [
     ".",
+<% if enable_proto_gen %>
     "tools/proto-gen",
+<% endif %>
+<% if enable_error_gen %>
+    "tools/error-gen",
+<% endif %>
 ]
 
 [package]
-name = "{{project_name}}"
+name = "<<project_name>>"
 version = "0.1.0"
 edition = "2024"
-authors = ["{{author}}"]
-license = "{{license}}"
+authors = ["<<author>>"]
+license = "<<license>>"
 
 [[bin]]
-name = "{{project_name}}"
+name = "<<project_name>>"
 path = "src/main.rs"
 
 [dependencies]
@@ -32,15 +37,17 @@ tracing-appender = "0.2"
 # Configuration
 config = "0.15"
 
+<% if enable_proto_gen %>
 # Protobuf (for generated code)
 prost = "0.13"
 prost-types = "0.13"
+<% endif %>
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-authors = ["{{author}}"]
-license = "{{license}}"
+authors = ["<<author>>"]
+license = "<<license>>"
 
 [workspace.dependencies]
 # Serialization
@@ -57,12 +64,14 @@ tokio = { version = "1", features = ["full"] }
 # CLI
 clap = { version = "4", features = ["derive"] }
 
+<% if enable_proto_gen %>
 # Protobuf and gRPC
 prost = "0.13"
 prost-build = "0.13"
 prost-types = "0.13"
 tonic = "0.12"
 tonic-build = "0.12"
+<% endif %>
 
 # Regex
 regex = "1.12"

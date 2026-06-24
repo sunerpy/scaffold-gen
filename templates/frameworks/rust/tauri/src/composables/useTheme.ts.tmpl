@@ -1,16 +1,14 @@
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { ThemeMode } from "@/types";
+import { darkTheme } from "naive-ui";
 
-export type ThemeMode = "light" | "dark" | "system";
+export type Platform = "windows" | "macos" | "linux" | "ios" | "android" | "web";
 
-/**
- * 主题管理 Composable
- * 提供主题切换和状态管理的便捷接口
- */
 export function useTheme() {
   const settingsStore = useSettingsStore();
+  const platform = ref<Platform>("web");
 
-  // 响应式状态
   const themeMode = computed(() => settingsStore.settings.theme);
   const systemPrefersDark = computed(() => {
     if (typeof window !== "undefined" && window.matchMedia) {
@@ -20,85 +18,121 @@ export function useTheme() {
   });
 
   const isDark = computed(() => {
-    if (themeMode.value === "system") {
+    if (themeMode.value === ThemeMode.System) {
       return systemPrefersDark.value;
     }
-    return themeMode.value === "dark";
+    return themeMode.value === ThemeMode.Dark;
   });
+
+  const naiveTheme = computed(() => isDark.value ? darkTheme : null);
 
   const currentTheme = computed(() => {
     return isDark.value ? "dark" : "light";
   });
 
-  // 主题切换方法
   const setTheme = async (mode: ThemeMode) => {
     await settingsStore.setTheme(mode);
+    updateThemeClass();
   };
 
   const toggleTheme = async () => {
     const current = themeMode.value;
-    if (current === "light") {
-      await setTheme("dark");
-    } else if (current === "dark") {
-      await setTheme("system");
+    if (current === ThemeMode.Light) {
+      await setTheme(ThemeMode.Dark);
+    } else if (current === ThemeMode.Dark) {
+      await setTheme(ThemeMode.System);
     } else {
-      await setTheme("light");
+      await setTheme(ThemeMode.Light);
     }
   };
 
   const toggleLightDark = async () => {
-    if (themeMode.value === "system") {
-      await setTheme(systemPrefersDark.value ? "light" : "dark");
+    if (themeMode.value === ThemeMode.System) {
+      await setTheme(systemPrefersDark.value ? ThemeMode.Light : ThemeMode.Dark);
     } else {
-      await setTheme(themeMode.value === "light" ? "dark" : "light");
+      await setTheme(themeMode.value === ThemeMode.Light ? ThemeMode.Dark : ThemeMode.Light);
     }
   };
 
-  // 主题相关的CSS类名
   const themeClasses = computed(() => {
     return currentTheme.value;
   });
 
-  // 获取主题相关的Tailwind类名
   const getThemeClass = (lightClass: string, darkClass: string) => {
     return isDark.value ? darkClass : lightClass;
   };
 
-  // 主题图标
   const themeIcon = computed(() => {
     switch (themeMode.value) {
-      case "light":
+      case ThemeMode.Light:
         return "sunny";
-      case "dark":
+      case ThemeMode.Dark:
         return "moon";
-      case "system":
+      case ThemeMode.System:
         return "desktop";
       default:
         return "desktop";
     }
   });
 
-  // 主题显示名称
   const themeLabel = computed(() => {
     switch (themeMode.value) {
-      case "light":
-        return "明亮模式";
-      case "dark":
-        return "深色模式";
-      case "system":
-        return "跟随系统";
+      case ThemeMode.Light:
+        return "Light";
+      case ThemeMode.Dark:
+        return "Dark";
+      case ThemeMode.System:
+        return "System";
       default:
-        return "跟随系统";
+        return "System";
     }
   });
 
-  // 初始化主题
+  const updateThemeClass = () => {
+    const htmlEl = document.documentElement;
+    if (isDark.value) {
+      htmlEl.classList.add("dark");
+    } else {
+      htmlEl.classList.remove("dark");
+    }
+    htmlEl.setAttribute("data-theme", currentTheme.value);
+  };
+
+  const detectPlatform = () => {
+    const userAgent = navigator.userAgent.toLowerCase();
+    
+    if (userAgent.includes("win")) {
+      platform.value = "windows";
+    } else if (userAgent.includes("mac")) {
+      platform.value = "macos";
+    } else if (userAgent.includes("linux")) {
+      platform.value = "linux";
+    } else if (userAgent.includes("android")) {
+      platform.value = "android";
+    } else if (userAgent.includes("iphone") || userAgent.includes("ipad")) {
+      platform.value = "ios";
+    } else {
+      platform.value = "web";
+    }
+
+    document.documentElement.setAttribute("data-platform", platform.value);
+  };
+
   const initTheme = async () => {
     await settingsStore.loadSettings();
+    detectPlatform();
+    updateThemeClass();
+    
+    if (window.matchMedia) {
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+        if (themeMode.value === ThemeMode.System) {
+          updateThemeClass();
+        }
+      });
+    }
   };
 
   return {
-    // 状态
     themeMode,
     isDark,
     currentTheme,
@@ -106,12 +140,12 @@ export function useTheme() {
     themeClasses,
     themeIcon,
     themeLabel,
-
-    // 方法
+    platform,
     setTheme,
     toggleTheme,
     toggleLightDark,
     getThemeClass,
-    initTheme
+    initTheme,
+    naiveTheme
   };
 }

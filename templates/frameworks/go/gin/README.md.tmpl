@@ -1,4 +1,4 @@
-# {{project_name_pascal}}
+# <<project_name_pascal>>
 
 A modern Go web application built with the Gin framework.
 
@@ -13,7 +13,7 @@ A modern Go web application built with the Gin framework.
 ## Project Structure
 
 ```
-{{project_name_pascal}}/
+<<project_name_pascal>>/
 ├── config/                # Configuration files
 ├── core/                  # Core application code
 ├── middleware/            # Custom middleware
@@ -29,7 +29,7 @@ A modern Go web application built with the Gin framework.
 
 ### Prerequisites
 
-- Go {{go_version}} or higher
+- Go <<go_version>> or higher
 - Docker (optional)
 
 ### Development
@@ -46,8 +46,8 @@ go run main.go
 
 3. Test the API:
 ```bash
-curl http://{{host}}:{{port}}/health
-curl http://{{host}}:{{port}}/api/v1/ping
+curl http://<<host>>:<<port>>/health
+curl http://<<host>>:<<port>>/api/v1/ping
 ```
 
 ### Docker
@@ -59,16 +59,16 @@ docker-compose up -d
 
 2. Or build and run with Docker:
 ```bash
-docker build -t {{project_name_pascal}} .
-docker run -p {{port}}:{{port}} {{project_name_pascal}}
+docker build -t <<project_name_pascal>> .
+docker run -p <<port>>:<<port>> <<project_name_pascal>>
 ```
 
 ## Configuration
 
 Configuration is managed through `configs/config.yaml`. You can also use environment variables:
 
-- `SERVER_HOST`: Server host (default: {{default_host}})
-- `SERVER_PORT`: Server port (default: {{default_port}})
+- `SERVER_HOST`: Server host (default: <<default_host>>)
+- `SERVER_PORT`: Server port (default: <<default_port>>)
 - `SERVER_MODE`: Gin mode (debug/release)
 - `LOG_LEVEL`: Log level (debug/info/warn/error)
 

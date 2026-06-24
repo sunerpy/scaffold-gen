@@ -1,0 +1,43 @@
+# Error Definitions for <<project_name>>
+#
+# Generates both Rust and TypeScript error types.
+# Run: make error-gen
+#
+# Format:
+#   [errors.ErrorName]
+#   doc = "Description"       # Optional documentation
+#   http = 500                # Default HTTP status for all variants
+#
+#   VariantName = { code = "E1001", http = 404, msg = "Message with {0}", data = "String" }
+#   # - code: Error code (required)
+#   # - http: HTTP status code (optional, inherits from parent)
+#   # - msg: Error message, {0} {1} for positional, {field} for named
+#   # - data: Data type - "String", "i32", or { field = "Type", ... } for named fields
+
+[errors.AppError]
+doc = "Application-level errors"
+http = 500
+
+NotFound       = { code = "E1001", http = 404, msg = "Resource not found: {0}", data = "String" }
+Unauthorized   = { code = "E1002", http = 401, msg = "Authentication required" }
+Forbidden      = { code = "E1003", http = 403, msg = "Access denied: {0}", data = "String" }
+BadRequest     = { code = "E1004", http = 400, msg = "Bad request: {0}", data = "String" }
+Conflict       = { code = "E1005", http = 409, msg = "Resource conflict: {0}", data = "String" }
+InternalError  = { code = "E5000", msg = "Internal server error" }
+
+[errors.ValidationError]
+doc = "Input validation errors"
+http = 422
+
+InvalidField   = { code = "E2001", msg = "Invalid {field}: {reason}", data = { field = "String", reason = "String" } }
+MissingField   = { code = "E2002", msg = "Missing required field: {0}", data = "String" }
+InvalidFormat  = { code = "E2003", msg = "Invalid format for {0}: expected {1}", data = ["String", "String"] }
+
+# Example: Add domain-specific errors
+# [errors.UserError]
+# doc = "User-related errors"
+# http = 400
+#
+# UserNotFound    = { code = "U1001", http = 404, msg = "User not found: {id}", data = { id = "u64" } }
+# EmailExists     = { code = "U1002", http = 409, msg = "Email already registered: {0}", data = "String" }
+# InvalidPassword = { code = "U1003", msg = "Invalid password" }

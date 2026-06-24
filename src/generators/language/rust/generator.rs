@@ -1,4 +1,6 @@
 use anyhow::{Context, Result};
+use serde_json::Value;
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
@@ -35,6 +37,34 @@ impl RustGenerator {
 
         Ok(())
     }
+
+    fn should_skip_proto_gen_file(&self, relative_path: &str, params: &RustParams) -> bool {
+        if !params.enable_proto_gen() {
+            relative_path.starts_with("tools/proto-gen")
+                || relative_path.starts_with("protos/")
+                || relative_path.contains("/protos/")
+        } else {
+            false
+        }
+    }
+
+    fn should_skip_error_gen_file(&self, relative_path: &str, params: &RustParams) -> bool {
+        if !params.enable_error_gen() {
+            relative_path.starts_with("tools/error-gen")
+                || relative_path == "errors.toml"
+                || relative_path == "errors.toml.tmpl"
+        } else {
+            false
+        }
+    }
+
+    fn should_skip_precommit_file(&self, file_name: &str, params: &RustParams) -> bool {
+        if !params.base.enable_precommit {
+            file_name == ".pre-commit-config.yaml.tmpl" || file_name == ".pre-commit-config.yaml"
+        } else {
+            false
+        }
+    }
 }
 
 impl Default for RustGenerator {
@@ -59,34 +89,23 @@ impl Generator for RustGenerator {
     }
 
     fn generate(&mut self, params: Self::Params, output_path: &Path) -> Result<()> {
-        // 验证参数
         params.validate()?;
 
         println!("Generating {} structure with workspace", self.name());
 
-        // 1. 处理嵌入式模板 (模板处理器会自动创建目录)
         let mut template_processor = TemplateProcessor::new()?;
         let template_path = self.get_template_path();
         let context = params.to_template_context();
 
-        // 检查嵌入式模板目录是否存在
         if crate::template_engine::embedded_template_dir_exists(template_path) {
             println!("Processing embedded templates from: {template_path}");
-            match template_processor.process_embedded_template_directory(
+            self.render_embedded_templates(
+                &mut template_processor,
                 template_path,
                 output_path,
                 context,
-            ) {
-                Ok(_) => println!("Embedded templates processed successfully"),
-                Err(e) => {
-                    eprintln!("Failed to process embedded templates: {e}");
-                    eprintln!("Error chain:");
-                    for cause in e.chain() {
-                        eprintln!("  - {cause}");
-                    }
-                    return Err(e).context("Failed to generate Rust files");
-                }
-            }
+                &params,
+            )?;
         } else {
             return Err(anyhow::anyhow!(
                 "{} embedded templates not found at: {}",
@@ -95,10 +114,105 @@ impl Generator for RustGenerator {
             ));
         }
 
-        // 2. 构建项目
         self.build_project(output_path)?;
 
         println!("Rust language generation completed successfully");
+        Ok(())
+    }
+
+    fn render_embedded_templates(
+        &mut self,
+        template_processor: &mut TemplateProcessor,
+        template_path: &str,
+        output_path: &Path,
+        context: HashMap<String, Value>,
+        params: &Self::Params,
+    ) -> Result<()> {
+        use std::fs;
+
+        let template_files = crate::template_engine::get_embedded_template_files(template_path)
+            .with_context(|| {
+                format!("Failed to get embedded template files for: {template_path}")
+            })?;
+
+        for template_file in template_files {
+            let relative_path = template_file
+                .strip_prefix(&format!("{template_path}/"))
+                .unwrap_or(&template_file);
+
+            let file_name = std::path::Path::new(relative_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+
+            if self.should_skip_precommit_file(file_name, params) {
+                continue;
+            }
+
+            if self.should_skip_proto_gen_file(relative_path, params) {
+                continue;
+            }
+
+            if self.should_skip_error_gen_file(relative_path, params) {
+                continue;
+            }
+
+            let output_relative_path = if let Some(stripped) = relative_path.strip_suffix(".tmpl") {
+                stripped
+            } else {
+                relative_path
+            };
+
+            let output_file_path = output_path.join(output_relative_path);
+
+            if let Some(parent) = output_file_path.parent() {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
+            }
+
+            if template_file.ends_with(".tmpl") {
+                if let Some(template_content) =
+                    crate::template_engine::get_embedded_template_content(&template_file)
+                {
+                    let rendered_content = match template_processor
+                        .render_template_content(&template_content, context.clone())
+                    {
+                        Ok(content) => content,
+                        Err(e) => {
+                            eprintln!("❌ Template rendering error for: {template_file}");
+                            eprintln!("   Error: {e:?}");
+                            return Err(e).with_context(|| {
+                                format!("Failed to render embedded template: {template_file}")
+                            });
+                        }
+                    };
+
+                    fs::write(&output_file_path, rendered_content).with_context(|| {
+                        format!(
+                            "Failed to write rendered file: {}",
+                            output_file_path.display()
+                        )
+                    })?;
+
+                    println!("📝 Rendered: {relative_path} -> {output_relative_path}");
+                } else {
+                    return Err(anyhow::anyhow!(
+                        "Template content not found: {template_file}"
+                    ));
+                }
+            } else if let Some(file_content) =
+                crate::template_engine::get_embedded_template_content(&template_file)
+            {
+                fs::write(&output_file_path, file_content).with_context(|| {
+                    format!("Failed to write file: {}", output_file_path.display())
+                })?;
+
+                println!("📋 Copied: {relative_path} -> {output_relative_path}");
+            } else {
+                return Err(anyhow::anyhow!("File content not found: {template_file}"));
+            }
+        }
+
         Ok(())
     }
 }

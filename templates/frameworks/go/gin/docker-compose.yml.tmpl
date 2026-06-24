@@ -1,10 +1,10 @@
 version: '3.8'
 
 services:
-  {{project_name}}:
+  <<project_name>>:
     build: .
     ports:
-      - "{{port}}:{{port}}"
+      - "<<port>>:<<port>>"
     environment:
       - GIN_MODE=release
     volumes:
@@ -17,7 +17,7 @@ services:
   #   image: mysql:8.0
   #   environment:
   #     MYSQL_ROOT_PASSWORD: rootpassword
-  #     MYSQL_DATABASE: {{project_name}}
+  #     MYSQL_DATABASE: <<project_name>>
   #   ports:
   #     - "3306:3306"
   #   volumes:

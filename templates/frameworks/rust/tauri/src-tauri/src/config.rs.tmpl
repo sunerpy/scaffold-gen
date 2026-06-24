@@ -1,0 +1,199 @@
+use serde::{Deserialize, Serialize};
+use std::sync::{Arc, OnceLock, RwLock};
+use tauri::{AppHandle, Wry};
+use tauri_plugin_store::{Store, StoreExt};
+
+static SETTINGS_MANAGER: OnceLock<RwLock<SettingsManager>> = OnceLock::new();
+
+pub const STORE_FILENAME: &str = "settings.json";
+pub const SETTINGS_KEY: &str = "app_settings";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeMode {
+    Light = 1,
+    Dark = 2,
+    #[default]
+    System = 3,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum Language {
+    #[default]
+    #[serde(rename = "zh-CN")]
+    ZhCn = 1,
+    #[serde(rename = "en-US")]
+    EnUs = 2,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppSettings {
+    pub theme: ThemeMode,
+    pub language: Language,
+    pub font_size: i32,
+    pub sidebar_collapsed: bool,
+    pub sidebar_width: i32,
+    pub sidebar_pinned: bool,
+    pub debug_logging: bool,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            theme: ThemeMode::System,
+            language: Language::ZhCn,
+            font_size: 14,
+            sidebar_collapsed: false,
+            sidebar_width: 260,
+            sidebar_pinned: true,
+            debug_logging: false,
+        }
+    }
+}
+
+pub struct SettingsManager {
+    settings: AppSettings,
+    store: Option<Arc<Store<Wry>>>,
+}
+
+impl SettingsManager {
+    pub fn new() -> Self {
+        Self {
+            settings: AppSettings::default(),
+            store: None,
+        }
+    }
+
+    pub fn init(&mut self, app_handle: &AppHandle) -> Result<(), String> {
+        let store = app_handle
+            .store(STORE_FILENAME)
+            .map_err(|e| format!("Failed to open store: {e}"))?;
+
+        if let Some(value) = store.get(SETTINGS_KEY) {
+            match serde_json::from_value::<AppSettings>(value.clone()) {
+                Ok(loaded) => {
+                    self.settings = loaded;
+                    log::info!("Settings loaded from store");
+                }
+                Err(e) => {
+                    log::warn!("Failed to parse settings from store, using defaults: {e}");
+                }
+            }
+        }
+
+        self.store = Some(store);
+        Ok(())
+    }
+
+    pub fn get_settings(&self) -> &AppSettings {
+        &self.settings
+    }
+
+    pub fn set_settings(&mut self, settings: AppSettings) -> Result<(), String> {
+        self.settings = settings;
+        self.save()
+    }
+
+    pub fn update_setting(&mut self, key: &str, value: serde_json::Value) -> Result<(), String> {
+        let mut settings_json = serde_json::to_value(&self.settings)
+            .map_err(|e| format!("Failed to serialize settings: {e}"))?;
+
+        if let Some(obj) = settings_json.as_object_mut() {
+            obj.insert(key.to_string(), value);
+        }
+
+        self.settings = serde_json::from_value(settings_json)
+            .map_err(|e| format!("Failed to deserialize settings: {e}"))?;
+
+        self.save()
+    }
+
+    fn save(&self) -> Result<(), String> {
+        if let Some(ref store) = self.store {
+            let value = serde_json::to_value(&self.settings)
+                .map_err(|e| format!("Failed to serialize settings: {e}"))?;
+
+            store.set(SETTINGS_KEY, value);
+            store
+                .save()
+                .map_err(|e| format!("Failed to save store: {e}"))?;
+
+            log::debug!("Settings saved to store");
+        }
+        Ok(())
+    }
+
+    pub fn reset(&mut self) -> Result<(), String> {
+        self.settings = AppSettings::default();
+        self.save()
+    }
+}
+
+impl Default for SettingsManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub fn init_settings_manager(app_handle: &AppHandle) -> Result<(), String> {
+    let mut manager = SettingsManager::new();
+    manager.init(app_handle)?;
+
+    SETTINGS_MANAGER
+        .set(RwLock::new(manager))
+        .map_err(|_| "Settings manager already initialized")?;
+
+    log::info!("Settings manager initialized");
+    Ok(())
+}
+
+pub fn with_settings_manager_read<F, R>(f: F) -> Result<R, String>
+where
+    F: FnOnce(&SettingsManager) -> R,
+{
+    let manager = SETTINGS_MANAGER
+        .get()
+        .ok_or("Settings manager not initialized")?;
+
+    let guard = manager
+        .read()
+        .map_err(|e| format!("Failed to acquire read lock: {e}"))?;
+
+    Ok(f(&guard))
+}
+
+pub fn with_settings_manager_write<F, R>(f: F) -> Result<R, String>
+where
+    F: FnOnce(&mut SettingsManager) -> R,
+{
+    let manager = SETTINGS_MANAGER
+        .get()
+        .ok_or("Settings manager not initialized")?;
+
+    let mut guard = manager
+        .write()
+        .map_err(|e| format!("Failed to acquire write lock: {e}"))?;
+
+    Ok(f(&mut guard))
+}
+
+#[tauri::command]
+pub fn load_user_settings() -> Result<AppSettings, String> {
+    with_settings_manager_read(|manager| manager.get_settings().clone())
+}
+
+#[tauri::command]
+pub fn save_user_settings(settings: AppSettings) -> Result<(), String> {
+    with_settings_manager_write(|manager| manager.set_settings(settings))?
+}
+
+#[tauri::command]
+pub fn update_user_setting(key: String, value: serde_json::Value) -> Result<(), String> {
+    with_settings_manager_write(|manager| manager.update_setting(&key, value))?
+}
+
+#[tauri::command]
+pub fn reset_user_settings() -> Result<(), String> {
+    with_settings_manager_write(|manager| manager.reset())?
+}

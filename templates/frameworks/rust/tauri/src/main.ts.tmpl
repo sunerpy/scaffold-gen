@@ -1,17 +1,18 @@
 import { createApp } from "vue";
 import { createPinia } from "pinia";
-import "element-plus/dist/index.css";
-import "element-plus/theme-chalk/dark/css-vars.css";
 import App from "./App.vue";
 import router from "./router";
 import "./styles/tailwind.css";
 import "./styles/global.css";
-import "./styles/theme.scss";
-import { useElementPlus } from "./plugins/elementPlus";
 import { useI18n } from "./utils/i18n";
-import { debug } from "@tauri-apps/plugin-log";
+import { initCustomTitlebar } from "./utils/titlebar";
 
-// 禁用右键菜单
+const log = (msg: string) => {
+  import("@tauri-apps/plugin-log")
+    .then(({ debug }) => debug(msg))
+    .catch(() => console.log(`[debug] ${msg}`));
+};
+
 document.addEventListener("contextmenu", e => {
   e.preventDefault();
 });
@@ -19,18 +20,30 @@ document.addEventListener("contextmenu", e => {
 const app = createApp(App);
 const pinia = createPinia();
 
-app.use(pinia).use(router).use(useElementPlus).use(useI18n).mount("#app");
+app.use(pinia).use(router).use(useI18n).mount("#app");
 
-// 初始化窗口状态
+function removeSkeleton() {
+  setTimeout(() => {
+    const skeleton = document.getElementById("app-skeleton");
+    if (skeleton) {
+      skeleton.style.opacity = "0";
+      setTimeout(() => skeleton.remove(), 300);
+    }
+  }, 100);
+}
+
 (async () => {
-  debug("Initializing application...");
+  log("Initializing application...");
 
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const appWindow = getCurrentWindow();
     await appWindow.setFullscreen(false);
-    debug("Window initialized successfully");
+    log("Window initialized successfully");
   } catch (err) {
-    debug(`Failed to initialize window state: ${err}`);
+    log(`Failed to initialize window state: ${err}`);
   }
+
+  initCustomTitlebar();
+  removeSkeleton();
 })();

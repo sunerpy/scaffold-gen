@@ -1,33 +1,27 @@
+# See https://pre-commit.com — run `make hooks` once after cloning to enable:
+#   pre-commit install --hook-type pre-commit --hook-type pre-push --hook-type commit-msg
+#
+# Local hooks call `make` so the exact same gate runs locally and in CI.
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+  - repo: local
     hooks:
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-toml
-      - id: check-added-large-files
-      - id: check-merge-conflict
-      - id: check-case-conflict
-
-  - repo: https://github.com/doublify/pre-commit-rust
-    rev: v1.0
-    hooks:
+      # Format on commit — fast, so contributors don't reach for --no-verify.
       - id: fmt
-        args: ["--", "--check"]
-      - id: cargo-check
-        args: ["--workspace"]
-      - id: clippy
-        args: [
-            "--workspace",
-            "--",
-            "-D",
-            "warnings",
-            "-A",
-            "unused", # 1. 忽略所有 rustc unused
-            "-A",
-            "clippy::uninlined_format_args", # 忽略这条 clippy 警告
-          ]
+        name: fmt
+        entry: make fmt
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
 
+      # Test on push — slower correctness gate, before code leaves the machine.
+      - id: test
+        name: test
+        entry: make test
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+  # Conventional Commits message validation.
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v3.2.2
     hooks:

@@ -4,29 +4,29 @@ import (
 	"net/http"
 	"os"
 
-{{#if enable_swagger}}
-	"{{project_name}}/docs"
+<% if enable_swagger %>
+	"<<project_name>>/docs"
 
-{{/if}}
+<% endif %>
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-{{#if enable_swagger}}
+<% if enable_swagger %>
 	"github.com/swaggo/files"
 	"github.com/swaggo/gin-swagger"
-{{/if}}
+<% endif %>
 )
 
 type Option func(*gin.RouterGroup)
 
 var swaggerRouter func(*gin.Engine) = nil
 
-{{#if enable_swagger}}
+<% if enable_swagger %>
 func initSwaggerRouter() {
 	swaggerRouter = func(r *gin.Engine) {
 		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	}
 }
-{{/if}}
+<% endif %>
 
 // CreateRouter 创建 Gin 引擎（不注册路由）
 // 这样可以在注册路由之前先注册中间件
@@ -40,12 +40,12 @@ func CreateRouter() *gin.Engine {
 	}
 	r := gin.New()
 
-{{#if enable_swagger}}
+<% if enable_swagger %>
 	// 设置Swagger文档的BasePath
 	docs.SwaggerInfo.BasePath = "/"
 	initSwaggerRouter()
 
-{{/if}}
+<% endif %>
 	return r
 }
 
@@ -54,9 +54,9 @@ func CreateRouter() *gin.Engine {
 func RegisterAllRoutes(r *gin.Engine) {
 	registerRoutes(r)
 	registerMetrics(r)
-{{#if enable_swagger}}
+<% if enable_swagger %>
 	registerSwagger(r)
-{{/if}}
+<% endif %>
 	handleNotFoundRoutes(r)
 }
 
@@ -81,13 +81,13 @@ func registerMetrics(r *gin.Engine) {
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
 
-{{#if enable_swagger}}
+<% if enable_swagger %>
 func registerSwagger(r *gin.Engine) {
 	if swaggerRouter != nil {
 		swaggerRouter(r)
 	}
 }
-{{/if}}
+<% endif %>
 
 func handleNotFoundRoutes(r *gin.Engine) {
 	r.NoRoute(func(c *gin.Context) {

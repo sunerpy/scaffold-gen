@@ -1,7 +1,6 @@
 import { createI18n } from "vue-i18n";
 import type { App } from "vue";
 
-// 语言包
 const messages = {
   zh: {
     common: {
@@ -15,17 +14,36 @@ const messages = {
       loading: "加载中...",
       success: "成功",
       error: "错误",
-      warning: "警告"
+      warning: "警告",
+      collapse: "收起侧栏",
+      expand: "展开侧栏",
+      showSidebar: "显示侧栏",
+      hideSidebar: "隐藏侧栏",
+      visible: "已显示"
     },
     settings: {
       title: "设置",
+      subtitle: "管理应用程序外观和行为",
       appearance: "外观",
       themeLight: "明亮",
       themeDark: "深色",
       themeSystem: "跟随系统",
       fontSize: "字体大小",
+      fontSizeDesc: "调整界面文字大小",
       languageZh: "简体中文",
-      languageEn: "English"
+      languageEn: "English",
+      sidebar: "侧栏",
+      layout: "布局",
+      sidebarWidth: "侧栏宽度",
+      sidebarWidthDesc: "调整侧栏宽度",
+      pinSidebar: "固定侧栏",
+      pinSidebarDesc: "保持侧栏在布局中可见",
+      defaultCollapsed: "默认收起",
+      defaultCollapsedDesc: "启动时收起侧栏",
+      general: "通用",
+      localization: "本地化",
+      languageDesc: "选择界面显示语言",
+      themeDesc: "自定义界面外观"
     }
   },
   en: {
@@ -40,22 +58,40 @@ const messages = {
       loading: "Loading...",
       success: "Success",
       error: "Error",
-      warning: "Warning"
+      warning: "Warning",
+      collapse: "Collapse sidebar",
+      expand: "Expand sidebar",
+      showSidebar: "Show sidebar",
+      hideSidebar: "Hide sidebar",
+      visible: "Visible"
     },
     settings: {
       title: "Settings",
+      subtitle: "Manage application appearance and behavior",
       appearance: "Appearance",
       themeLight: "Light",
       themeDark: "Dark",
       themeSystem: "System",
       fontSize: "Font Size",
+      fontSizeDesc: "Adjust the text size",
       languageZh: "简体中文",
-      languageEn: "English"
+      languageEn: "English",
+      sidebar: "Sidebar",
+      layout: "Layout",
+      sidebarWidth: "Sidebar Width",
+      sidebarWidthDesc: "Adjust the width of the sidebar",
+      pinSidebar: "Pin Sidebar",
+      pinSidebarDesc: "Keep sidebar visible in layout",
+      defaultCollapsed: "Default Collapsed",
+      defaultCollapsedDesc: "Start with collapsed sidebar",
+      general: "General",
+      localization: "Localization",
+      languageDesc: "Select your preferred language",
+      themeDesc: "Customize your interface look"
     }
   }
 };
 
-// 创建 i18n 实例
 const i18n = createI18n({
   legacy: false,
   locale: "zh",
@@ -63,22 +99,18 @@ const i18n = createI18n({
   messages
 });
 
-// 设置语言
 export const setLocale = (locale: "zh" | "en") => {
   i18n.global.locale.value = locale;
 };
 
-// 获取当前语言
 export const getLocale = () => {
   return i18n.global.locale.value;
 };
 
-// 翻译函数
 export const $t = (key: string) => {
   return i18n.global.t(key);
 };
 
-// Vue 插件
 export const useI18n = {
   install(app: App) {
     app.use(i18n);

@@ -1,0 +1,53 @@
+use serde::Serialize;
+use std::sync::OnceLock;
+use tauri::{AppHandle, Manager};
+
+static DB_PATH: OnceLock<String> = OnceLock::new();
+
+pub async fn init_database(app_handle: &AppHandle) -> Result<(), String> {
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {e}"))?;
+
+    std::fs::create_dir_all(&app_data_dir)
+        .map_err(|e| format!("Failed to create app data dir: {e}"))?;
+
+    let db_path = app_data_dir.join("app.db");
+    let db_path_str = db_path.to_string_lossy().to_string();
+
+    DB_PATH
+        .set(db_path_str.clone())
+        .map_err(|_| "Database path already initialized")?;
+
+    log::info!("Database initialized at: {db_path_str}");
+    Ok(())
+}
+
+pub fn get_db_path() -> Option<&'static String> {
+    DB_PATH.get()
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DbHealthStatus {
+    pub healthy: bool,
+    pub path: Option<String>,
+    pub message: String,
+}
+
+#[tauri::command]
+pub fn db_health_check() -> DbHealthStatus {
+    match get_db_path() {
+        Some(path) => DbHealthStatus {
+            healthy: true,
+            path: Some(path.clone()),
+            message: "Database is ready".to_string(),
+        },
+        None => DbHealthStatus {
+            healthy: false,
+            path: None,
+            message: "Database not initialized".to_string(),
+        },
+    }
+}

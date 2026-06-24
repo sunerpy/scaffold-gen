@@ -2,7 +2,7 @@ import { type UserConfigExport, type ConfigEnv } from "vite";
 import vue from "@vitejs/plugin-vue";
 import AutoImport from "unplugin-auto-import/vite";
 import Components from "unplugin-vue-components/vite";
-import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
+import { NaiveUiResolver } from "unplugin-vue-components/resolvers";
 import { fileURLToPath, URL } from "node:url";
 
 // https://vite.dev/config/
@@ -14,12 +14,24 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
     plugins: [
       vue(),
       AutoImport({
-        resolvers: [ElementPlusResolver()],
-        imports: ["vue", "vue-router", "pinia", "vue-i18n"],
+        imports: [
+          "vue",
+          "vue-router",
+          "pinia",
+          "vue-i18n",
+          {
+            "naive-ui": [
+              "useDialog",
+              "useMessage",
+              "useNotification",
+              "useLoadingBar"
+            ]
+          }
+        ],
         dts: true
       }),
       Components({
-        resolvers: [ElementPlusResolver()],
+        resolvers: [NaiveUiResolver()],
         dts: true
       })
     ],
@@ -52,7 +64,7 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
         output: {
           manualChunks: {
             "vue-vendor": ["vue", "vue-router", "pinia"],
-            "element-plus": ["element-plus/es"],
+            "naive-ui": ["naive-ui"],
             "tauri-plugins": ["@tauri-apps/plugin-log", "@tauri-apps/api"]
           }
         }

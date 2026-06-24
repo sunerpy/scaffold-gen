@@ -1,0 +1,31 @@
+// TypeScript types for application settings
+// These mirror the Rust backend types in src-tauri/src/config.rs
+
+export enum ThemeMode {
+  Light = "light",
+  Dark = "dark",
+  System = "system"
+}
+
+export enum Language {
+  ZhCN = "zh-CN",
+  EnUS = "en-US"
+}
+
+export interface AppSettings {
+  theme: ThemeMode;
+  language: Language;
+  fontSize: number;
+  sidebarCollapsed: boolean;
+  sidebarWidth: number;
+  sidebarPinned: boolean;
+}
+
+export const defaultSettings: AppSettings = {
+  theme: ThemeMode.System,
+  language: Language.ZhCN,
+  fontSize: 14,
+  sidebarCollapsed: false,
+  sidebarWidth: 260,
+  sidebarPinned: true
+};

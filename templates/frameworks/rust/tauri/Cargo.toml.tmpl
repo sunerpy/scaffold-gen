@@ -2,14 +2,19 @@
 resolver = "2"
 members = [
     "src-tauri",
+<% if enable_proto_gen %>
     "tools/proto-gen",
+<% endif %>
+<% if enable_error_gen %>
+    "tools/error-gen",
+<% endif %>
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-authors = ["{{author}}"]
-license = "{{license}}"
+authors = ["<<author>>"]
+license = "<<license>>"
 
 [workspace.dependencies]
 # Serialization
@@ -26,12 +31,14 @@ tokio = { version = "1", features = ["full"] }
 # CLI
 clap = { version = "4", features = ["derive"] }
 
+<% if enable_proto_gen %>
 # Protobuf and gRPC
 prost = "0.13"
 prost-build = "0.13"
 prost-types = "0.13"
 tonic = "0.12"
 tonic-build = "0.12"
+<% endif %>
 
 # Regex
 regex = "1.12"

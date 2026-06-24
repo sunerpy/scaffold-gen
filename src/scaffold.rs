@@ -207,8 +207,7 @@ impl Scaffold {
             // 渲染模板
             let rendered_content = self
                 .template_engine
-                .handlebars
-                .render_template(&content, self.params.get_all())
+                .render_template_content(&content, self.params.get_all().clone())
                 .with_context(|| {
                     format!("Failed to render embedded template: {template_file_path}")
                 })?;

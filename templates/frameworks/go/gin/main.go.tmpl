@@ -8,24 +8,24 @@ import (
 	"syscall"
 	"time"
 
-	"{{project_name}}/core"
-	"{{project_name}}/middlewares"
-	"{{project_name}}/routers"
+	"<<project_name>>/core"
+	"<<project_name>>/middlewares"
+	"<<project_name>>/routers"
 
 	"go.uber.org/zap"
 )
 
 var logger, sLogger = core.GetLoggers()
 
-{{#if enable_swagger}}
-// @title                      {{project_name_pascal}} API
-// @version                    {{cargo_version}}
-// @description                {{cargo_description}}
+<% if enable_swagger %>
+// @title                      <<project_name_pascal>> API
+// @version                    <<cargo_version>>
+// @description                <<cargo_description>>
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
 // @BasePath                   /
-{{/if}}
+<% endif %>
 func main() {
 	// 初始化应用
 	app := core.GetApp()

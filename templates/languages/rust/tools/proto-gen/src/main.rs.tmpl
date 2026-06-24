@@ -1,6 +1,14 @@
-//! Proto-gen: Protobuf code generator for {{project_name}}
+//! Proto-gen: Protobuf code generator for <<project_name>>
 //!
-//! This tool generates Rust code from .proto files.
+//! This tool generates Rust code from .proto files with serde support.
+//!
+//! Usage:
+//! ```bash
+//! cargo run -p proto-gen -- all
+//! cargo run -p proto-gen -- rust
+//! # or
+//! make proto
+//! ```
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -13,11 +21,19 @@ use generator::RustGenerator;
 /// Proto-gen CLI - Generate code from protobuf definitions
 #[derive(Parser, Debug)]
 #[command(name = "proto-gen")]
-#[command(author, version, about, long_about = None)]
+#[command(about = "Generate Rust code from protobuf definitions")]
 #[command(color = clap::ColorChoice::Auto)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+
+    /// Proto files directory (relative to project root)
+    #[arg(short, long, default_value = "protos")]
+    proto_dir: PathBuf,
+
+    /// Output directory for generated code (relative to project root)
+    #[arg(short, long)]
+    output: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -33,12 +49,17 @@ fn main() -> Result<()> {
 
     // Get project root directory
     let project_root = get_project_root()?;
+    let proto_dir = project_root.join(&cli.proto_dir);
+    let output_dir = cli
+        .output
+        .map(|o| project_root.join(o))
+        .unwrap_or_else(|| project_root.join("src").join("protos"));
 
     match cli.command {
         Commands::All | Commands::Rust => {
-            println!("🦀 Generating Rust protobuf code...");
-            generate_rust(&project_root)?;
-            println!("✅ Rust protobuf code generated successfully!");
+            println!("Generating Rust protobuf code...");
+            generate_rust(&proto_dir, &output_dir)?;
+            println!("Rust protobuf code generated successfully!");
         }
     }
 
@@ -47,10 +68,9 @@ fn main() -> Result<()> {
 
 /// Get the project root directory
 fn get_project_root() -> Result<PathBuf> {
-    // Navigate from tools/proto-gen to project root
     let current_dir = std::env::current_dir().context("Failed to get current directory")?;
 
-    // If we're in tools/proto-gen, go up two levels
+    // Navigate from tools/proto-gen to project root
     if current_dir.ends_with("proto-gen") {
         Ok(current_dir
             .parent()
@@ -68,7 +88,7 @@ fn get_project_root() -> Result<PathBuf> {
 }
 
 /// Generate Rust protobuf code
-fn generate_rust(project_root: &PathBuf) -> Result<()> {
-    let generator = RustGenerator::new(project_root.clone());
+fn generate_rust(proto_dir: &PathBuf, output_dir: &PathBuf) -> Result<()> {
+    let generator = RustGenerator::new(proto_dir.clone(), output_dir.clone());
     generator.generate()
 }

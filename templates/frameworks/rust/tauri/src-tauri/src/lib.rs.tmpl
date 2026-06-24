@@ -1,0 +1,82 @@
+mod config;
+mod database;
+mod logger;
+{{#if enable_proto_gen}}
+mod protos;
+{{/if}}
+mod system;
+
+use config::init_settings_manager;
+use logger::init_logger;
+use tauri::Manager;
+
+#[cfg(target_os = "linux")]
+fn adjust_window_for_dpi(window: &tauri::WebviewWindow) {
+    use tauri::PhysicalSize;
+
+    if let Ok(Some(monitor)) = window.current_monitor() {
+        let scale_factor = monitor.scale_factor();
+
+        if scale_factor > 1.0 {
+            let base_width = {{window_width}}.0;
+            let base_height = {{window_height}}.0;
+            let scaled_width = (base_width * scale_factor) as u32;
+            let scaled_height = (base_height * scale_factor) as u32;
+
+            if let Err(e) = window.set_size(PhysicalSize::new(scaled_width, scaled_height)) {
+                log::warn!("Failed to adjust window size for DPI: {}", e);
+            } else {
+                log::info!(
+                    "Adjusted window size for DPI {}: {}x{}",
+                    scale_factor,
+                    scaled_width,
+                    scaled_height
+                );
+            }
+        }
+    }
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(tauri_plugin_sql::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![
+            config::load_user_settings,
+            config::save_user_settings,
+            config::update_user_setting,
+            config::reset_user_settings,
+            system::get_system_info,
+            system::open_in_system_browser,
+            system::open_folder,
+            database::db_health_check,
+        ])
+        .setup(|app| {
+            let app_handle = app.handle();
+
+            init_logger(app_handle)?;
+            init_settings_manager(app_handle)?;
+
+            tauri::async_runtime::block_on(async {
+                if let Err(e) = database::init_database(app_handle).await {
+                    log::error!("Failed to initialize database: {}", e);
+                }
+            });
+
+            if let Some(window) = app.get_webview_window("main") {
+                #[cfg(target_os = "linux")]
+                adjust_window_for_dpi(&window);
+
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+
+            log::info!("Application setup completed");
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

@@ -1,8 +1,8 @@
 syntax = "v1"
 
 info(
-    title: "{{ProjectName}} API"
-    desc: "API service for {{ProjectName}}"
+    title: "<<ProjectName>> API"
+    desc: "API service for <<ProjectName>>"
     author: "Scaffold-Gen"
     version: "v1.0.0"
 )
@@ -27,7 +27,7 @@ type (
     }
 )
 
-service {{ProjectName}}-api {
+service <<ProjectName>>-api {
     @handler HealthHandler
     get /health returns (HealthResponse)
 

@@ -34,7 +34,7 @@ fn create_file_appender(config: &AppConfig) -> RollingFileAppender {
     )
 }
 
-{{{{raw}}}}/// 宏：创建层的通用配置
+/// 宏：创建层的通用配置
 macro_rules! create_layer {
     ($writer:expr, $log_level:expr, $show_location:expr, json) => {
         fmt::layer()
@@ -68,7 +68,7 @@ macro_rules! create_layer {
                 .with_filter($log_level)
         }
     }};
-}{{{{/raw}}}}
+}
 
 /// 初始化日志系统 - 根据配置动态启用输出
 pub fn init(config: &AppConfig) -> Result<(), Box<dyn std::error::Error>> {

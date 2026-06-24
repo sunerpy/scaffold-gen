@@ -1,0 +1,118 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
+
+const log = async (level: "debug" | "error", msg: string) => {
+  try {
+    const { debug, error } = await import("@tauri-apps/plugin-log");
+    if (level === "debug") await debug(msg);
+    else await error(msg);
+  } catch {
+    console.log(`[${level}] ${msg}`);
+  }
+};
+
+export function initCustomTitlebar() {
+  log("debug", "Starting titlebar initialization...");
+
+  try {
+    const appWindow = getCurrentWindow();
+
+    const minimizeBtn = document.getElementById("titlebar-minimize");
+    if (minimizeBtn) {
+      minimizeBtn.addEventListener("click", async () => {
+        try {
+          await appWindow.minimize();
+        } catch (err) {
+          log("error", `Failed to minimize: ${err}`);
+        }
+      });
+    }
+
+    const maximizeBtn = document.getElementById("titlebar-maximize");
+    const maximizeIcon = document.getElementById("maximize-icon");
+    const restoreIcon = document.getElementById("restore-icon");
+
+    const updateMaximizeIcon = async () => {
+      try {
+        const isMaximized = await appWindow.isMaximized();
+        if (maximizeIcon && restoreIcon) {
+          maximizeIcon.style.display = isMaximized ? "none" : "block";
+          restoreIcon.style.display = isMaximized ? "block" : "none";
+        }
+      } catch {}
+    };
+
+    if (maximizeBtn) {
+      maximizeBtn.addEventListener("click", async () => {
+        try {
+          const isMaximized = await appWindow.isMaximized();
+          if (isMaximized) {
+            await appWindow.unmaximize();
+          } else {
+            await appWindow.maximize();
+          }
+          updateMaximizeIcon();
+        } catch (err) {
+          log("error", `Failed to toggle maximize: ${err}`);
+        }
+      });
+    }
+
+    const closeBtn = document.getElementById("titlebar-close");
+    if (closeBtn) {
+      closeBtn.addEventListener("click", async () => {
+        try {
+          await appWindow.close();
+        } catch (err) {
+          log("error", `Failed to close: ${err}`);
+        }
+      });
+    }
+
+    const titlebar = document.querySelector(".custom-titlebar");
+    const dragRegion = document.querySelector(".titlebar-drag-region");
+
+    if (dragRegion) {
+      dragRegion.addEventListener("mousedown", async (e) => {
+        if ((e as MouseEvent).button !== 0) return;
+        try {
+          await appWindow.startDragging();
+        } catch {}
+      });
+    }
+
+    if (titlebar) {
+      titlebar.addEventListener("mousedown", async (e) => {
+        const event = e as MouseEvent;
+        if (event.button !== 0) return;
+        const target = event.target as Element;
+        if (target.closest(".titlebar-button") || target.closest(".titlebar-controls")) return;
+        try {
+          await appWindow.startDragging();
+        } catch {}
+      });
+
+      titlebar.addEventListener("dblclick", async (e) => {
+        const target = (e as MouseEvent).target as Element;
+        if (target.closest(".titlebar-controls")) return;
+        try {
+          const isMaximized = await appWindow.isMaximized();
+          if (isMaximized) {
+            await appWindow.unmaximize();
+          } else {
+            await appWindow.maximize();
+          }
+          updateMaximizeIcon();
+        } catch {}
+      });
+    }
+
+    appWindow.onResized(() => updateMaximizeIcon());
+    updateMaximizeIcon();
+
+    appWindow.setShadow(true).catch(() => {});
+
+    log("debug", "Custom titlebar initialized successfully");
+  } catch (err) {
+    log("error", `Failed to initialize titlebar: ${err}`);
+  }
+}

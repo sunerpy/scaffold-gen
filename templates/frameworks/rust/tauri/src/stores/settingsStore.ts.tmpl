@@ -2,44 +2,35 @@ import { defineStore } from "pinia";
 import { ref, watch } from "vue";
 import { setLocale } from "@/utils/i18n";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { debug, info, error as logError } from "@tauri-apps/plugin-log";
+import { ThemeMode, Language, type AppSettings, defaultSettings } from "@/types";
 
 const isTauriBool = isTauri();
 
-// 应用设置接口
-interface AppSettings {
-  theme: "light" | "dark" | "system";
-  language: "zh-CN" | "en-US";
-  fontSize: number;
-  sidebarCollapsed: boolean;
-  sidebarWidth: number;
-}
-
-// 默认设置
-const defaultSettings: AppSettings = {
-  theme: "system",
-  language: "zh-CN",
-  fontSize: 14,
-  sidebarCollapsed: false,
-  sidebarWidth: 20
+const log = (level: "debug" | "info" | "error", msg: string) => {
+  import("@tauri-apps/plugin-log")
+    .then(({ debug, info, error }) => {
+      if (level === "debug") debug(msg);
+      else if (level === "info") info(msg);
+      else error(msg);
+    })
+    .catch(() => {
+      console.log(`[${level}] ${msg}`);
+    });
 };
 
 export const useSettingsStore = defineStore("settings", () => {
-  // 响应式设置状态
   const settings = ref<AppSettings>({ ...defaultSettings });
   const isLoaded = ref(false);
 
-  // 系统主题监听器
   let systemThemeListener: MediaQueryList | null = null;
 
-  // 设置系统主题监听
   const setupSystemThemeListener = () => {
     if (typeof window !== "undefined") {
       systemThemeListener = window.matchMedia("(prefers-color-scheme: dark)");
       const handleSystemThemeChange = () => {
-        if (settings.value.theme === "system") {
+        if (settings.value.theme === ThemeMode.System) {
           if (isTauriBool) {
-            info("[systemThemeListener] 系统主题发生变化，重新应用主题");
+            log("info", "[systemThemeListener] System theme changed, reapplying");
           }
           applyTheme();
         }
@@ -48,10 +39,9 @@ export const useSettingsStore = defineStore("settings", () => {
     }
   };
 
-  // 应用主题到DOM
   const applyTheme = () => {
     const theme = settings.value.theme;
-    debug(`[applyTheme] 开始应用主题: ${theme}`);
+    log("debug", `[applyTheme] Applying theme: ${theme}`);
 
     const body = document.body;
     const html = document.documentElement;
@@ -61,13 +51,13 @@ export const useSettingsStore = defineStore("settings", () => {
     body.removeAttribute("data-theme");
     html.removeAttribute("data-theme");
 
-    let actualTheme = theme;
+    let actualTheme: "light" | "dark" = "light";
 
-    if (theme === "system") {
-      const prefersDark = window.matchMedia(
-        "(prefers-color-scheme: dark)"
-      ).matches;
+    if (theme === ThemeMode.System) {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
       actualTheme = prefersDark ? "dark" : "light";
+    } else if (theme === ThemeMode.Dark) {
+      actualTheme = "dark";
     }
 
     body.classList.add(actualTheme);
@@ -75,44 +65,37 @@ export const useSettingsStore = defineStore("settings", () => {
     body.setAttribute("data-theme", actualTheme);
     html.setAttribute("data-theme", actualTheme);
 
-    info(`[applyTheme] 主题应用完成: ${theme} -> ${actualTheme}`);
+    log("info", `[applyTheme] Theme applied: ${theme} -> ${actualTheme}`);
   };
 
-  // 应用字体大小
   const applyFontSize = () => {
     const fontSize = settings.value.fontSize;
-    debug(`[applyFontSize] 开始应用字体大小: ${fontSize}px`);
-    document.documentElement.style.setProperty(
-      "--app-font-size",
-      `${fontSize}px`
-    );
-    info(`[applyFontSize] 字体大小应用完成: ${fontSize}px`);
+    log("debug", `[applyFontSize] Applying font size: ${fontSize}px`);
+    document.documentElement.style.setProperty("--app-font-size", `${fontSize}px`);
+    log("info", `[applyFontSize] Font size applied: ${fontSize}px`);
   };
 
-  // 应用语言
   const applyLanguage = () => {
-    const langCode = settings.value.language === "zh-CN" ? "zh" : "en";
-    debug(`[applyLanguage] 应用语言设置: ${settings.value.language}`);
-    setLocale(langCode as any);
-    info(`[applyLanguage] 语言应用完成: ${settings.value.language}`);
+    const lang = settings.value.language;
+    const langCode = lang === Language.ZhCN ? "zh" : "en";
+    log("debug", `[applyLanguage] Applying language: ${lang}`);
+    setLocale(langCode as "zh" | "en");
+    log("info", `[applyLanguage] Language applied: ${lang}`);
   };
 
-  // 加载设置
   const loadSettings = async () => {
-    debug("[loadSettings] 开始加载用户设置");
+    log("debug", "[loadSettings] Loading user settings");
 
     if (!isTauriBool) {
-      debug("[loadSettings] 非Tauri环境，从localStorage加载设置");
+      log("debug", "[loadSettings] Non-Tauri, loading from localStorage");
       try {
         const savedSettings = localStorage.getItem("app-settings");
         if (savedSettings) {
           settings.value = { ...defaultSettings, ...JSON.parse(savedSettings) };
-          debug(
-            `[loadSettings] 从localStorage成功加载设置: theme=${settings.value.theme}`
-          );
+          log("debug", `[loadSettings] Loaded from localStorage: theme=${settings.value.theme}`);
         }
-      } catch (error) {
-        console.error("Failed to load settings from localStorage:", error);
+      } catch (err) {
+        console.error("Failed to load settings from localStorage:", err);
       }
       isLoaded.value = true;
       applyTheme();
@@ -123,21 +106,19 @@ export const useSettingsStore = defineStore("settings", () => {
     }
 
     try {
-      debug("[loadSettings] Tauri环境，从后端加载设置");
+      log("debug", "[loadSettings] Tauri env, loading from backend");
       const userSettings = await invoke<AppSettings>("load_user_settings");
       if (userSettings) {
         settings.value = { ...defaultSettings, ...userSettings };
-        debug(
-          `[loadSettings] 从后端成功加载设置: theme=${settings.value.theme}`
-        );
+        log("debug", `[loadSettings] Loaded from backend: theme=${settings.value.theme}`);
       }
       isLoaded.value = true;
       applyTheme();
       applyFontSize();
       applyLanguage();
       setupSystemThemeListener();
-    } catch (error) {
-      logError(`[loadSettings] Failed to load settings: ${error}`);
+    } catch (err) {
+      log("error", `[loadSettings] Failed to load settings: ${err}`);
       settings.value = { ...defaultSettings };
       isLoaded.value = true;
       applyTheme();
@@ -147,44 +128,37 @@ export const useSettingsStore = defineStore("settings", () => {
     }
   };
 
-  // 保存设置
   const saveSettings = async () => {
-    debug(`[saveSettings] 开始保存设置: theme=${settings.value.theme}`);
+    log("debug", `[saveSettings] Saving settings: theme=${settings.value.theme}`);
 
     if (!isTauriBool) {
       try {
         localStorage.setItem("app-settings", JSON.stringify(settings.value));
-        debug("[saveSettings] 设置已保存到localStorage");
-      } catch (error) {
-        console.error("Failed to save settings to localStorage:", error);
+        log("debug", "[saveSettings] Saved to localStorage");
+      } catch (err) {
+        console.error("Failed to save settings to localStorage:", err);
       }
       return;
     }
 
     try {
       await invoke("save_user_settings", { settings: settings.value });
-      debug("[saveSettings] 设置已保存到后端");
-    } catch (error) {
-      logError(`[saveSettings] Failed to save settings: ${error}`);
+      log("debug", "[saveSettings] Saved to backend");
+    } catch (err) {
+      log("error", `[saveSettings] Failed to save settings: ${err}`);
     }
   };
 
-  // 更新单个设置项
-  const updateSetting = async <K extends keyof AppSettings>(
-    key: K,
-    value: AppSettings[K]
-  ) => {
+  const updateSetting = async <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     settings.value[key] = value;
     await saveSettings();
   };
 
-  // 重置设置
   const resetSettings = async () => {
     settings.value = { ...defaultSettings };
     await saveSettings();
   };
 
-  // 监听设置变化并自动保存
   watch(
     settings,
     () => {
@@ -195,21 +169,20 @@ export const useSettingsStore = defineStore("settings", () => {
     { deep: true }
   );
 
-  // 便捷的设置方法
-  const setTheme = async (theme: AppSettings["theme"]) => {
-    debug(`[setTheme] 设置主题: ${theme}`);
+  const setTheme = async (theme: ThemeMode) => {
+    log("debug", `[setTheme] Setting theme: ${theme}`);
     await updateSetting("theme", theme);
     applyTheme();
   };
 
-  const setLanguage = async (language: AppSettings["language"]) => {
-    debug(`[setLanguage] 设置语言: ${language}`);
+  const setLanguage = async (language: Language) => {
+    log("debug", `[setLanguage] Setting language: ${language}`);
     await updateSetting("language", language);
     applyLanguage();
   };
 
   const setFontSize = async (fontSize: number) => {
-    debug(`[setFontSize] 设置字体大小: ${fontSize}px`);
+    log("debug", `[setFontSize] Setting font size: ${fontSize}px`);
     await updateSetting("fontSize", fontSize);
     applyFontSize();
   };
@@ -219,16 +192,17 @@ export const useSettingsStore = defineStore("settings", () => {
   };
 
   const setSidebarWidth = async (width: number) => {
-    const clampedWidth = Math.max(10, Math.min(30, width));
+    const clampedWidth = Math.max(200, Math.min(320, width));
     await updateSetting("sidebarWidth", clampedWidth);
   };
 
+  const setSidebarPinned = async (pinned: boolean) => {
+    await updateSetting("sidebarPinned", pinned);
+  };
+
   return {
-    // 状态
     settings,
     isLoaded,
-
-    // 方法
     loadSettings,
     saveSettings,
     updateSetting,
@@ -238,6 +212,7 @@ export const useSettingsStore = defineStore("settings", () => {
     setFontSize,
     setSidebarCollapsed,
     setSidebarWidth,
+    setSidebarPinned,
     applyTheme,
     applyFontSize,
     applyLanguage

@@ -130,12 +130,19 @@ impl TauriGenerator {
     /// 检查是否应该跳过proto-gen相关文件
     fn should_skip_proto_gen_file(&self, relative_path: &str, params: &TauriParams) -> bool {
         if !params.enable_proto_gen() {
-            // 如果禁用proto-gen，跳过所有proto-gen相关文件和目录
             relative_path.starts_with("tools/proto-gen")
                 || relative_path.starts_with("protos/")
                 || relative_path.contains("/protos/")
-                || relative_path == "Makefile.tmpl"
-                || relative_path == "Makefile"
+        } else {
+            false
+        }
+    }
+
+    fn should_skip_error_gen_file(&self, relative_path: &str, params: &TauriParams) -> bool {
+        if !params.enable_error_gen() {
+            relative_path.starts_with("tools/error-gen")
+                || relative_path == "errors.toml"
+                || relative_path == "errors.toml.tmpl"
         } else {
             false
         }
@@ -198,6 +205,11 @@ impl Generator for TauriGenerator {
 
             // 检查是否应该跳过proto-gen相关文件
             if self.should_skip_proto_gen_file(relative_path, params) {
+                continue;
+            }
+
+            // 检查是否应该跳过error-gen相关文件
+            if self.should_skip_error_gen_file(relative_path, params) {
                 continue;
             }
 

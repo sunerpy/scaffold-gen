@@ -1,6 +1,8 @@
 mod config;
 mod logger;
+<% if enable_proto_gen %>
 mod protos;
+<% endif %>
 
 use tracing::{debug, error, info, warn};
 

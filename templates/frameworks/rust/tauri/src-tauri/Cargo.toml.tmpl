@@ -1,0 +1,27 @@
+[package]
+name = "{{project_name}}"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["{{author}}"]
+edition = "2021"
+
+[lib]
+name = "{{crate_name}}_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-opener = "2"
+tauri-plugin-log = "2"
+tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+tauri-plugin-store = "2"
+tauri-plugin-window-state = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+hostname = "0.4"
+open = "5"
+tokio = { version = "1", features = ["full"] }

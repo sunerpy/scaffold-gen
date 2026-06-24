@@ -1,0 +1,50 @@
+use log::LevelFilter;
+use tauri::AppHandle;
+use tauri_plugin_log::{Target, TargetKind};
+
+use crate::config::{AppSettings, SETTINGS_KEY, STORE_FILENAME};
+use tauri_plugin_store::StoreExt;
+
+const APP_NAME: &str = "{{project_name}}";
+const MAX_LOG_FILE_SIZE: u128 = 2 * 1024 * 1024;
+
+fn load_settings_for_logger(app_handle: &AppHandle) -> AppSettings {
+    if let Ok(store) = app_handle.store(STORE_FILENAME) {
+        if let Some(value) = store.get(SETTINGS_KEY) {
+            if let Ok(settings) = serde_json::from_value::<AppSettings>(value.clone()) {
+                return settings;
+            }
+        }
+    }
+    AppSettings::default()
+}
+
+pub fn init_logger(app_handle: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    let settings = load_settings_for_logger(app_handle);
+
+    let log_level = if settings.debug_logging {
+        LevelFilter::Debug
+    } else {
+        LevelFilter::Info
+    };
+
+    app_handle.plugin(
+        tauri_plugin_log::Builder::new()
+            .clear_targets()
+            .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+            .targets([
+                Target::new(TargetKind::LogDir {
+                    file_name: Some(APP_NAME.to_string()),
+                }),
+                Target::new(TargetKind::Webview),
+                Target::new(TargetKind::Stdout),
+            ])
+            .level(log_level)
+            .max_file_size(MAX_LOG_FILE_SIZE)
+            .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+            .build(),
+    )?;
+
+    log::info!("Logger initialized with level: {:?}", log_level);
+    Ok(())
+}

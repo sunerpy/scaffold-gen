@@ -1,0 +1,470 @@
+//! Error type generator for <<project_name>>
+//!
+//! Generates Rust and TypeScript error types from TOML definitions.
+//!
+//! Usage:
+//!   cargo run -p error-gen           # Generate all (Rust + TypeScript)
+//!   cargo run -p error-gen -- rust   # Generate Rust only
+//!   cargo run -p error-gen -- ts     # Generate TypeScript only
+
+use anyhow::{Context, Result};
+use clap::{Parser, Subcommand};
+use serde::Deserialize;
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::PathBuf;
+
+#[derive(Parser, Debug)]
+#[command(name = "error-gen")]
+#[command(about = "Generate Rust and TypeScript error types from TOML definitions")]
+#[command(color = clap::ColorChoice::Auto)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
+    #[arg(short, long, default_value = "errors.toml")]
+    input: PathBuf,
+
+    #[arg(short, long)]
+    output: Option<PathBuf>,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum Commands {
+    All,
+    Rust,
+    Ts,
+}
+
+#[derive(Debug, Deserialize)]
+struct ErrorDefinitions {
+    errors: BTreeMap<String, ErrorDef>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ErrorDef {
+    doc: Option<String>,
+    #[serde(default = "default_http")]
+    http: u16,
+    #[serde(flatten)]
+    variants: BTreeMap<String, VariantDef>,
+}
+
+fn default_http() -> u16 {
+    500
+}
+
+#[derive(Debug, Deserialize)]
+struct VariantDef {
+    code: String,
+    http: Option<u16>,
+    msg: String,
+    #[serde(default)]
+    data: DataType,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+#[serde(untagged)]
+enum DataType {
+    #[default]
+    None,
+    Single(String),
+    Tuple(Vec<String>),
+    Named(BTreeMap<String, String>),
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+    let command = cli.command.clone().unwrap_or(Commands::All);
+
+    let project_root = get_project_root()?;
+    let input_path = project_root.join(&cli.input);
+
+    println!("📖 Reading error definitions from: {}", input_path.display());
+    let content = fs::read_to_string(&input_path)
+        .with_context(|| format!("Failed to read: {}", input_path.display()))?;
+
+    let definitions: ErrorDefinitions =
+        toml::from_str(&content).context("Failed to parse TOML")?;
+
+    let error_count: usize = definitions.errors.values().map(|e| e.variants.len()).sum();
+    println!(
+        "📦 Found {} error type(s) with {} variant(s)",
+        definitions.errors.len(),
+        error_count
+    );
+
+    match command {
+        Commands::All => {
+            generate_rust(&definitions, &project_root)?;
+            generate_typescript(&definitions, &project_root)?;
+        }
+        Commands::Rust => {
+            generate_rust(&definitions, &project_root)?;
+        }
+        Commands::Ts => {
+            generate_typescript(&definitions, &project_root)?;
+        }
+    }
+
+    println!("✅ Code generation complete!");
+    Ok(())
+}
+
+fn get_project_root() -> Result<PathBuf> {
+    let current = std::env::current_dir()?;
+    if current.ends_with("error-gen") {
+        Ok(current.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf()).unwrap_or(current))
+    } else if current.ends_with("tools") {
+        Ok(current.parent().map(|p| p.to_path_buf()).unwrap_or(current))
+    } else {
+        Ok(current)
+    }
+}
+
+// ============================================================================
+// Rust Code Generation
+// ============================================================================
+
+fn generate_rust(defs: &ErrorDefinitions, root: &PathBuf) -> Result<()> {
+    let output_path = root.join("src/errors.rs");
+    println!("🦀 Generating Rust: {}", output_path.display());
+
+    let mut out = String::new();
+    out.push_str("//! Auto-generated error types - DO NOT EDIT\n");
+    out.push_str("//! Generated from errors.toml by error-gen\n");
+    out.push_str("//! Regenerate: `make error-gen` or `cargo run -p error-gen`\n\n");
+    out.push_str("use thiserror::Error;\n");
+    out.push_str("use serde::{Deserialize, Serialize};\n\n");
+
+    for (name, def) in &defs.errors {
+        out.push_str(&generate_rust_error(name, def));
+    }
+
+    out.push_str(&generate_rust_error_response(defs));
+
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&output_path, out)?;
+    println!("   ✓ Generated {} error type(s)", defs.errors.len());
+
+    Ok(())
+}
+
+fn generate_rust_error(name: &str, def: &ErrorDef) -> String {
+    let mut out = String::new();
+
+    if let Some(doc) = &def.doc {
+        out.push_str(&format!("/// {doc}\n"));
+    }
+    out.push_str("#[derive(Error, Debug, Clone, Serialize, Deserialize)]\n");
+    out.push_str(&format!("pub enum {name} {{\n"));
+
+    for (variant_name, variant) in &def.variants {
+        let msg = &variant.msg;
+        match &variant.data {
+            DataType::None => {
+                out.push_str(&format!("    #[error(\"{msg}\")]\n"));
+                out.push_str(&format!("    {variant_name},\n\n"));
+            }
+            DataType::Single(ty) => {
+                let rust_ty = to_rust_type(ty);
+                out.push_str(&format!("    #[error(\"{msg}\")]\n"));
+                out.push_str(&format!("    {variant_name}({rust_ty}),\n\n"));
+            }
+            DataType::Tuple(types) => {
+                let rust_types: Vec<_> = types.iter().map(|t| to_rust_type(t)).collect();
+                out.push_str(&format!("    #[error(\"{msg}\")]\n"));
+                out.push_str(&format!("    {variant_name}({}),\n\n", rust_types.join(", ")));
+            }
+            DataType::Named(fields) => {
+                let field_str: Vec<_> = fields
+                    .iter()
+                    .map(|(k, v)| format!("{k}: {}", to_rust_type(v)))
+                    .collect();
+                out.push_str(&format!("    #[error(\"{msg}\")]\n"));
+                out.push_str(&format!("    {variant_name} {{ {} }},\n\n", field_str.join(", ")));
+            }
+        }
+    }
+
+    out.push_str("}\n\n");
+
+    out.push_str(&format!("impl {name} {{\n"));
+    out.push_str("    pub fn error_code(&self) -> &'static str {\n");
+    out.push_str("        match self {\n");
+    for (variant_name, variant) in &def.variants {
+        let code = &variant.code;
+        let pattern = match &variant.data {
+            DataType::None => format!("Self::{variant_name}"),
+            DataType::Single(_) => format!("Self::{variant_name}(_)"),
+            DataType::Tuple(t) => format!("Self::{variant_name}({})", vec!["_"; t.len()].join(", ")),
+            DataType::Named(_) => format!("Self::{variant_name} {{ .. }}"),
+        };
+        out.push_str(&format!("            {pattern} => \"{code}\",\n"));
+    }
+    out.push_str("        }\n");
+    out.push_str("    }\n\n");
+
+    out.push_str("    pub fn http_status(&self) -> u16 {\n");
+    out.push_str("        match self {\n");
+    for (variant_name, variant) in &def.variants {
+        let http = variant.http.unwrap_or(def.http);
+        let pattern = match &variant.data {
+            DataType::None => format!("Self::{variant_name}"),
+            DataType::Single(_) => format!("Self::{variant_name}(_)"),
+            DataType::Tuple(t) => format!("Self::{variant_name}({})", vec!["_"; t.len()].join(", ")),
+            DataType::Named(_) => format!("Self::{variant_name} {{ .. }}"),
+        };
+        out.push_str(&format!("            {pattern} => {http},\n"));
+    }
+    out.push_str("        }\n");
+    out.push_str("    }\n");
+    out.push_str("}\n\n");
+
+    out
+}
+
+fn generate_rust_error_response(defs: &ErrorDefinitions) -> String {
+    let mut out = String::new();
+
+    out.push_str("/// Unified error response for API\n");
+    out.push_str("#[derive(Debug, Clone, Serialize, Deserialize)]\n");
+    out.push_str("pub struct ErrorResponse {\n");
+    out.push_str("    pub code: String,\n");
+    out.push_str("    pub message: String,\n");
+    out.push_str("    #[serde(skip_serializing_if = \"Option::is_none\")]\n");
+    out.push_str("    pub details: Option<serde_json::Value>,\n");
+    out.push_str("}\n\n");
+
+    out.push_str("impl ErrorResponse {\n");
+    out.push_str("    pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {\n");
+    out.push_str("        Self { code: code.into(), message: message.into(), details: None }\n");
+    out.push_str("    }\n\n");
+    out.push_str("    pub fn with_details(mut self, details: serde_json::Value) -> Self {\n");
+    out.push_str("        self.details = Some(details);\n");
+    out.push_str("        self\n");
+    out.push_str("    }\n");
+    out.push_str("}\n\n");
+
+    for name in defs.errors.keys() {
+        out.push_str(&format!("impl From<{name}> for ErrorResponse {{\n"));
+        out.push_str(&format!("    fn from(err: {name}) -> Self {{\n"));
+        out.push_str("        Self::new(err.error_code(), err.to_string())\n");
+        out.push_str("    }\n");
+        out.push_str("}\n\n");
+    }
+
+    out
+}
+
+fn to_rust_type(t: &str) -> &str {
+    match t {
+        "string" | "String" => "String",
+        "i32" | "int" => "i32",
+        "i64" => "i64",
+        "u32" | "uint" => "u32",
+        "u64" => "u64",
+        "bool" | "boolean" => "bool",
+        "f32" | "float" => "f32",
+        "f64" | "double" => "f64",
+        other => other,
+    }
+}
+
+// ============================================================================
+// TypeScript Code Generation
+// ============================================================================
+
+fn generate_typescript(defs: &ErrorDefinitions, root: &PathBuf) -> Result<()> {
+    let output_path = root.join("src/errors.ts");
+    println!("📘 Generating TypeScript: {}", output_path.display());
+
+    let mut out = String::new();
+    out.push_str("// Auto-generated error types - DO NOT EDIT\n");
+    out.push_str("// Generated from errors.toml by error-gen\n");
+    out.push_str("// Regenerate: `make error-gen` or `cargo run -p error-gen`\n\n");
+
+    out.push_str("export interface ErrorResponse {\n");
+    out.push_str("  code: string;\n");
+    out.push_str("  message: string;\n");
+    out.push_str("  details?: unknown;\n");
+    out.push_str("}\n\n");
+
+    out.push_str(&generate_ts_error_codes(defs));
+    out.push_str(&generate_ts_error_classes(defs));
+    out.push_str(&generate_ts_error_factory(defs));
+
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&output_path, out)?;
+    println!("   ✓ Generated {} error type(s)", defs.errors.len());
+
+    Ok(())
+}
+
+fn generate_ts_error_codes(defs: &ErrorDefinitions) -> String {
+    let mut out = String::new();
+
+    out.push_str("/** All error codes */\n");
+    out.push_str("export const ErrorCodes = {\n");
+    for (name, def) in &defs.errors {
+        out.push_str(&format!("  // {name}\n"));
+        for (variant_name, variant) in &def.variants {
+            let const_name = to_screaming_snake(&format!("{name}_{variant_name}"));
+            out.push_str(&format!("  {const_name}: '{}',\n", variant.code));
+        }
+    }
+    out.push_str("} as const;\n\n");
+
+    out.push_str("export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];\n\n");
+
+    out
+}
+
+fn generate_ts_error_classes(defs: &ErrorDefinitions) -> String {
+    let mut out = String::new();
+
+    out.push_str("/** Base error class */\n");
+    out.push_str("export class BaseError extends Error {\n");
+    out.push_str("  constructor(\n");
+    out.push_str("    public readonly code: string,\n");
+    out.push_str("    message: string,\n");
+    out.push_str("    public readonly httpStatus: number = 500,\n");
+    out.push_str("    public readonly details?: unknown,\n");
+    out.push_str("  ) {\n");
+    out.push_str("    super(message);\n");
+    out.push_str("    this.name = this.constructor.name;\n");
+    out.push_str("  }\n\n");
+    out.push_str("  toJSON(): ErrorResponse {\n");
+    out.push_str("    const result: ErrorResponse = { code: this.code, message: this.message };\n");
+    out.push_str("    if (this.details !== undefined) result.details = this.details;\n");
+    out.push_str("    return result;\n");
+    out.push_str("  }\n\n");
+    out.push_str("  static fromResponse(res: ErrorResponse): BaseError {\n");
+    out.push_str("    return new BaseError(res.code, res.message, 500, res.details);\n");
+    out.push_str("  }\n");
+    out.push_str("}\n\n");
+
+    for (name, def) in &defs.errors {
+        if let Some(doc) = &def.doc {
+            out.push_str(&format!("/** {doc} */\n"));
+        }
+        out.push_str(&format!("export class {name} extends BaseError {{\n"));
+
+        for (variant_name, variant) in &def.variants {
+            let http = variant.http.unwrap_or(def.http);
+            let code = &variant.code;
+            let msg = &variant.msg;
+
+            let (params, msg_template, details) = generate_ts_params(&variant.data, msg);
+
+            if params.is_empty() {
+                out.push_str(&format!(
+                    "  static {variant_name}(): {name} {{\n"
+                ));
+                out.push_str(&format!(
+                    "    return new {name}('{code}', '{msg_template}', {http});\n"
+                ));
+            } else {
+                out.push_str(&format!(
+                    "  static {variant_name}({params}): {name} {{\n"
+                ));
+                out.push_str(&format!(
+                    "    return new {name}('{code}', {msg_template}, {http}, {details});\n"
+                ));
+            }
+            out.push_str("  }\n\n");
+        }
+
+        out.push_str("}\n\n");
+    }
+
+    out
+}
+
+fn generate_ts_params(data: &DataType, msg: &str) -> (String, String, String) {
+    match data {
+        DataType::None => (String::new(), msg.to_string(), "undefined".to_string()),
+        DataType::Single(ty) => {
+            let ts_ty = to_ts_type(ty);
+            let msg_template = if msg.contains("{0}") {
+                format!("`{}`", msg.replace("{0}", "${value}"))
+            } else {
+                format!("'{msg}'")
+            };
+            (format!("value: {ts_ty}"), msg_template, "{ value }".to_string())
+        }
+        DataType::Tuple(types) => {
+            let params: Vec<_> = types
+                .iter()
+                .enumerate()
+                .map(|(i, t)| format!("v{i}: {}", to_ts_type(t)))
+                .collect();
+            let mut msg_template = msg.to_string();
+            for i in 0..types.len() {
+                msg_template = msg_template.replace(&format!("{{{i}}}"), &format!("${{v{i}}}"));
+            }
+            let details: Vec<_> = (0..types.len()).map(|i| format!("v{i}")).collect();
+            (
+                params.join(", "),
+                format!("`{msg_template}`"),
+                format!("[{}]", details.join(", ")),
+            )
+        }
+        DataType::Named(fields) => {
+            let params: Vec<_> = fields
+                .iter()
+                .map(|(k, v)| format!("{k}: {}", to_ts_type(v)))
+                .collect();
+            let mut msg_template = msg.to_string();
+            for k in fields.keys() {
+                msg_template = msg_template.replace(&format!("{{{k}}}"), &format!("${{{k}}}"));
+            }
+            let details: Vec<_> = fields.keys().cloned().collect();
+            (
+                format!("{{ {} }}: {{ {} }}", details.join(", "), params.join("; ")),
+                format!("`{msg_template}`"),
+                format!("{{ {} }}", details.join(", ")),
+            )
+        }
+    }
+}
+
+fn generate_ts_error_factory(_defs: &ErrorDefinitions) -> String {
+    let mut out = String::new();
+
+    out.push_str("/** Parse error response from API */\n");
+    out.push_str("export function parseError(response: ErrorResponse): BaseError {\n");
+    out.push_str("  return BaseError.fromResponse(response);\n");
+    out.push_str("}\n\n");
+
+    out.push_str("/** Check if error matches a specific code */\n");
+    out.push_str("export function isErrorCode(error: unknown, code: ErrorCode): boolean {\n");
+    out.push_str("  return error instanceof BaseError && error.code === code;\n");
+    out.push_str("}\n");
+
+    out
+}
+
+fn to_ts_type(t: &str) -> &str {
+    match t {
+        "string" | "String" => "string",
+        "i32" | "i64" | "u32" | "u64" | "int" | "uint" | "f32" | "f64" | "float" | "double" => "number",
+        "bool" | "boolean" => "boolean",
+        _ => "unknown",
+    }
+}
+
+fn to_screaming_snake(s: &str) -> String {
+    let mut result = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if c.is_uppercase() && i > 0 {
+            result.push('_');
+        }
+        result.push(c.to_ascii_uppercase());
+    }
+    result
+}

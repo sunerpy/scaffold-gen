@@ -1,51 +1,61 @@
 <template>
-  <el-config-provider :locale="currentLocale">
-    <div id="app-container" :class="themeClasses">
-      <router-view />
-    </div>
-  </el-config-provider>
+  <n-config-provider :theme="naiveTheme" :locale="zhCN" :date-locale="dateZhCN">
+    <n-global-style />
+    <n-message-provider>
+      <div id="app-container" :class="[themeClasses, platformClass]">
+        <router-view />
+      </div>
+    </n-message-provider>
+  </n-config-provider>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted, computed } from "vue";
+import { NConfigProvider, NGlobalStyle, NMessageProvider, zhCN, dateZhCN } from "naive-ui";
 import { useTheme } from "@/composables/useTheme";
 
-// 初始化主题系统
-const { themeClasses, initTheme } = useTheme();
+const { themeClasses, naiveTheme, initTheme } = useTheme();
 
-// 当前语言包 - 可扩展为多语言支持
-const currentLocale = undefined;
+const platform = ref('unknown');
 
-const showSettings = ref(false);
+const platformClass = computed(() => `platform-${platform.value}`);
 
-// 全局键盘快捷键
 const handleKeydown = (event: KeyboardEvent) => {
-  // Ctrl/Cmd + , 打开设置
   if ((event.ctrlKey || event.metaKey) && event.key === ",") {
     event.preventDefault();
-    showSettings.value = true;
+    window.__openSettings?.();
   }
 };
 
 onMounted(async () => {
   document.addEventListener("keydown", handleKeydown);
   await initTheme();
+  
+  const userAgent = navigator.userAgent.toLowerCase();
+  if (userAgent.includes('win')) {
+    platform.value = 'windows';
+  } else if (userAgent.includes('mac')) {
+    platform.value = 'macos';
+  } else if (userAgent.includes('linux')) {
+    platform.value = 'linux';
+  } else if (userAgent.includes('android')) {
+    platform.value = 'android';
+  } else if (userAgent.includes('iphone') || userAgent.includes('ipad')) {
+    platform.value = 'ios';
+  }
+  
+  document.documentElement.dataset.platform = platform.value;
 });
 
 onUnmounted(() => {
   document.removeEventListener("keydown", handleKeydown);
 });
 
-// 暴露给全局使用
 declare global {
   interface Window {
-    __openSettings: () => void;
+    __openSettings?: () => void;
   }
 }
-
-window.__openSettings = () => {
-  showSettings.value = true;
-};
 </script>
 
 <style>

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "{{project_title}}",
+  "version": "0.1.0",
+  "identifier": "{{identifier}}",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "{{project_title}}",
+        "width": {{window_width}},
+        "height": {{window_height}},
+        "minWidth": 800,
+        "minHeight": 600,
+        "visible": true,
+        "center": true,
+        "resizable": true,
+        "minimizable": true,
+        "maximizable": true,
+        "closable": true,
+        "decorations": false,
+        "transparent": false,
+        "alwaysOnTop": false,
+        "skipTaskbar": false,
+        "theme": null,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "acceptFirstMouse": true,
+        "shadow": true
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "macOSPrivateApi": true,
+    "withGlobalTauri": false
+  },
+  "bundle": {
+    "category": "DeveloperTool",
+    "shortDescription": "{{project_title}} - Desktop Application",
+    "longDescription": "{{project_title}} is a desktop application built with Tauri.",
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "languages": ["SimpChinese", "English"],
+        "installMode": "both",
+        "displayLanguageSelector": true
+      }
+    }
+  }
+}

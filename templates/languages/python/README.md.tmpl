@@ -1,10 +1,10 @@
-# {{project_name}}
+# <<project_name>>
 
-{{project_description}}
+<<project_description>>
 
 ## Requirements
 
-- Python {{python_version}}+
+- Python <<python_version>>+
 - [uv](https://docs.astral.sh/uv/) - Fast Python package installer and resolver
 
 ## Installation
@@ -20,7 +20,7 @@ uv sync
 ### Running the application
 
 ```bash
-uv run python -m {{package_name}}
+uv run python -m <<package_name>>
 ```
 
 ### Running tests
@@ -41,7 +41,7 @@ uv run ruff check .
 uv run ruff format .
 ```
 
-{{#if enable_precommit}}
+<% if enable_precommit %>
 ### Pre-commit hooks
 
 This project uses pre-commit hooks to ensure code quality.
@@ -57,14 +57,14 @@ Run pre-commit on all files:
 ```bash
 uv run pre-commit run --all-files
 ```
-{{/if}}
+<% endif %>
 
 ## Project Structure
 
 ```
-{{project_name}}/
+<<project_name>>/
 ├── src/
-│   └── {{package_name}}/
+│   └── <<package_name>>/
 │       ├── __init__.py
 │       ├── config/          # Configuration files
 │       └── utils/           # Utility functions
@@ -75,4 +75,4 @@ uv run pre-commit run --all-files
 
 ## License
 
-{{license}}
+<<license>>

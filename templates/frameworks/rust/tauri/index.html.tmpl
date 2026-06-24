@@ -1,13 +1,310 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri Vue Template</title>
+    <meta name="theme-color" content="#18a058" />
+    <meta name="description" content="{{project_title}} - Desktop Application" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+
+    <!-- Performance optimization -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="renderer" content="webkit" />
+
+    <title>{{project_title}}</title>
+
+    <!-- Critical CSS for custom titlebar and loading -->
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html, body {
+        height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        overflow: hidden;
+      }
+
+      #app {
+        height: 100%;
+        transform: translateZ(0);
+        will-change: transform;
+        padding-top: 32px; /* Space for custom titlebar */
+      }
+
+      /* Custom titlebar - using green theme colors */
+      .custom-titlebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 32px;
+        background: linear-gradient(135deg, #18a058 0%, #0d9488 100%);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        z-index: 10000;
+        user-select: none;
+        -webkit-app-region: drag;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        transition: background 0.3s ease;
+      }
+
+      .titlebar-drag-region {
+        flex: 1;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        padding-left: 12px;
+        -webkit-app-region: drag;
+        cursor: move;
+      }
+
+      .titlebar-title {
+        color: white;
+        font-size: 13px;
+        font-weight: 500;
+        opacity: 0.95;
+        letter-spacing: 0.02em;
+      }
+
+      .titlebar-controls {
+        display: flex;
+        height: 100%;
+        -webkit-app-region: no-drag;
+      }
+
+      .titlebar-button {
+        width: 46px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        position: relative;
+      }
+
+      .titlebar-button:not(:last-child)::after {
+        content: "";
+        position: absolute;
+        right: 0;
+        top: 25%;
+        bottom: 25%;
+        width: 1px;
+        background: rgba(255, 255, 255, 0.2);
+        transition: opacity 0.15s ease;
+      }
+
+      .titlebar-button:hover::after {
+        opacity: 0;
+      }
+
+      .titlebar-button svg {
+        width: 14px;
+        height: 14px;
+        fill: white;
+        opacity: 0.85;
+        transition: all 0.15s ease;
+      }
+
+      .titlebar-button:hover {
+        background: rgba(255, 255, 255, 0.15);
+      }
+
+      .titlebar-button:hover svg {
+        opacity: 1;
+        transform: scale(1.05);
+      }
+
+      .titlebar-button:active svg {
+        transform: scale(0.95);
+      }
+
+      .titlebar-button.close:hover {
+        background: #e81123;
+      }
+
+      .titlebar-button.close:hover svg {
+        opacity: 1;
+      }
+
+      /* Dark theme titlebar */
+      [data-theme="dark"] .custom-titlebar,
+      .dark .custom-titlebar {
+        background: linear-gradient(135deg, #171717 0%, #0a0a0a 100%);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      [data-theme="dark"] .titlebar-button:not(:last-child)::after,
+      .dark .titlebar-button:not(:last-child)::after {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      [data-theme="dark"] .titlebar-button:hover,
+      .dark .titlebar-button:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      /* Fullscreen mode */
+      body.fullscreen .custom-titlebar {
+        display: none;
+      }
+
+      body.fullscreen #app {
+        padding-top: 0;
+      }
+
+      /* Loading skeleton */
+      .app-skeleton {
+        position: fixed;
+        top: 32px;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, #18a058 0%, #0d9488 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        opacity: 1;
+        transition: opacity 0.3s ease-out;
+      }
+
+      .skeleton-content {
+        text-align: center;
+        color: white;
+      }
+
+      .skeleton-logo {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 20px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 16px;
+        animation: pulse 2s infinite;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .skeleton-logo svg {
+        width: 36px;
+        height: 36px;
+        fill: white;
+        opacity: 0.9;
+      }
+
+      .skeleton-title {
+        font-size: 22px;
+        font-weight: 600;
+        margin-bottom: 8px;
+        opacity: 0.95;
+        letter-spacing: -0.01em;
+      }
+
+      .skeleton-subtitle {
+        font-size: 13px;
+        opacity: 0.7;
+        margin-bottom: 24px;
+      }
+
+      .skeleton-loading {
+        width: 120px;
+        height: 3px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 2px;
+        overflow: hidden;
+        margin: 0 auto;
+        position: relative;
+      }
+
+      .skeleton-loading::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 40%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.7);
+        border-radius: 2px;
+        animation: loading 1.2s infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% {
+          transform: scale(1);
+          opacity: 0.9;
+        }
+        50% {
+          transform: scale(1.03);
+          opacity: 1;
+        }
+      }
+
+      @keyframes loading {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(350%); }
+      }
+
+      /* Dark theme skeleton */
+      [data-theme="dark"] .app-skeleton,
+      .dark .app-skeleton {
+        background: linear-gradient(135deg, #171717 0%, #0a0a0a 100%);
+      }
+    </style>
   </head>
+
   <body>
+    <!-- Custom titlebar -->
+    <div data-tauri-drag-region class="custom-titlebar">
+      <div class="titlebar-drag-region">
+        <div class="titlebar-title">{{project_title}}</div>
+      </div>
+      <div class="titlebar-controls">
+        <div class="titlebar-button" id="titlebar-minimize">
+          <svg viewBox="0 0 24 24">
+            <path d="M20,14H4V10H20" />
+          </svg>
+        </div>
+        <div class="titlebar-button" id="titlebar-maximize">
+          <svg viewBox="0 0 24 24" id="maximize-icon">
+            <path d="M4,4H20V20H4V4M6,8V18H18V8H6Z" />
+          </svg>
+          <svg viewBox="0 0 24 24" id="restore-icon" style="display: none">
+            <path d="M4,8H8V4H20V16H16V20H4V8M16,8V14H18V6H10V8H16M6,12V18H14V12H6Z" />
+          </svg>
+        </div>
+        <div class="titlebar-button close" id="titlebar-close">
+          <svg viewBox="0 0 24 24">
+            <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading skeleton -->
+    <div id="app-skeleton" class="app-skeleton">
+      <div class="skeleton-content">
+        <div class="skeleton-logo">
+          <svg viewBox="0 0 24 24">
+            <path d="M12,2C17.52,2 22,6.48 22,12C22,17.52 17.52,22 12,22C6.48,22 2,17.52 2,12C2,6.48 6.48,2 12,2M12,4C7.58,4 4,7.58 4,12C4,16.42 7.58,20 12,20C16.42,20 20,16.42 20,12C20,7.58 16.42,4 12,4M13,7V11H17V13H13V17H11V13H7V11H11V7H13Z" />
+          </svg>
+        </div>
+        <div class="skeleton-title">{{project_title}}</div>
+        <div class="skeleton-subtitle">Loading...</div>
+        <div class="skeleton-loading"></div>
+      </div>
+    </div>
+
     <div id="app"></div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

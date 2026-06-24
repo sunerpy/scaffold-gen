@@ -1,0 +1,229 @@
+<template>
+  <div class="settings-container page-container">
+    <div class="settings-header">
+      <h1 class="settings-title">\{{ $t("settings.title") }}</h1>
+      <p class="settings-subtitle">\{{ $t("settings.subtitle") }}</p>
+    </div>
+
+    <div class="settings-layout">
+      <!-- Sidebar Navigation -->
+      <nav class="settings-nav">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          :class="['nav-item', { active: activeTab === tab.id }]"
+          @click="activeTab = tab.id"
+        >
+          <n-icon :size="18"><component :is="tab.icon" /></n-icon>
+          <span>\{{ tab.label }}</span>
+        </button>
+      </nav>
+
+      <!-- Content Area -->
+      <div class="settings-content">
+        <!-- Appearance Section -->
+        <section v-show="activeTab === 'appearance'" class="settings-section">
+          <div class="section-card">
+            <div class="section-card-header">
+              <h3 class="section-card-title">\{{ $t("common.theme") }}</h3>
+              <p class="section-card-desc">\{{ $t("settings.themeDesc") }}</p>
+            </div>
+            <div class="theme-selector">
+              <label
+                v-for="option in themeOptions"
+                :key="option.value"
+                :class="['theme-option', { active: localSettings.theme === option.value }]"
+              >
+                <input
+                  type="radio"
+                  :value="option.value"
+                  v-model="localSettings.theme"
+                  class="sr-only"
+                />
+                <div class="theme-preview" :class="option.previewClass">
+                  <div class="preview-sidebar"></div>
+                  <div class="preview-content">
+                    <div class="preview-header"></div>
+                    <div class="preview-body"></div>
+                  </div>
+                </div>
+                <div class="theme-info">
+                  <n-icon :size="16"><component :is="option.icon" /></n-icon>
+                  <span>\{{ option.label }}</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="setting-row">
+              <div class="setting-info">
+                <label class="setting-label">\{{ $t('settings.fontSize') }}</label>
+                <p class="setting-desc">\{{ $t('settings.fontSizeDesc') }}</p>
+              </div>
+              <div class="setting-control slider-control">
+                <span class="slider-value">\{{ localSettings.fontSize }}px</span>
+                <n-slider
+                  v-model:value="localSettings.fontSize"
+                  :min="12"
+                  :max="20"
+                  :step="1"
+                  :tooltip="false"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Sidebar Section -->
+        <section v-show="activeTab === 'sidebar'" class="settings-section">
+          <div class="section-card">
+            <div class="section-card-header">
+              <h3 class="section-card-title">\{{ $t("settings.layout") }}</h3>
+              <p class="section-card-desc">\{{ $t("settings.sidebarWidthDesc") }}</p>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <label class="setting-label">\{{ $t('settings.sidebarWidth') }}</label>
+              </div>
+              <div class="setting-control slider-control">
+                <span class="slider-value">\{{ localSettings.sidebarWidth }}px</span>
+                <n-slider
+                  v-model:value="localSettings.sidebarWidth"
+                  :min="200"
+                  :max="320"
+                  :step="10"
+                  :tooltip="false"
+                />
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <label class="setting-label">\{{ $t('settings.pinSidebar') }}</label>
+                <p class="setting-desc">\{{ $t('settings.pinSidebarDesc') }}</p>
+              </div>
+              <div class="setting-control">
+                <n-switch v-model:value="localSettings.sidebarPinned" />
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <label class="setting-label">\{{ $t('settings.defaultCollapsed') }}</label>
+                <p class="setting-desc">\{{ $t('settings.defaultCollapsedDesc') }}</p>
+              </div>
+              <div class="setting-control">
+                <n-switch v-model:value="localSettings.sidebarCollapsed" />
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <label class="setting-label">\{{ $t('common.showSidebar') }}</label>
+              </div>
+              <div class="setting-control">
+                <n-button
+                  size="small"
+                  :type="layoutStore.sidebarHidden ? 'primary' : 'default'"
+                  :disabled="!layoutStore.sidebarHidden"
+                  @click="handleShowSidebar"
+                >
+                  \{{ layoutStore.sidebarHidden ? $t("common.showSidebar") : $t("common.visible") }}
+                </n-button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- General Section -->
+        <section v-show="activeTab === 'general'" class="settings-section">
+          <div class="section-card">
+            <div class="section-card-header">
+              <h3 class="section-card-title">\{{ $t("settings.localization") }}</h3>
+              <p class="section-card-desc">\{{ $t("settings.languageDesc") }}</p>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <label class="setting-label">\{{ $t('common.language') }}</label>
+              </div>
+              <div class="setting-control">
+                <n-select 
+                  v-model:value="localSettings.language" 
+                  :options="languageOptions"
+                  :style="{ width: '160px' }"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, watch, reactive, computed, onMounted, markRaw } from "vue";
+import { useSettingsStore } from "@/stores/settingsStore";
+import { useLayoutStore } from "@/stores/layoutStore";
+import { $t } from "@/utils/i18n";
+import { NIcon, NSlider, NSwitch, NButton, NSelect } from "naive-ui";
+import { Sun, Moon, Monitor, Palette, Layout, Globe } from "lucide-vue-next";
+import { ThemeMode, Language } from "@/types";
+
+const settingsStore = useSettingsStore();
+const layoutStore = useLayoutStore();
+const activeTab = ref("appearance");
+
+const localSettings = reactive({
+  theme: settingsStore.settings.theme,
+  language: settingsStore.settings.language,
+  fontSize: settingsStore.settings.fontSize,
+  sidebarWidth: settingsStore.settings.sidebarWidth,
+  sidebarPinned: settingsStore.settings.sidebarPinned,
+  sidebarCollapsed: settingsStore.settings.sidebarCollapsed
+});
+
+const themeOptions = computed(() => [
+  { label: $t("settings.themeLight"), value: ThemeMode.Light, icon: markRaw(Sun), previewClass: 'light' },
+  { label: $t("settings.themeDark"), value: ThemeMode.Dark, icon: markRaw(Moon), previewClass: 'dark' },
+  { label: $t("settings.themeSystem"), value: ThemeMode.System, icon: markRaw(Monitor), previewClass: 'system' }
+]);
+
+const languageOptions = computed(() => [
+  { label: $t('settings.languageZh'), value: Language.ZhCN },
+  { label: $t('settings.languageEn'), value: Language.EnUS }
+]);
+
+const tabs = computed(() => [
+  { id: 'appearance', label: $t('settings.appearance'), icon: markRaw(Palette) },
+  { id: 'sidebar', label: $t('settings.sidebar'), icon: markRaw(Layout) },
+  { id: 'general', label: $t('settings.general'), icon: markRaw(Globe) }
+]);
+
+onMounted(() => {
+  localSettings.theme = settingsStore.settings.theme;
+  localSettings.language = settingsStore.settings.language;
+  localSettings.fontSize = settingsStore.settings.fontSize;
+  localSettings.sidebarWidth = settingsStore.settings.sidebarWidth;
+  localSettings.sidebarPinned = settingsStore.settings.sidebarPinned;
+  localSettings.sidebarCollapsed = settingsStore.settings.sidebarCollapsed;
+});
+
+watch(() => localSettings.theme, async (newVal) => await settingsStore.setTheme(newVal));
+watch(() => localSettings.language, async (newVal) => await settingsStore.setLanguage(newVal));
+watch(() => localSettings.fontSize, async (newVal) => await settingsStore.setFontSize(newVal));
+watch(() => localSettings.sidebarWidth, async (newVal) => await settingsStore.setSidebarWidth(newVal));
+watch(() => localSettings.sidebarPinned, async (newVal) => await settingsStore.setSidebarPinned(newVal));
+watch(() => localSettings.sidebarCollapsed, async (newVal) => await settingsStore.setSidebarCollapsed(newVal));
+
+const handleShowSidebar = () => {
+  layoutStore.setSidebarHidden(false);
+};
+</script>
+
+<style scoped>
+@import "@/styles/settings.css";
+</style>

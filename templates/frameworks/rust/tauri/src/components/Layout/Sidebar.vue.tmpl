@@ -1,77 +1,141 @@
 <template>
+  <!-- Trigger area for showing sidebar when hidden -->
+  <div
+    v-if="layoutStore.sidebarHidden"
+    class="sidebar-trigger-area"
+    @mouseenter="handleTriggerHover"
+  ></div>
+
   <div
     class="sidebar"
     :class="{
       collapsed: layoutStore.sidebarCollapsed,
-      hidden: layoutStore.sidebarHidden
+      hidden: layoutStore.sidebarHidden,
+      'hover-visible': showOnHover
     }"
+    :style="{ width: sidebarWidthStyle }"
+    @mouseleave="handleSidebarLeave"
   >
-    <!-- 侧边栏头部 -->
-    <div class="sidebar-header">
-      <div class="logo" v-if="!layoutStore.sidebarCollapsed">
-        <span class="logo-text">App</span>
-      </div>
-      <el-icon v-else class="logo-icon">
-        <House />
-      </el-icon>
+    <!-- Header spacer for titlebar -->
+    <div class="sidebar-header"></div>
+
+    <!-- Collapse/Hide controls -->
+    <div class="sidebar-controls">
+      <button
+        v-if="!layoutStore.sidebarHidden"
+        class="sidebar-control-btn"
+        :title="layoutStore.sidebarCollapsed ? $t('common.expand') : $t('common.collapse')"
+        @click="handleToggleCollapse"
+      >
+        <n-icon :size="16">
+          <PanelLeftClose v-if="!layoutStore.sidebarCollapsed" />
+          <PanelLeftOpen v-else />
+        </n-icon>
+      </button>
+
+      <button
+        class="sidebar-control-btn"
+        :title="layoutStore.sidebarHidden ? $t('common.showSidebar') : $t('common.hideSidebar')"
+        @click="handleToggleHidden"
+      >
+        <n-icon :size="16">
+          <PanelLeft v-if="layoutStore.sidebarHidden" />
+          <EyeOff v-else />
+        </n-icon>
+      </button>
     </div>
 
-    <!-- 导航菜单 -->
-    <el-menu
-      :default-active="$route.path"
-      :collapse="layoutStore.sidebarCollapsed"
-      :unique-opened="true"
-      router
-      class="sidebar-menu"
-    >
-      <el-menu-item index="/">
-        <el-icon>
-          <House />
-        </el-icon>
-        <template #title>\{{ $t("common.dashboard") }}</template>
-      </el-menu-item>
+    <!-- Navigation menu -->
+    <nav class="sidebar-nav">
+      <n-menu
+        :collapsed="layoutStore.sidebarCollapsed"
+        :collapsed-width="64"
+        :collapsed-icon-size="20"
+        :options="menuOptions"
+        :value="currentRoute"
+        :indent="18"
+        :root-indent="16"
+      />
+    </nav>
 
-      <!-- 在此添加更多菜单项 -->
-    </el-menu>
-
-    <!-- 占位区域 -->
-    <div class="menu-spacer"></div>
-
-    <!-- 侧边栏底部 -->
+    <!-- Footer: Theme toggle + Settings -->
     <div class="sidebar-footer">
-      <!-- 主题切换按钮 -->
-      <div class="theme-toggle-wrapper">
-        <ThemeToggle :simple="layoutStore.sidebarCollapsed" />
-      </div>
-
-      <!-- 设置项 -->
-      <el-menu
-        :collapse="layoutStore.sidebarCollapsed"
-        :collapse-transition="false"
-        class="footer-menu"
+      <ThemeToggle :simple="layoutStore.sidebarCollapsed" />
+      
+      <div 
+        class="footer-menu-item"
+        :class="{ collapsed: layoutStore.sidebarCollapsed }"
+        @click="openSettings"
       >
-        <el-menu-item @click="openSettings">
-          <el-icon>
-            <Setting />
-          </el-icon>
-          <template #title>\{{ $t("common.settings") }}</template>
-        </el-menu-item>
-      </el-menu>
+        <n-icon :size="18">
+          <Settings />
+        </n-icon>
+        <span v-if="!layoutStore.sidebarCollapsed" class="footer-menu-label">
+          \{{ $t('common.settings') }}
+        </span>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { h, computed, ref } from "vue";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { useLayoutStore } from "@/stores/layoutStore";
-import { House, Setting } from "@element-plus/icons-vue";
+import { NMenu, NIcon } from "naive-ui";
+import { Home, Settings, PanelLeftClose, PanelLeftOpen, PanelLeft, EyeOff } from "lucide-vue-next";
 import ThemeToggle from "@/components/Settings/ThemeToggle.vue";
 import { $t } from "@/utils/i18n";
 
 const layoutStore = useLayoutStore();
+const route = useRoute();
+const router = useRouter();
+const showOnHover = ref(false);
 
-// 打开设置弹窗
+const currentRoute = computed(() => route.path);
+
+const sidebarWidthStyle = computed(() => {
+  if (layoutStore.sidebarCollapsed) return '64px';
+  return `${layoutStore.sidebarWidth}px`;
+});
+
+function renderIcon(icon: typeof Home) {
+  return () => h(NIcon, null, { default: () => h(icon) });
+}
+
+const menuOptions = computed(() => [
+  {
+    label: () => h(RouterLink, { to: '/' }, { default: () => $t('common.dashboard') }),
+    key: '/',
+    icon: renderIcon(Home)
+  }
+]);
+
 const openSettings = () => {
-  window.__openSettings?.();
+  router.push('/settings');
+};
+
+const handleToggleCollapse = () => {
+  layoutStore.toggleSidebar();
+};
+
+const handleToggleHidden = () => {
+  if (layoutStore.sidebarHidden) {
+    layoutStore.setSidebarHidden(false);
+    showOnHover.value = false;
+  } else {
+    layoutStore.setSidebarHidden(true);
+  }
+};
+
+const handleTriggerHover = () => {
+  showOnHover.value = true;
+};
+
+const handleSidebarLeave = () => {
+  if (layoutStore.sidebarHidden) {
+    showOnHover.value = false;
+  }
 };
 </script>
 

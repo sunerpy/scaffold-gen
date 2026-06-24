@@ -1,215 +1,134 @@
-# Scaffold-Gen
+# scaffold-gen
 
-[English](../../README.md) | 简体中文
+> 用一个交互式 CLI 为 Go、Rust、Python、TypeScript 生成可直接构建的项目脚手架。
 
-一个现代化、可扩展的脚手架生成器，支持多种框架和编程语言的项目模板创建。
+[![CI](https://github.com/sunerpy/scaffold-gen/actions/workflows/ci.yml/badge.svg)](https://github.com/sunerpy/scaffold-gen/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/sunerpy/scaffold-gen)](https://github.com/sunerpy/scaffold-gen/releases)
+[![Crates.io](https://img.shields.io/crates/v/scaffold-gen.svg)](https://crates.io/crates/scaffold-gen)
+[![License](https://img.shields.io/crates/l/scaffold-gen.svg)](../../LICENSE)
+
+简体中文 · [English](../../README.md)
+
+`scafgen` 是一个快速、可扩展的脚手架生成器。选择语言和框架，回答几个提示，
+即可得到一个带有合理默认值、LICENSE 和已初始化 git 仓库、可直接构建的项目。
+
+## 目录
+
+- [特性](#特性)
+- [支持的框架](#支持的框架)
+- [安装](#安装)
+- [快速开始](#快速开始)
+- [使用方法](#使用方法)
+- [配合 LLM 使用](#配合-llm-使用)
+- [架构设计](#架构设计)
+- [开发](#开发)
+- [贡献](#贡献)
+- [许可证](#许可证)
 
 ## 特性
 
-- 🚀 **现代化架构**: 基于 trait 的清洁、模块化设计
-- 🏗️ **三层生成器架构**: 项目级、语言级、框架级分层生成
-- 🔌 **统一生成器接口**: 所有框架生成器的一致 API
-- ⚡ **后处理管道**: 可扩展的自定义项目设置钩子
-- 💻 **交互式 CLI**: 用户友好的项目配置提示
-- ✅ **环境验证**: 自动检查所需工具和依赖
+- **三层生成器架构** —— 项目级、语言级、框架级清晰组合。
+- **交互式 CLI** —— 基于 `inquire` 的提示，覆盖语言、框架、端口、许可证。
+- **内嵌模板** —— 所有模板编译进二进制，运行时无外部文件依赖。
+- **环境验证** —— 生成前检查所需工具链（Go ≥ 1.24、Rust ≥ 1.88、Python ≥ 3.12）。
+- **可扩展** —— 实现 `FrameworkGenerator` trait 即可新增框架。
 
 ## 支持的框架
 
-| 语言 | 框架 | 状态 |
-|------|------|------|
-| Go | Gin | ✅ |
-| Go | Go-Zero | ✅ |
-| Rust | CLI App | ✅ |
-| Rust | Tauri | ✅ |
-| TypeScript | Vue 3 | ✅ |
-| TypeScript | React | ✅ |
-| Python | Basic | ✅ |
+| 语言       | 框架    | 状态 |
+| ---------- | ------- | ---- |
+| Go         | Gin     | ✅   |
+| Go         | Go-Zero | ✅   |
+| Rust       | CLI App | ✅   |
+| Rust       | Tauri   | ✅   |
+| TypeScript | Vue 3   | ✅   |
+| TypeScript | React   | ✅   |
+| Python     | Basic   | ✅   |
 
 ## 安装
 
-### 从 crates.io 安装
+```sh
+# 一键安装脚本（Linux / macOS）
+curl -fsSL https://raw.githubusercontent.com/sunerpy/scaffold-gen/main/scripts/install.sh | sh
+```
 
-```bash
+```sh
+# 从 crates.io 安装
 cargo install scaffold-gen
 ```
 
-### 从源码构建
+Linux、macOS、Windows 的预编译二进制见
+[Releases](https://github.com/sunerpy/scaffold-gen/releases) 页面。从源码构建：
+`git clone … && cd scaffold-gen && make release`。
 
-```bash
-git clone https://github.com/sunerpy/scaffold-gen.git
-cd scaffold-gen
-make release
-```
+## 快速开始
 
-## 使用方法
-
-### 交互模式（推荐）
-
-```bash
+```sh
 scafgen new my-project
 ```
 
-CLI 将引导您完成：
+CLI 会引导你完成语言、框架、项目配置和许可证选择，然后在 `./my-project`
+中生成项目。
 
-- 语言选择（Go、Rust、TypeScript、Python）
-- 框架选择（Gin、Go-Zero、Tauri、Vue3、React 等）
-- 项目配置（主机、端口、功能）
-- 许可证选择
+## 使用方法
 
-### 直接指定框架
+```sh
+# 交互模式（推荐）
+scafgen new my-project
 
-```bash
-# 创建 Gin 项目
-scafgen new my-gin-app --framework gin
-
-# 创建 Go-Zero 项目
+# 直接指定框架
+scafgen new my-gin-app    --framework gin
 scafgen new my-gozero-app --framework go-zero
-
-# 创建 Tauri 项目
-scafgen new my-tauri-app --framework tauri
-
-# 创建 Vue3 项目
-scafgen new my-vue-app --framework vue3
+scafgen new my-tauri-app  --framework tauri
+scafgen new my-vue-app    --framework vue3
+scafgen new my-react-app  --framework react
 ```
+
+运行 `scafgen new --help` 查看完整选项列表。
+
+## 配合 LLM 使用
+
+一键安装后，让你的 agent 使用以下命令：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sunerpy/scaffold-gen/main/scripts/install.sh | sh
+```
+
+- `scafgen new <name> --framework <fw>` —— 非交互式生成；通过 flag 传入所有选择以避免提示。
+- `scafgen new --help` —— 查看可用 flag 和框架。
+- `scafgen --version` —— 打印版本。
+
+框架：`gin`、`go-zero`、`tauri`、`vue3`、`react`。错误输出到 stderr 并返回非零退出码。
 
 ## 架构设计
 
-### 三层生成器架构
-
-```
-┌─────────────────────────────────────────┐
-│           GeneratorOrchestrator         │
-│         (协调所有生成器的执行)            │
-└─────────────────┬───────────────────────┘
-                  │
-    ┌─────────────┼─────────────┐
-    ▼             ▼             ▼
-┌────────┐  ┌──────────┐  ┌───────────┐
-│ Project │  │ Language │  │ Framework │
-│Generator│  │Generator │  │ Generator │
-└────────┘  └──────────┘  └───────────┘
-    │             │             │
-    ▼             ▼             ▼
- LICENSE      Go/Rust/      Gin/Tauri/
- Git/README   Python/TS     Vue3/React
-```
-
-#### 1. 项目级生成器 (ProjectGenerator)
-
-负责通用项目文件的生成：
-
-- LICENSE 文件生成
-- Git 仓库初始化
-- Pre-commit hooks 安装
-- README 文件生成
-
-#### 2. 语言级生成器 (LanguageGenerator)
-
-处理特定编程语言的设置：
-
-- **GoGenerator**: Go 模块初始化、依赖管理
-- **RustGenerator**: Cargo 项目初始化
-- **PythonGenerator**: Python 项目结构
-- **TypeScriptGenerator**: Node.js/npm 配置
-
-#### 3. 框架级生成器 (FrameworkGenerator)
-
-生成框架特定的代码结构：
-
-- **GinGenerator**: Gin web 框架项目结构
-- **GoZeroGenerator**: Go-Zero 微服务框架结构
-- **TauriGenerator**: Tauri 桌面应用结构
-- **Vue3Generator**: Vue 3 前端项目结构
-- **ReactGenerator**: React 前端项目结构
-
-## 模板系统
-
-生成器使用分层模板系统：
-
-```
-templates/
-├── frameworks/          # 框架特定模板
-│   ├── go/
-│   │   ├── gin/        # Gin 框架模板
-│   │   └── go-zero/    # Go-Zero 框架模板
-│   ├── rust/
-│   │   └── tauri/      # Tauri 框架模板
-│   └── typescript/
-│       ├── vue3/       # Vue 3 框架模板
-│       └── react/      # React 框架模板
-├── languages/          # 语言特定模板
-│   ├── go/
-│   ├── rust/
-│   ├── python/
-│   └── typescript/
-└── licenses/           # 许可证模板
-    ├── MIT.tmpl
-    ├── Apache-2.0.tmpl
-    └── GPL-3.0.tmpl
-```
-
-### 模板变量
-
-#### 通用变量
-
-- `{{project_name}}` - 项目名称
-- `{{author}}` - 项目作者
-- `{{license}}` - 许可证类型
-- `{{year}}` - 当前年份
-
-#### 框架特定变量
-
-- `{{host}}` - 服务器主机（默认: localhost）
-- `{{port}}` - HTTP 端口（默认: 8080）
-- `{{grpc_port}}` - gRPC 端口（Go-Zero 专用）
-- `{{enable_swagger}}` - 是否启用 Swagger 文档
-- `{{enable_database}}` - 是否启用数据库支持
+scaffold-gen 采用三层生成器系统（Project → Language → Framework）和分层、
+内嵌于二进制的模板系统。完整设计、模板布局与变量参考见
+[docs/readme/ARCHITECTURE-CN.md](ARCHITECTURE-CN.md)。
 
 ## 开发
 
-### 构建命令
-
-```bash
-# 调试构建
-make build
-
-# 发布构建
-make release
-
-# 运行测试
-make test
-
-# 代码检查
-make lint
-
-# 格式化代码
-make fmt
+```sh
+make build      # 调试构建 → dist/scafgen
+make release    # 优化的发布构建
+make fmt        # 格式化（rustfmt + oxfmt 处理 YAML/JSON/Markdown）
+make lint       # clippy，-D warnings
+make test       # cargo test
+make check      # fmt-check + lint + test（与 CI 一致）
+make hooks      # 安装 pre-commit（格式化）+ pre-push（测试）钩子
+make help       # 列出所有目标
 ```
 
-### 项目结构
-
-```
-src/
-├── commands/           # CLI 命令实现
-├── generators/         # 生成器模块
-│   ├── core/          # 核心生成器 traits 和工具
-│   ├── project/       # 项目级生成器
-│   ├── language/      # 语言级生成器
-│   ├── framework/     # 框架级生成器
-│   └── orchestrator.rs # 生成器编排器
-├── scaffold.rs        # 核心脚手架系统
-├── template_engine.rs # 模板处理引擎
-└── utils/             # 工具模块
-```
+克隆后运行一次 `make hooks` 即可启用提交时格式化、推送时测试的 git 钩子。
 
 ## 贡献
 
-1. Fork 仓库
-2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add some amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
+本项目使用 [Conventional Commits](https://www.conventionalcommits.org/)
+（`feat:`、`fix:`、`docs:` …）—— 版本号与变更日志由
+[release-please](https://github.com/googleapis/release-please) 和
+[git-cliff](https://git-cliff.org) 自动生成。Fork、建分支、用规范化提交信息提交、
+运行 `make check`，然后向 `main` 提 PR。
 
 ## 许可证
 
-本项目基于 MIT 许可证 - 详见 [LICENSE](../../LICENSE) 文件。
+本项目基于 MIT 许可证 —— 详见 [LICENSE](../../LICENSE) 文件。

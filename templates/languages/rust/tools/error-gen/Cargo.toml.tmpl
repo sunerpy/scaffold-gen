@@ -1,0 +1,16 @@
+[package]
+name = "error-gen"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "error-gen"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = "0.8"
+clap = { workspace = true }

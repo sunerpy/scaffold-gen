@@ -1,4 +1,4 @@
-"""Application settings for {{project_name}}."""
+"""Application settings for <<project_name>>."""
 
 import os
 import tomllib
@@ -35,8 +35,8 @@ class Settings:
 
     def __init__(self) -> None:
         """Initialize settings."""
-        self.project_name = "{{project_name}}"
-        self.version = "{{project_version}}"
+        self.project_name = "<<project_name>>"
+        self.version = "<<project_version>>"
         self.debug = self._get_bool_env("DEBUG", False)
 
         # Paths

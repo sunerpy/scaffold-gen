@@ -1,10 +1,10 @@
-//! TypeScript code generator for protobuf files
+//! TypeScript code generator for protobuf files using ts-proto
 
-use anyhow::{Context, Result};
-use regex::Regex;
+use anyhow::{bail, Context, Result};
 use std::path::PathBuf;
+use std::process::Command;
 
-/// TypeScript protobuf code generator
+/// TypeScript protobuf code generator using ts-proto
 pub struct TypeScriptGenerator {
     project_root: PathBuf,
 }
@@ -20,11 +20,12 @@ impl TypeScriptGenerator {
         let proto_dir = self.project_root.join("protos");
         let output_dir = self.project_root.join("src").join("protos");
 
-        // Ensure output directory exists
         std::fs::create_dir_all(&output_dir)
             .context("Failed to create TypeScript output directory")?;
 
-        // Find all .proto files
+        self.check_protoc()?;
+        self.check_ts_proto()?;
+
         let proto_files = self.find_proto_files(&proto_dir)?;
 
         if proto_files.is_empty() {
@@ -34,26 +35,115 @@ impl TypeScriptGenerator {
 
         println!("📁 Found {} proto file(s)", proto_files.len());
 
-        // Generate TypeScript interfaces for each proto file
-        let mut all_interfaces = String::new();
-        all_interfaces.push_str("// Auto-generated TypeScript interfaces from protobuf definitions\n");
-        all_interfaces.push_str("// Do not edit manually\n\n");
-
         for proto_file in &proto_files {
-            let content = std::fs::read_to_string(proto_file)
-                .with_context(|| format!("Failed to read proto file: {}", proto_file.display()))?;
-
-            let interfaces = self.parse_proto_to_typescript(&content)?;
-            all_interfaces.push_str(&interfaces);
-            all_interfaces.push('\n');
+            self.generate_typescript(proto_file, &proto_dir, &output_dir)?;
         }
 
-        // Write the generated TypeScript file
-        let output_file = output_dir.join("app.ts");
-        std::fs::write(&output_file, all_interfaces)
-            .context("Failed to write TypeScript file")?;
+        println!("📝 Generated TypeScript code in {}", output_dir.display());
 
-        println!("📝 Generated TypeScript code in {}", output_file.display());
+        Ok(())
+    }
+
+    /// Check if protoc is available
+    fn check_protoc(&self) -> Result<()> {
+        let output = Command::new("protoc").arg("--version").output();
+
+        match output {
+            Ok(output) if output.status.success() => {
+                let version = String::from_utf8_lossy(&output.stdout);
+                println!("✓ Found protoc: {}", version.trim());
+                Ok(())
+            }
+            _ => {
+                bail!(
+                    "protoc not found. Please install Protocol Buffers compiler:\n\
+                     - Windows: choco install protoc / scoop install protobuf\n\
+                     - macOS: brew install protobuf\n\
+                     - Linux: apt install protobuf-compiler"
+                )
+            }
+        }
+    }
+
+    /// Check if ts-proto plugin is available
+    fn check_ts_proto(&self) -> Result<()> {
+        let plugin_path = self.get_ts_proto_plugin_path();
+
+        if plugin_path.exists() {
+            println!("✓ Found ts-proto plugin");
+            Ok(())
+        } else {
+            bail!(
+                "ts-proto not found at {}. Please run 'pnpm install' first.",
+                plugin_path.display()
+            )
+        }
+    }
+
+    /// Get the ts-proto plugin path based on platform
+    fn get_ts_proto_plugin_path(&self) -> PathBuf {
+        let base = self.project_root.join("node_modules").join(".bin");
+
+        if cfg!(windows) {
+            base.join("protoc-gen-ts_proto.cmd")
+        } else {
+            base.join("protoc-gen-ts_proto")
+        }
+    }
+
+    /// Generate TypeScript code for a single proto file
+    fn generate_typescript(
+        &self,
+        proto_file: &PathBuf,
+        proto_dir: &PathBuf,
+        output_dir: &PathBuf,
+    ) -> Result<()> {
+        let plugin_path = self.get_ts_proto_plugin_path();
+
+        let plugin_arg = if cfg!(windows) {
+            format!("protoc-gen-ts_proto={}", plugin_path.display())
+        } else {
+            format!("--plugin={}", plugin_path.display())
+        };
+
+        let ts_proto_opts = [
+            "esModuleInterop=true",
+            "outputServices=false",
+            "useOptionals=messages",
+            "exportCommonSymbols=false",
+            "oneof=unions",
+            "unrecognizedEnum=false",
+        ]
+        .join(",");
+
+        let ts_proto_out = format!("--ts_proto_out={}", output_dir.display());
+        let ts_proto_opt = format!("--ts_proto_opt={}", ts_proto_opts);
+        let proto_path = format!("--proto_path={}", proto_dir.display());
+
+        let mut cmd = Command::new("protoc");
+
+        if cfg!(windows) {
+            cmd.arg(format!("--plugin={}", plugin_arg));
+        } else {
+            cmd.arg(plugin_arg);
+        }
+
+        cmd.arg(&ts_proto_out)
+            .arg(&ts_proto_opt)
+            .arg(&proto_path)
+            .arg(proto_file);
+
+        println!(
+            "  → Generating from {}",
+            proto_file.file_name().unwrap().to_string_lossy()
+        );
+
+        let output = cmd.output().context("Failed to execute protoc")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!("protoc failed:\n{}", stderr);
+        }
 
         Ok(())
     }
@@ -76,81 +166,5 @@ impl TypeScriptGenerator {
         }
 
         Ok(proto_files)
-    }
-
-    /// Parse proto content and generate TypeScript interfaces
-    fn parse_proto_to_typescript(&self, content: &str) -> Result<String> {
-        let mut output = String::new();
-
-        // Parse message definitions
-        let message_re = Regex::new(r"message\s+(\w+)\s*\{([^}]*)\}")
-            .context("Failed to compile message regex")?;
-
-        for cap in message_re.captures_iter(content) {
-            let message_name = &cap[1];
-            let fields_content = &cap[2];
-
-            output.push_str(&format!("export interface {message_name} {{\n"));
-
-            // Parse fields
-            let field_re = Regex::new(r"(?:optional\s+|repeated\s+)?(\w+)\s+(\w+)\s*=\s*\d+")
-                .context("Failed to compile field regex")?;
-
-            for field_cap in field_re.captures_iter(fields_content) {
-                let proto_type = &field_cap[1];
-                let field_name = &field_cap[2];
-                let ts_type = self.proto_type_to_typescript(proto_type);
-
-                // Check if it's a repeated field
-                let is_repeated = fields_content.contains(&format!("repeated {proto_type} {field_name}"));
-                let final_type = if is_repeated {
-                    format!("{ts_type}[]")
-                } else {
-                    ts_type
-                };
-
-                output.push_str(&format!("  {field_name}: {final_type};\n"));
-            }
-
-            output.push_str("}\n\n");
-        }
-
-        // Parse enum definitions
-        let enum_re = Regex::new(r"enum\s+(\w+)\s*\{([^}]*)\}")
-            .context("Failed to compile enum regex")?;
-
-        for cap in enum_re.captures_iter(content) {
-            let enum_name = &cap[1];
-            let values_content = &cap[2];
-
-            output.push_str(&format!("export enum {enum_name} {{\n"));
-
-            // Parse enum values
-            let value_re = Regex::new(r"(\w+)\s*=\s*(\d+)")
-                .context("Failed to compile enum value regex")?;
-
-            for value_cap in value_re.captures_iter(values_content) {
-                let value_name = &value_cap[1];
-                let value_num = &value_cap[2];
-                output.push_str(&format!("  {value_name} = {value_num},\n"));
-            }
-
-            output.push_str("}\n\n");
-        }
-
-        Ok(output)
-    }
-
-    /// Convert protobuf type to TypeScript type
-    fn proto_type_to_typescript(&self, proto_type: &str) -> String {
-        match proto_type {
-            "string" => "string".to_string(),
-            "bool" => "boolean".to_string(),
-            "int32" | "int64" | "uint32" | "uint64" | "sint32" | "sint64" |
-            "fixed32" | "fixed64" | "sfixed32" | "sfixed64" | "float" | "double" => "number".to_string(),
-            "bytes" => "Uint8Array".to_string(),
-            // Custom message types
-            other => other.to_string(),
-        }
     }
 }

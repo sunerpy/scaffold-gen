@@ -224,6 +224,8 @@ impl GeneratorOrchestrator {
         output_path: &Path,
         license: String,
         enable_precommit: bool,
+        enable_proto_gen: bool,
+        enable_error_gen: bool,
     ) -> Result<()> {
         println!("Starting Rust project generation: {project_name}");
 
@@ -234,8 +236,15 @@ impl GeneratorOrchestrator {
             .await
             .unwrap_or_else(|_| crate::constants::defaults::RUST_VERSION.to_string());
 
-        // 1. 语言级别生成 (Rust) - 使用 cargo init 创建项目
-        let rust_params = RustParams::new(project_name.clone()).with_rust_version(rust_version);
+        // 1. 语言级别生成 (Rust) - 使用模板创建项目
+        let rust_params = RustParams::new(project_name.clone())
+            .with_rust_version(rust_version)
+            .with_proto_gen(enable_proto_gen)
+            .with_error_gen(enable_error_gen);
+
+        // 设置 precommit
+        let mut rust_params = rust_params;
+        rust_params.base.enable_precommit = enable_precommit;
 
         self.rust_generator
             .generate(rust_params, output_path)
@@ -265,6 +274,8 @@ impl GeneratorOrchestrator {
         output_path: &Path,
         license: String,
         enable_precommit: bool,
+        enable_proto_gen: bool,
+        enable_error_gen: bool,
     ) -> Result<()> {
         println!("Starting Tauri project generation: {project_name}");
 
@@ -307,7 +318,9 @@ impl GeneratorOrchestrator {
         // 6. 创建 Tauri 参数
         let tauri_params = TauriParams::from_project_name(project_name.clone())
             .with_project(project_params.clone())
-            .with_precommit(enable_precommit);
+            .with_precommit(enable_precommit)
+            .with_proto_gen(enable_proto_gen)
+            .with_error_gen(enable_error_gen);
 
         // 7. 覆盖模板文件 - 添加骨架屏、Tailwind CSS 等功能
         println!("📝 Applying enhanced templates...");

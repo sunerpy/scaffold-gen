@@ -1,23 +1,23 @@
 version: '3.8'
 
 services:
-  {{ProjectName}}-api:
+  <<ProjectName>>-api:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.api
     ports:
-      - "{{Port}}:{{Port}}"
+      - "<<Port>>:<<Port>>"
     volumes:
       - ../../etc:/root/etc
     restart: unless-stopped
 
   # Uncomment if you need RPC service
-  # {{ProjectName}}-rpc:
+  # <<ProjectName>>-rpc:
   #   build:
   #     context: ../..
   #     dockerfile: deploy/docker/Dockerfile.rpc
   #   ports:
-  #     - "{{GrpcPort}}:{{GrpcPort}}"
+  #     - "<<GrpcPort>>:<<GrpcPort>>"
   #   volumes:
   #     - ../../etc:/root/etc
   #   restart: unless-stopped
@@ -27,7 +27,7 @@ services:
   #   image: mysql:8.0
   #   environment:
   #     MYSQL_ROOT_PASSWORD: rootpassword
-  #     MYSQL_DATABASE: {{ProjectName}}
+  #     MYSQL_DATABASE: <<ProjectName>>
   #   ports:
   #     - "3306:3306"
   #   volumes:

@@ -1,187 +1,108 @@
 <template>
-  <div class="dashboard">
-    <div class="page-header">
-      <h1 class="page-title">\{{ $t("common.dashboard") }}</h1>
-      <p class="page-description">欢迎使用 Tauri Vue 模板</p>
+  <div class="dashboard-container page-container">
+    <div class="dashboard-header">
+      <h1 class="dashboard-title">\{{ $t("common.dashboard") }}</h1>
+      <p class="dashboard-subtitle">
+        Overview of your system performance and key metrics. 
+        Everything looks good today.
+      </p>
     </div>
 
-    <!-- 骨架屏示例 -->
-    <div class="skeleton-demo">
-      <h2 class="section-title">骨架屏组件</h2>
-      <div class="skeleton-grid">
-        <div class="skeleton-card">
-          <div class="skeleton skeleton-avatar"></div>
-          <div class="skeleton-content">
-            <div class="skeleton skeleton-title"></div>
-            <div class="skeleton skeleton-text"></div>
-            <div class="skeleton skeleton-text short"></div>
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+      <div class="stat-card" v-for="(stat, index) in stats" :key="index">
+        <div class="stat-content">
+          <div class="stat-value">\{{ stat.value }}</div>
+          <div class="stat-label">\{{ stat.label }}</div>
+          <div class="stat-trend" :class="stat.trend > 0 ? 'positive' : 'negative'">
+            <n-icon><TrendingUp v-if="stat.trend > 0" /><TrendingDown v-else /></n-icon>
+            <span>\{{ Math.abs(stat.trend) }}% vs last month</span>
           </div>
         </div>
-        <div class="skeleton-card">
-          <div class="skeleton skeleton-avatar"></div>
-          <div class="skeleton-content">
-            <div class="skeleton skeleton-title"></div>
-            <div class="skeleton skeleton-text"></div>
-            <div class="skeleton skeleton-text short"></div>
-          </div>
-        </div>
-        <div class="skeleton-card">
-          <div class="skeleton skeleton-avatar"></div>
-          <div class="skeleton-content">
-            <div class="skeleton skeleton-title"></div>
-            <div class="skeleton skeleton-text"></div>
-            <div class="skeleton skeleton-text short"></div>
-          </div>
+        <div class="stat-icon-wrapper">
+          <n-icon size="24"><component :is="stat.icon" /></n-icon>
         </div>
       </div>
     </div>
 
-    <!-- 卡片示例 -->
-    <div class="cards-demo">
-      <h2 class="section-title">卡片组件</h2>
-      <el-row :gutter="20">
-        <el-col :span="8">
-          <el-card shadow="hover">
-            <template #header>
-              <div class="card-header">
-                <span>功能一</span>
-                <el-button type="primary" text>操作</el-button>
-              </div>
-            </template>
-            <p>这是一个示例卡片，展示基础的卡片布局。</p>
-          </el-card>
-        </el-col>
-        <el-col :span="8">
-          <el-card shadow="hover">
-            <template #header>
-              <div class="card-header">
-                <span>功能二</span>
-                <el-button type="primary" text>操作</el-button>
-              </div>
-            </template>
-            <p>这是一个示例卡片，展示基础的卡片布局。</p>
-          </el-card>
-        </el-col>
-        <el-col :span="8">
-          <el-card shadow="hover">
-            <template #header>
-              <div class="card-header">
-                <span>功能三</span>
-                <el-button type="primary" text>操作</el-button>
-              </div>
-            </template>
-            <p>这是一个示例卡片，展示基础的卡片布局。</p>
-          </el-card>
-        </el-col>
-      </el-row>
+    <!-- Quick Actions -->
+    <div class="section-header">
+      <h2 class="section-title">Quick Actions</h2>
+    </div>
+    <div class="actions-grid">
+      <button class="action-btn" v-for="(action, index) in actions" :key="index">
+        <n-icon class="action-icon" size="20"><component :is="action.icon" /></n-icon>
+        <span class="action-label">\{{ action.label }}</span>
+      </button>
     </div>
 
-    <!-- 按钮示例 -->
-    <div class="buttons-demo">
-      <h2 class="section-title">按钮组件</h2>
-      <el-space wrap>
-        <el-button>默认按钮</el-button>
-        <el-button type="primary">主要按钮</el-button>
-        <el-button type="success">成功按钮</el-button>
-        <el-button type="warning">警告按钮</el-button>
-        <el-button type="danger">危险按钮</el-button>
-        <el-button type="info">信息按钮</el-button>
-      </el-space>
+    <!-- Features -->
+    <div class="section-header">
+      <h2 class="section-title">New Features</h2>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card" v-for="(feature, index) in features" :key="index">
+        <div class="feature-image">
+          <n-icon class="feature-icon-lg" size="48"><component :is="feature.icon" /></n-icon>
+        </div>
+        <div class="feature-content">
+          <h3 class="feature-title">\{{ feature.title }}</h3>
+          <p class="feature-desc">\{{ feature.desc }}</p>
+          <div class="feature-footer">
+            <n-button type="primary" size="small">
+              Try Now <n-icon><ArrowRight /></n-icon>
+            </n-button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { markRaw } from 'vue';
+import { NIcon, NButton } from 'naive-ui';
 import { $t } from "@/utils/i18n";
+import { 
+  TrendingUp, TrendingDown, ArrowRight,
+  DollarSign, Users, ShoppingCart, Activity,
+  Plus, FileText, Settings, Bell,
+  BarChart3, Radio, Gauge
+} from 'lucide-vue-next';
+
+const stats = [
+  { label: 'Total Revenue', value: '$48,290', trend: 12.5, icon: markRaw(DollarSign) },
+  { label: 'Active Users', value: '2,450', trend: 8.2, icon: markRaw(Users) },
+  { label: 'New Orders', value: '356', trend: -2.4, icon: markRaw(ShoppingCart) },
+  { label: 'System Health', value: '98%', trend: 1.2, icon: markRaw(Activity) },
+];
+
+const actions = [
+  { label: 'Add User', icon: markRaw(Plus) },
+  { label: 'View Reports', icon: markRaw(FileText) },
+  { label: 'Settings', icon: markRaw(Settings) },
+  { label: 'Alerts', icon: markRaw(Bell) },
+];
+
+const features = [
+  { 
+    title: 'Advanced Analytics', 
+    desc: 'Deep dive into your data with our new AI-powered analytics engine.', 
+    icon: markRaw(BarChart3) 
+  },
+  { 
+    title: 'Real-time Sync', 
+    desc: 'Collaborate with your team in real-time with zero latency.', 
+    icon: markRaw(Radio) 
+  },
+  { 
+    title: 'Performance Boost', 
+    desc: 'Optimized rendering engine making your app 3x faster.', 
+    icon: markRaw(Gauge) 
+  },
+];
 </script>
 
 <style scoped>
-.dashboard {
-  padding: 20px;
-}
-
-.page-header {
-  margin-bottom: 32px;
-}
-
-.page-title {
-  font-size: 28px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 8px 0;
-}
-
-.page-description {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-.section-title {
-  font-size: 18px;
-  font-weight: 500;
-  color: var(--text-primary);
-  margin: 0 0 16px 0;
-}
-
-.skeleton-demo,
-.cards-demo,
-.buttons-demo {
-  margin-bottom: 32px;
-}
-
-.skeleton-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-}
-
-.skeleton-card {
-  display: flex;
-  gap: 16px;
-  padding: 20px;
-  background-color: var(--bg-secondary);
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-}
-
-.skeleton-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.skeleton-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.skeleton-title {
-  height: 20px;
-  width: 60%;
-}
-
-.skeleton-text {
-  height: 14px;
-  width: 100%;
-}
-
-.skeleton-text.short {
-  width: 40%;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-@media (max-width: 768px) {
-  .skeleton-grid {
-    grid-template-columns: 1fr;
-  }
-}
+@import "@/styles/dashboard.css";
 </style>

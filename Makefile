@@ -1,9 +1,15 @@
-.PHONY: all build build-dev build-prod release release-target clean install fmt lint check test ci help upx-binaries install-upx fmt-check
+.PHONY: all build build-dev build-prod release release-target clean install fmt fmt-rust fmt-oxfmt lint check test ci help upx-binaries install-upx fmt-check fmt-rust-check fmt-oxfmt-check hooks
 
 # Project configuration
 PROJECT_NAME := scaffold-gen
 BINARY_NAME := scafgen
 CARGO := cargo
+
+# Tooling detection
+PROJECT_ROOT := $(abspath .)
+OXFMT_IGNORE := --ignore-path "$(PROJECT_ROOT)/.oxfmtignore"
+HAS_OXFMT := $(shell command -v oxfmt 2>/dev/null)
+HAS_PRECOMMIT := $(shell command -v pre-commit 2>/dev/null)
 
 # Directories
 TARGET_DIR := target
@@ -117,14 +123,40 @@ install: release
 	@echo "✅ Installation complete"
 
 # Format code
-fmt:
-	@echo "✨ Formatting code..."
+fmt: fmt-rust fmt-oxfmt
+	@echo "✨ Formatting complete"
+
+# Format Rust code
+fmt-rust:
+	@echo "✨ Formatting Rust code..."
 	$(CARGO) fmt
 
+# Format non-Rust files (YAML / JSON / Markdown) with oxfmt
+fmt-oxfmt:
+ifdef HAS_OXFMT
+	@echo "✨ Formatting YAML/JSON/Markdown with oxfmt..."
+	@oxfmt --write --no-error-on-unmatched-pattern $(OXFMT_IGNORE) "$(PROJECT_ROOT)"
+else
+	@echo "⏭️  oxfmt not found, skipping non-Rust formatting (https://github.com/oxc-project/oxfmt)"
+endif
+
 # Check code formatting (for CI)
-fmt-check:
-	@echo "✨ Checking code formatting..."
+fmt-check: fmt-rust-check fmt-oxfmt-check
+	@echo "✨ Format check complete"
+
+# Check Rust formatting
+fmt-rust-check:
+	@echo "✨ Checking Rust code formatting..."
 	$(CARGO) fmt --all -- --check
+
+# Check non-Rust formatting with oxfmt
+fmt-oxfmt-check:
+ifdef HAS_OXFMT
+	@echo "✨ Checking YAML/JSON/Markdown formatting with oxfmt..."
+	@oxfmt --check --no-error-on-unmatched-pattern $(OXFMT_IGNORE) "$(PROJECT_ROOT)"
+else
+	@echo "⏭️  oxfmt not found, skipping non-Rust format check"
+endif
 
 # Run linter
 lint:
@@ -144,6 +176,16 @@ test:
 # Run all CI checks
 ci: fmt-check lint test
 	@echo "✅ All CI checks passed!"
+
+# Install git pre-commit + pre-push hooks
+hooks:
+ifdef HAS_PRECOMMIT
+	@echo "🪝 Installing git hooks (pre-commit + pre-push)..."
+	@pre-commit install --hook-type pre-commit --hook-type pre-push
+	@echo "✅ Hooks installed"
+else
+	@echo "❌ pre-commit not found: https://pre-commit.com/#install"
+endif
 
 # Clean build artifacts
 clean:
@@ -181,11 +223,13 @@ help:
 	@echo "    install-upx  - Install UPX compression tool"
 	@echo ""
 	@echo "  Development:"
-	@echo "    fmt          - Format code"
+	@echo "    fmt          - Format code (Rust + YAML/JSON/Markdown via oxfmt)"
+	@echo "    fmt-check    - Check formatting without writing (CI gate)"
 	@echo "    lint         - Run linter (clippy)"
 	@echo "    check        - Check code without building"
 	@echo "    test         - Run tests"
 	@echo "    ci           - Run all CI checks"
+	@echo "    hooks        - Install git pre-commit + pre-push hooks"
 	@echo ""
 	@echo "  Utilities:"
 	@echo "    clean        - Clean build artifacts"

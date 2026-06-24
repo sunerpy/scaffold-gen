@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
 
 use crate::generators::core::{BaseParams, InheritableParams};
 use crate::generators::language::rust::RustParams;
@@ -27,6 +29,8 @@ pub struct TauriParams {
     pub identifier: String,
     /// 是否启用 proto-gen 工具
     pub enable_proto_gen: bool,
+    /// 是否启用 error-gen 工具
+    pub enable_error_gen: bool,
 }
 
 impl Default for TauriParams {
@@ -47,7 +51,8 @@ impl Default for TauriParams {
             window_width: 800,
             window_height: 600,
             identifier: "com.example.app".to_string(),
-            enable_proto_gen: true,
+            enable_proto_gen: false,
+            enable_error_gen: false,
         }
     }
 }
@@ -72,8 +77,48 @@ impl InheritableParams for TauriParams {
             window_width: 800,
             window_height: 600,
             identifier: "com.example.app".to_string(),
-            enable_proto_gen: true,
+            enable_proto_gen: false,
+            enable_error_gen: false,
         }
+    }
+
+    fn extended_template_context(&self) -> HashMap<String, Value> {
+        let mut context = HashMap::new();
+
+        context.insert(
+            "frontend_framework".to_string(),
+            Value::String(self.frontend_framework.clone()),
+        );
+        context.insert(
+            "enable_dark_mode".to_string(),
+            Value::Bool(self.enable_dark_mode),
+        );
+        context.insert(
+            "enable_skeleton".to_string(),
+            Value::Bool(self.enable_skeleton),
+        );
+        context.insert(
+            "window_width".to_string(),
+            Value::Number(self.window_width.into()),
+        );
+        context.insert(
+            "window_height".to_string(),
+            Value::Number(self.window_height.into()),
+        );
+        context.insert(
+            "identifier".to_string(),
+            Value::String(self.identifier.clone()),
+        );
+        context.insert(
+            "enable_proto_gen".to_string(),
+            Value::Bool(self.enable_proto_gen),
+        );
+        context.insert(
+            "enable_error_gen".to_string(),
+            Value::Bool(self.enable_error_gen),
+        );
+
+        context
     }
 }
 
@@ -105,7 +150,8 @@ impl TauriParams {
             window_width: 800,
             window_height: 600,
             identifier,
-            enable_proto_gen: true,
+            enable_proto_gen: false,
+            enable_error_gen: false,
         }
     }
 
@@ -179,5 +225,14 @@ impl TauriParams {
     /// 获取是否启用proto-gen工具
     pub fn enable_proto_gen(&self) -> bool {
         self.enable_proto_gen
+    }
+
+    pub fn with_error_gen(mut self, enable: bool) -> Self {
+        self.enable_error_gen = enable;
+        self
+    }
+
+    pub fn enable_error_gen(&self) -> bool {
+        self.enable_error_gen
     }
 }

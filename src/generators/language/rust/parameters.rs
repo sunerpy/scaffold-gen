@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
 
 use crate::generators::core::{BaseParams, InheritableParams};
 
@@ -11,6 +13,10 @@ pub struct RustParams {
     pub rust_version: Option<String>,
     /// Cargo版本
     pub cargo_version: Option<String>,
+    /// 是否启用 proto-gen 工具
+    pub enable_proto_gen: bool,
+    /// 是否启用 error-gen 工具
+    pub enable_error_gen: bool,
 }
 
 impl Default for RustParams {
@@ -24,6 +30,8 @@ impl Default for RustParams {
             base,
             rust_version: Some("1.75".to_string()),
             cargo_version: None,
+            enable_proto_gen: false,
+            enable_error_gen: false,
         }
     }
 }
@@ -42,7 +50,32 @@ impl InheritableParams for RustParams {
             base,
             rust_version: None,
             cargo_version: None,
+            enable_proto_gen: false,
+            enable_error_gen: false,
         }
+    }
+
+    fn extended_template_context(&self) -> HashMap<String, Value> {
+        let mut context = HashMap::new();
+
+        if let Some(ref version) = self.rust_version {
+            context.insert("rust_version".to_string(), Value::String(version.clone()));
+        }
+
+        if let Some(ref version) = self.cargo_version {
+            context.insert("cargo_version".to_string(), Value::String(version.clone()));
+        }
+
+        context.insert(
+            "enable_proto_gen".to_string(),
+            Value::Bool(self.enable_proto_gen),
+        );
+        context.insert(
+            "enable_error_gen".to_string(),
+            Value::Bool(self.enable_error_gen),
+        );
+
+        context
     }
 }
 
@@ -55,6 +88,8 @@ impl RustParams {
             base,
             rust_version: Some("1.75".to_string()),
             cargo_version: None,
+            enable_proto_gen: false,
+            enable_error_gen: false,
         }
     }
 
@@ -73,6 +108,18 @@ impl RustParams {
         self
     }
 
+    /// 设置是否启用proto-gen工具
+    pub fn with_proto_gen(mut self, enable: bool) -> Self {
+        self.enable_proto_gen = enable;
+        self
+    }
+
+    /// 设置是否启用error-gen工具
+    pub fn with_error_gen(mut self, enable: bool) -> Self {
+        self.enable_error_gen = enable;
+        self
+    }
+
     /// 获取Rust版本
     #[allow(dead_code)]
     pub fn version(&self) -> Option<&String> {
@@ -83,5 +130,15 @@ impl RustParams {
     #[allow(dead_code)]
     pub fn get_cargo_version(&self) -> Option<&String> {
         self.cargo_version.as_ref()
+    }
+
+    /// 获取是否启用proto-gen工具
+    pub fn enable_proto_gen(&self) -> bool {
+        self.enable_proto_gen
+    }
+
+    /// 获取是否启用error-gen工具
+    pub fn enable_error_gen(&self) -> bool {
+        self.enable_error_gen
     }
 }
