@@ -2,10 +2,10 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::Command;
 
 use super::parameters::TauriParams;
 use crate::generators::core::{Generator, TemplateProcessor};
+use crate::utils::toolchain::{self, ExternalCommand};
 
 /// Tauri框架级别生成器实现
 #[derive(Debug)]
@@ -19,14 +19,13 @@ impl TauriGenerator {
 
     /// 检查 create-tauri-app 是否已安装
     pub fn check_create_tauri_app() -> Result<bool> {
-        let output = Command::new("cargo")
+        let outcome = ExternalCommand::new("cargo")
             .args(["install", "--list"])
-            .output()
+            .run()
             .context("Failed to execute cargo install --list")?;
 
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            Ok(stdout.contains("create-tauri-app"))
+        if outcome.success() {
+            Ok(outcome.stdout().contains("create-tauri-app"))
         } else {
             Ok(false)
         }
@@ -34,27 +33,24 @@ impl TauriGenerator {
 
     /// 检查 pnpm 是否已安装
     pub fn check_pnpm() -> Result<bool> {
-        match Command::new("pnpm").arg("--version").output() {
-            Ok(output) => Ok(output.status.success()),
-            Err(_) => Ok(false),
-        }
+        Ok(toolchain::tool_available("pnpm"))
     }
 
     /// 安装 create-tauri-app
     pub fn install_create_tauri_app() -> Result<()> {
         println!("📦 Installing create-tauri-app...");
-        let output = Command::new("cargo")
+        let outcome = ExternalCommand::new("cargo")
             .args(["install", "create-tauri-app"])
-            .output()
+            .run()
             .context("Failed to install create-tauri-app")?;
 
-        if output.status.success() {
+        if outcome.success() {
             println!("✅ create-tauri-app installed successfully");
             Ok(())
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
             Err(anyhow::anyhow!(
-                "Failed to install create-tauri-app: {stderr}"
+                "Failed to install create-tauri-app: {}",
+                outcome.stderr()
             ))
         }
     }
@@ -68,7 +64,7 @@ impl TauriGenerator {
 
         // 使用 cargo create-tauri-app 创建项目
         // 使用非交互模式，指定模板
-        let output = Command::new("cargo")
+        let outcome = ExternalCommand::new("cargo")
             .args([
                 "create-tauri-app",
                 project_name,
@@ -79,17 +75,17 @@ impl TauriGenerator {
                 "--yes",
             ])
             .current_dir(parent_dir)
-            .output()
+            .run()
             .context("Failed to execute cargo create-tauri-app")?;
 
-        if output.status.success() {
+        if outcome.success() {
             println!("✅ Tauri project created successfully");
             Ok(())
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
             Err(anyhow::anyhow!(
-                "Failed to create Tauri project:\nstdout: {stdout}\nstderr: {stderr}"
+                "Failed to create Tauri project:\nstdout: {}\nstderr: {}",
+                outcome.stdout(),
+                outcome.stderr()
             ))
         }
     }
@@ -98,21 +94,23 @@ impl TauriGenerator {
     pub fn install_dependencies(output_path: &Path) -> Result<()> {
         println!("📦 Installing frontend dependencies...");
 
-        let output = Command::new("pnpm")
+        let outcome = ExternalCommand::new("pnpm")
             .arg("install")
             .current_dir(output_path)
-            .output()
+            .run()
             .context("Failed to execute pnpm install")?;
 
-        if output.status.success() {
+        if outcome.success() {
             println!("✅ Dependencies installed successfully");
-            Ok(())
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            println!("⚠️ Warning: Failed to install dependencies: {stderr}");
+            println!(
+                "⚠️ Warning: Failed to install dependencies: {}",
+                outcome.stderr()
+            );
             // 不返回错误，让用户手动安装
-            Ok(())
         }
+
+        Ok(())
     }
 
     /// 检查是否应该跳过pre-commit相关文件

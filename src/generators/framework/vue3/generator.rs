@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
 use std::path::Path;
-use std::process::Command;
 
 use super::parameters::Vue3Params;
 use crate::generators::core::Generator;
+use crate::utils::toolchain::{self, ExternalCommand};
 
 /// Vue3框架级别生成器实现
 #[derive(Debug)]
@@ -12,10 +12,7 @@ pub struct Vue3Generator {}
 impl Vue3Generator {
     /// 检查 pnpm 是否已安装
     pub fn check_pnpm() -> Result<bool> {
-        match Command::new("pnpm").arg("--version").output() {
-            Ok(output) => Ok(output.status.success()),
-            Err(_) => Ok(false),
-        }
+        Ok(toolchain::tool_available("pnpm"))
     }
 
     /// 使用 pnpm create vue 创建项目
@@ -27,7 +24,7 @@ impl Vue3Generator {
 
         // 使用 pnpm create vue 创建项目
         // 使用非交互模式，指定所有选项
-        let output = Command::new("pnpm")
+        let outcome = ExternalCommand::new("pnpm")
             .args([
                 "create",
                 "vue@latest",
@@ -39,17 +36,17 @@ impl Vue3Generator {
                 "--prettier",
             ])
             .current_dir(parent_dir)
-            .output()
+            .run()
             .context("Failed to execute pnpm create vue")?;
 
-        if output.status.success() {
+        if outcome.success() {
             println!("✅ Vue3 project created successfully");
             Ok(())
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
             Err(anyhow::anyhow!(
-                "Failed to create Vue3 project:\nstdout: {stdout}\nstderr: {stderr}"
+                "Failed to create Vue3 project:\nstdout: {}\nstderr: {}",
+                outcome.stdout(),
+                outcome.stderr()
             ))
         }
     }
@@ -59,7 +56,7 @@ impl Vue3Generator {
         println!("📦 Installing Tailwind CSS...");
 
         // 安装 Tailwind CSS 依赖
-        let output = Command::new("pnpm")
+        let outcome = ExternalCommand::new("pnpm")
             .args([
                 "add",
                 "-D",
@@ -70,26 +67,30 @@ impl Vue3Generator {
                 "@tailwindcss/typography",
             ])
             .current_dir(output_path)
-            .output()
+            .run()
             .context("Failed to install Tailwind CSS")?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            println!("⚠️ Warning: Failed to install Tailwind CSS: {stderr}");
+        if !outcome.success() {
+            println!(
+                "⚠️ Warning: Failed to install Tailwind CSS: {}",
+                outcome.stderr()
+            );
         }
 
         // 初始化 Tailwind CSS
-        let output = Command::new("pnpm")
+        let outcome = ExternalCommand::new("pnpm")
             .args(["exec", "tailwindcss", "init", "-p"])
             .current_dir(output_path)
-            .output()
+            .run()
             .context("Failed to initialize Tailwind CSS")?;
 
-        if output.status.success() {
+        if outcome.success() {
             println!("✅ Tailwind CSS installed successfully");
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            println!("⚠️ Warning: Failed to initialize Tailwind CSS: {stderr}");
+            println!(
+                "⚠️ Warning: Failed to initialize Tailwind CSS: {}",
+                outcome.stderr()
+            );
         }
 
         Ok(())
@@ -99,21 +100,23 @@ impl Vue3Generator {
     pub fn install_dependencies(output_path: &Path) -> Result<()> {
         println!("📦 Installing frontend dependencies...");
 
-        let output = Command::new("pnpm")
+        let outcome = ExternalCommand::new("pnpm")
             .arg("install")
             .current_dir(output_path)
-            .output()
+            .run()
             .context("Failed to execute pnpm install")?;
 
-        if output.status.success() {
+        if outcome.success() {
             println!("✅ Dependencies installed successfully");
-            Ok(())
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            println!("⚠️ Warning: Failed to install dependencies: {stderr}");
+            println!(
+                "⚠️ Warning: Failed to install dependencies: {}",
+                outcome.stderr()
+            );
             // 不返回错误，让用户手动安装
-            Ok(())
         }
+
+        Ok(())
     }
 }
 

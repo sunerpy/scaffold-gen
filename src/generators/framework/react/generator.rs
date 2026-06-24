@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
 use std::path::Path;
-use std::process::Command;
 
 use super::parameters::ReactParams;
 use crate::generators::core::Generator;
+use crate::utils::toolchain::{self, ExternalCommand};
 
 /// React框架级别生成器实现
 #[derive(Debug)]
@@ -12,10 +12,7 @@ pub struct ReactGenerator {}
 impl ReactGenerator {
     /// 检查 pnpm 是否已安装
     pub fn check_pnpm() -> Result<bool> {
-        match Command::new("pnpm").arg("--version").output() {
-            Ok(output) => Ok(output.status.success()),
-            Err(_) => Ok(false),
-        }
+        Ok(toolchain::tool_available("pnpm"))
     }
 
     /// 使用 pnpm create vite 创建 React 项目
@@ -26,7 +23,7 @@ impl ReactGenerator {
         let parent_dir = output_path.parent().unwrap_or_else(|| Path::new("."));
 
         // 使用 pnpm create vite 创建项目
-        let output = Command::new("pnpm")
+        let outcome = ExternalCommand::new("pnpm")
             .args([
                 "create",
                 "vite@latest",
@@ -35,17 +32,17 @@ impl ReactGenerator {
                 "react-ts",
             ])
             .current_dir(parent_dir)
-            .output()
+            .run()
             .context("Failed to execute pnpm create vite")?;
 
-        if output.status.success() {
+        if outcome.success() {
             println!("✅ React project created successfully");
             Ok(())
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
             Err(anyhow::anyhow!(
-                "Failed to create React project:\nstdout: {stdout}\nstderr: {stderr}"
+                "Failed to create React project:\nstdout: {}\nstderr: {}",
+                outcome.stdout(),
+                outcome.stderr()
             ))
         }
     }
@@ -55,7 +52,7 @@ impl ReactGenerator {
         println!("📦 Installing Tailwind CSS...");
 
         // 安装 Tailwind CSS 依赖
-        let output = Command::new("pnpm")
+        let outcome = ExternalCommand::new("pnpm")
             .args([
                 "add",
                 "-D",
@@ -66,26 +63,30 @@ impl ReactGenerator {
                 "@tailwindcss/typography",
             ])
             .current_dir(output_path)
-            .output()
+            .run()
             .context("Failed to install Tailwind CSS")?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            println!("⚠️ Warning: Failed to install Tailwind CSS: {stderr}");
+        if !outcome.success() {
+            println!(
+                "⚠️ Warning: Failed to install Tailwind CSS: {}",
+                outcome.stderr()
+            );
         }
 
         // 初始化 Tailwind CSS
-        let output = Command::new("pnpm")
+        let outcome = ExternalCommand::new("pnpm")
             .args(["exec", "tailwindcss", "init", "-p"])
             .current_dir(output_path)
-            .output()
+            .run()
             .context("Failed to initialize Tailwind CSS")?;
 
-        if output.status.success() {
+        if outcome.success() {
             println!("✅ Tailwind CSS installed successfully");
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            println!("⚠️ Warning: Failed to initialize Tailwind CSS: {stderr}");
+            println!(
+                "⚠️ Warning: Failed to initialize Tailwind CSS: {}",
+                outcome.stderr()
+            );
         }
 
         Ok(())
@@ -95,17 +96,19 @@ impl ReactGenerator {
     pub fn install_router(output_path: &Path) -> Result<()> {
         println!("📦 Installing React Router...");
 
-        let output = Command::new("pnpm")
+        let outcome = ExternalCommand::new("pnpm")
             .args(["add", "react-router-dom"])
             .current_dir(output_path)
-            .output()
+            .run()
             .context("Failed to install React Router")?;
 
-        if output.status.success() {
+        if outcome.success() {
             println!("✅ React Router installed successfully");
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            println!("⚠️ Warning: Failed to install React Router: {stderr}");
+            println!(
+                "⚠️ Warning: Failed to install React Router: {}",
+                outcome.stderr()
+            );
         }
 
         Ok(())
@@ -125,17 +128,19 @@ impl ReactGenerator {
         let mut args = vec!["add"];
         args.extend(packages.iter().copied());
 
-        let output = Command::new("pnpm")
+        let outcome = ExternalCommand::new("pnpm")
             .args(&args)
             .current_dir(output_path)
-            .output()
+            .run()
             .context("Failed to install state management library")?;
 
-        if output.status.success() {
+        if outcome.success() {
             println!("✅ {state_management} installed successfully");
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            println!("⚠️ Warning: Failed to install {state_management}: {stderr}");
+            println!(
+                "⚠️ Warning: Failed to install {state_management}: {}",
+                outcome.stderr()
+            );
         }
 
         Ok(())
@@ -145,21 +150,23 @@ impl ReactGenerator {
     pub fn install_dependencies(output_path: &Path) -> Result<()> {
         println!("📦 Installing frontend dependencies...");
 
-        let output = Command::new("pnpm")
+        let outcome = ExternalCommand::new("pnpm")
             .arg("install")
             .current_dir(output_path)
-            .output()
+            .run()
             .context("Failed to execute pnpm install")?;
 
-        if output.status.success() {
+        if outcome.success() {
             println!("✅ Dependencies installed successfully");
-            Ok(())
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            println!("⚠️ Warning: Failed to install dependencies: {stderr}");
+            println!(
+                "⚠️ Warning: Failed to install dependencies: {}",
+                outcome.stderr()
+            );
             // 不返回错误，让用户手动安装
-            Ok(())
         }
+
+        Ok(())
     }
 }
 
