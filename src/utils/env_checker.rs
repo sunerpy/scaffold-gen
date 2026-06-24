@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use regex::Regex;
 use std::process::Command;
 use which::which;
@@ -61,8 +61,16 @@ impl EnvironmentChecker {
         let re = Regex::new(r"go(\d+)\.(\d+)(?:\.(\d+))?")?;
 
         if let Some(captures) = re.captures(&version_str) {
-            let major: u32 = captures.get(1).unwrap().as_str().parse()?;
-            let minor: u32 = captures.get(2).unwrap().as_str().parse()?;
+            let major: u32 = captures
+                .get(1)
+                .context("Go version regex missing major capture group")?
+                .as_str()
+                .parse()?;
+            let minor: u32 = captures
+                .get(2)
+                .context("Go version regex missing minor capture group")?
+                .as_str()
+                .parse()?;
 
             // 要求Go版本 >= 1.24
             if major > 1 || (major == 1 && minor >= 24) {
@@ -97,8 +105,14 @@ impl EnvironmentChecker {
         let re = Regex::new(r"Python (\d+)\.(\d+)(?:\.(\d+))?")?;
 
         if let Some(captures) = re.captures(&version_str) {
-            let major = captures.get(1).unwrap().as_str();
-            let minor = captures.get(2).unwrap().as_str();
+            let major = captures
+                .get(1)
+                .context("Python version regex missing major capture group")?
+                .as_str();
+            let minor = captures
+                .get(2)
+                .context("Python version regex missing minor capture group")?
+                .as_str();
 
             // 返回格式化的版本字符串，如 "3.12"
             Ok(format!("{major}.{minor}"))
@@ -163,8 +177,14 @@ impl EnvironmentChecker {
         let re = Regex::new(r"rustc (\d+)\.(\d+)(?:\.(\d+))?")?;
 
         if let Some(captures) = re.captures(&version_str) {
-            let major = captures.get(1).unwrap().as_str();
-            let minor = captures.get(2).unwrap().as_str();
+            let major = captures
+                .get(1)
+                .context("Rust version regex missing major capture group")?
+                .as_str();
+            let minor = captures
+                .get(2)
+                .context("Rust version regex missing minor capture group")?
+                .as_str();
 
             // 返回格式化的版本字符串，如 "1.75"
             Ok(format!("{major}.{minor}"))

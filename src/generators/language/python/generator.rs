@@ -83,12 +83,6 @@ impl PythonGenerator {
     }
 }
 
-impl Default for PythonGenerator {
-    fn default() -> Self {
-        Self::new().expect("Failed to create PythonGenerator")
-    }
-}
-
 impl Generator for PythonGenerator {
     type Params = PythonParams;
 

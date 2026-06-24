@@ -64,12 +64,6 @@ impl RustGenerator {
     }
 }
 
-impl Default for RustGenerator {
-    fn default() -> Self {
-        Self::new().expect("Failed to create RustGenerator")
-    }
-}
-
 impl Generator for RustGenerator {
     type Params = RustParams;
 

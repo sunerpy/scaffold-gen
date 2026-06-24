@@ -3,16 +3,14 @@ use std::path::Path;
 use std::process::Command;
 
 use super::parameters::ProjectParams;
-use crate::generators::core::{
-    Generator, Parameters, ProjectGenerator as ProjectGeneratorTrait, TemplateProcessor,
-};
+use crate::generators::core::{Generator, Parameters, ProjectGenerator, TemplateProcessor};
 
 /// 项目级别生成器实现
-pub struct ProjectGenerator {
+pub struct ProjectScaffolder {
     template_processor: TemplateProcessor,
 }
 
-impl ProjectGenerator {
+impl ProjectScaffolder {
     /// 创建新的项目生成器
     pub fn new() -> Result<Self> {
         Ok(Self {
@@ -39,13 +37,7 @@ impl ProjectGenerator {
     }
 }
 
-impl Default for ProjectGenerator {
-    fn default() -> Self {
-        Self::new().expect("Failed to create ProjectGenerator")
-    }
-}
-
-impl Generator for ProjectGenerator {
+impl Generator for ProjectScaffolder {
     type Params = ProjectParams;
 
     fn name(&self) -> &'static str {
@@ -76,7 +68,7 @@ impl Generator for ProjectGenerator {
     }
 }
 
-impl ProjectGeneratorTrait for ProjectGenerator {
+impl ProjectGenerator for ProjectScaffolder {
     fn generate_license(&mut self, params: &Self::Params, output_path: &Path) -> Result<()> {
         let license_template = format!("licenses/{}.tmpl", params.license());
 

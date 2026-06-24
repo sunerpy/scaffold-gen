@@ -18,12 +18,6 @@ impl GinGenerator {
     }
 }
 
-impl Default for GinGenerator {
-    fn default() -> Self {
-        Self::new().expect("Failed to create GinGenerator")
-    }
-}
-
 impl Generator for GinGenerator {
     type Params = GinParams;
 

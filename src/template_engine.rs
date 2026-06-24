@@ -133,9 +133,13 @@ pub fn embedded_template_dir_exists(relative_path: &str) -> bool {
         }
 
         for subdir in dir.dirs() {
-            let subdir_name = subdir.path().file_name().unwrap().to_string_lossy();
+            let subdir_name = subdir
+                .path()
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| subdir.path().to_string_lossy().to_string());
             let subdir_path = if current_path.is_empty() {
-                subdir_name.to_string()
+                subdir_name
             } else {
                 format!("{current_path}/{subdir_name}")
             };
@@ -163,19 +167,24 @@ pub fn get_embedded_template_files(relative_path: &str) -> Result<Vec<String>> {
             let file_path = if current_path.is_empty() {
                 file.path().to_string_lossy().to_string()
             } else {
-                format!(
-                    "{}/{}",
-                    current_path,
-                    file.path().file_name().unwrap().to_string_lossy()
-                )
+                let file_name = file
+                    .path()
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| file.path().to_string_lossy().to_string());
+                format!("{current_path}/{file_name}")
             };
             files.push(normalize_path(&file_path));
         }
 
         for subdir in dir.dirs() {
-            let subdir_name = subdir.path().file_name().unwrap().to_string_lossy();
+            let subdir_name = subdir
+                .path()
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| subdir.path().to_string_lossy().to_string());
             let subdir_path = if current_path.is_empty() {
-                subdir_name.to_string()
+                subdir_name
             } else {
                 format!("{current_path}/{subdir_name}")
             };

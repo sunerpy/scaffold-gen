@@ -86,12 +86,6 @@ impl GoGenerator {
     }
 }
 
-impl Default for GoGenerator {
-    fn default() -> Self {
-        Self::new().expect("Failed to create GoGenerator")
-    }
-}
-
 impl Generator for GoGenerator {
     type Params = GoParams;
 

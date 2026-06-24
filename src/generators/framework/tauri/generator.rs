@@ -146,12 +146,6 @@ impl TauriGenerator {
     }
 }
 
-impl Default for TauriGenerator {
-    fn default() -> Self {
-        Self::new().expect("Failed to create TauriGenerator")
-    }
-}
-
 impl Generator for TauriGenerator {
     type Params = TauriParams;
 

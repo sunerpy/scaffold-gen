@@ -145,12 +145,6 @@ impl TemplateProcessor {
     }
 }
 
-impl Default for TemplateProcessor {
-    fn default() -> Self {
-        Self::new().expect("Failed to create TemplateProcessor")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

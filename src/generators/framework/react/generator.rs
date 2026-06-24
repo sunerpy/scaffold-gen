@@ -10,11 +10,6 @@ use crate::generators::core::Generator;
 pub struct ReactGenerator {}
 
 impl ReactGenerator {
-    /// 创建新的React生成器
-    pub fn new() -> Result<Self> {
-        Ok(Self {})
-    }
-
     /// 检查 pnpm 是否已安装
     pub fn check_pnpm() -> Result<bool> {
         match Command::new("pnpm").arg("--version").output() {
@@ -165,12 +160,6 @@ impl ReactGenerator {
             // 不返回错误，让用户手动安装
             Ok(())
         }
-    }
-}
-
-impl Default for ReactGenerator {
-    fn default() -> Self {
-        Self::new().expect("Failed to create ReactGenerator")
     }
 }
 
