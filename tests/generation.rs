@@ -137,3 +137,79 @@ fn fastapi_embedded_generation_renders_without_external_tools() {
         "host/port not driven into config.toml:\n{config}"
     );
 }
+
+#[test]
+fn vue3_embedded_generation_renders_without_external_tools() {
+    // 1. Arrange: setup temp dir and parameters
+    let temp_dir = tempfile::tempdir().unwrap();
+    let project_name = "test-vue3-embedded".to_string();
+    let params = scaffold_gen::generators::framework::vue3::Vue3Params::from_project_name(
+        project_name.clone(),
+    );
+
+    // 2. Act: run the template processor
+    let mut processor = scaffold_gen::generators::core::TemplateProcessor::new()
+        .expect("Failed to initialize template processor");
+
+    // 模拟 orchestrator 里的流程
+    use scaffold_gen::generators::core::Parameters;
+    let context = params.to_template_context();
+
+    processor
+        .process_embedded_template_directory("frameworks/typescript/vue3", temp_dir.path(), context)
+        .expect("Failed to process Vue3 embedded templates");
+
+    // 3. Assert: check that the expected files exist and project_name is substituted
+    let package_json = temp_dir.path().join("package.json");
+    assert!(package_json.exists(), "package.json was not generated");
+
+    let package_json_content = std::fs::read_to_string(&package_json).unwrap();
+    assert!(
+        package_json_content.contains("\"name\": \"test-vue3-embedded\""),
+        "package.json did not contain substituted project name"
+    );
+
+    let vite_config = temp_dir.path().join("vite.config.ts");
+    assert!(vite_config.exists(), "vite.config.ts was not generated");
+
+    let main_ts = temp_dir.path().join("src/main.ts");
+    assert!(main_ts.exists(), "src/main.ts was not generated");
+
+    let app_vue = temp_dir.path().join("src/App.vue");
+    assert!(app_vue.exists(), "src/App.vue was not generated");
+
+    let index_html = temp_dir.path().join("index.html");
+    assert!(index_html.exists(), "index.html was not generated");
+
+    let readme = temp_dir.path().join("README.md");
+    assert!(readme.exists(), "README.md was not generated");
+    let readme_content = std::fs::read_to_string(&readme).unwrap();
+    assert!(
+        readme_content.contains("# test-vue3-embedded"),
+        "README.md did not contain substituted project name"
+    );
+
+    // Do NOT assert no unrendered delimiters `<<` or `>>` for Vue templates,
+    // because Vue uses `{{` which is not the engine delimiter anyway,
+    // but there might be other things. Just ensuring no `<<` is fine since
+    // Vue uses `{{}}`, not `<<>>`.
+    for entry in walkdir::WalkDir::new(temp_dir.path())
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file())
+    {
+        let content = std::fs::read_to_string(entry.path()).unwrap_or_default();
+        if !content.is_empty() {
+            assert!(
+                !content.contains("<<"),
+                "Found unrendered minijinja opening delimiter in {:?}",
+                entry.path()
+            );
+            assert!(
+                !content.contains(">>"),
+                "Found unrendered minijinja closing delimiter in {:?}",
+                entry.path()
+            );
+        }
+    }
+}

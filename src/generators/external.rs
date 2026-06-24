@@ -10,7 +10,6 @@ use std::path::Path;
 use crate::generators::core::Generator;
 use crate::generators::framework::react::{ReactGenerator, ReactParams};
 use crate::generators::framework::tauri::{TauriGenerator, TauriParams};
-use crate::generators::framework::vue3::{Vue3Generator, Vue3Params};
 use crate::generators::orchestrator::{GenerationRequest, GeneratorOrchestrator};
 use crate::generators::project::ProjectParams;
 
@@ -85,64 +84,6 @@ impl GeneratorOrchestrator {
             .context("Failed to generate project files")?;
 
         print_external_completion("Tauri", output_path, project_name, request.spec.next_steps);
-
-        Ok(())
-    }
-
-    /// 生成完整的Vue3项目
-    pub(super) async fn generate_vue3_project(
-        &mut self,
-        request: &GenerationRequest<'_>,
-    ) -> Result<()> {
-        let project_name = &request.project_name;
-        let output_path = request.output_path;
-        let enable_precommit = request.enable_precommit;
-
-        tracing::info!("Starting Vue3 project generation: {project_name}");
-
-        // 1. 环境预检查
-        tracing::debug!("🔍 Checking environment prerequisites...");
-
-        // 检查 pnpm
-        if !Vue3Generator::check_pnpm()? {
-            return Err(anyhow::anyhow!(
-                "pnpm is not installed. Please install pnpm first:\n  npm install -g pnpm\n  or visit: https://pnpm.io/installation"
-            ));
-        }
-        tracing::debug!("  ✅ pnpm: Available");
-
-        // 2. 删除已存在的目录（如果存在）
-        if output_path.exists() {
-            std::fs::remove_dir_all(output_path).context("Failed to remove existing directory")?;
-        }
-
-        // 3. 使用 pnpm create vue 创建项目
-        Vue3Generator::create_vue3_project(project_name, output_path)?;
-
-        // 4. 安装前端依赖
-        Vue3Generator::install_dependencies(output_path)?;
-
-        // 5. 安装 Tailwind CSS
-        Vue3Generator::install_tailwind(output_path)?;
-
-        // 6. 创建项目参数
-        let project_params = ProjectParams::new(project_name.clone())
-            .with_license(request.license.clone())
-            .with_git(true)
-            .with_precommit(enable_precommit)
-            .with_description(request.spec.description(project_name));
-
-        // 7. 创建 Vue3 参数
-        let _vue3_params = Vue3Params::from_project_name(project_name.clone())
-            .with_project(project_params.clone())
-            .with_precommit(enable_precommit);
-
-        // 8. 项目级别生成 - 生成 LICENSE 等
-        self.project_generator
-            .generate(project_params, output_path)
-            .context("Failed to generate project files")?;
-
-        print_external_completion("Vue3", output_path, project_name, request.spec.next_steps);
 
         Ok(())
     }

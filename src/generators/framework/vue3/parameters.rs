@@ -77,16 +77,4 @@ impl Vue3Params {
             package_manager: "pnpm".to_string(),
         }
     }
-
-    /// 设置项目参数
-    pub fn with_project(mut self, project: ProjectParams) -> Self {
-        self.project = project;
-        self
-    }
-
-    /// 设置是否启用pre-commit
-    pub fn with_precommit(mut self, enable_precommit: bool) -> Self {
-        self.base.enable_precommit = enable_precommit;
-        self
-    }
 }

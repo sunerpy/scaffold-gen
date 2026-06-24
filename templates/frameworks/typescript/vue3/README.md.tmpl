@@ -1,0 +1,51 @@
+# <<project_name>>
+
+这是一份由 `scafgen` 生成的现代 Vue 3 前端应用骨架。
+
+## 技术栈 (Tech Stack)
+- **Framework:** Vue 3 (Composition API / `<script setup>`)
+- **Build Tool:** Vite
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS (v3)
+- **Routing:** Vue Router 4
+- **State Management:** Pinia 2
+
+## 环境要求 (Prerequisites)
+- Node.js (>= 18.x)
+- pnpm (>= 8.x) - *推荐使用的包管理器*
+
+## 开发流程 (Development)
+
+1. **安装依赖 (Install Dependencies):**
+   ```bash
+   pnpm install
+   ```
+
+2. **启动本地开发服务器 (Start Dev Server):**
+   ```bash
+   pnpm dev
+   ```
+
+3. **构建生产版本 (Build for Production):**
+   ```bash
+   pnpm build
+   ```
+
+4. **本地预览生产构建 (Preview Production Build):**
+   ```bash
+   pnpm preview
+   ```
+
+## 项目结构 (Project Structure)
+- `src/views/` - 页面组件。路由的顶层入口。
+- `src/components/` - 可复用的 UI 组件。
+- `src/stores/` - Pinia 状态管理模块。
+- `src/router/` - Vue Router 配置。
+- `src/composables/` - Vue 组合式函数 (如 `useDarkMode`)。
+- `src/styles/` - 全局样式文件。
+
+## CodeGraph 建议 (CodeGraph Recommendation)
+如果你在这个项目中使用 [codegraph](https://github.com/sunerpy/codegraph-rust)，可以初始化它来帮助 AI 或开发者更好地理解代码库：
+```bash
+codegraph sync
+```

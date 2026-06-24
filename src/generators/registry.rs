@@ -88,7 +88,7 @@ const REGISTRY: &[FrameworkSpec] = &[
     FrameworkSpec {
         framework: Framework::Vue3,
         language: Language::TypeScript,
-        kind: GenKind::ExternalAsync,
+        kind: GenKind::EmbeddedAsync,
         description_template: "A Vue3 frontend application: {name}",
         accepts_proto_error_gen: false,
         next_steps: &[
