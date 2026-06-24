@@ -174,7 +174,10 @@ jobs:
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --no-verify
+        # --allow-dirty: release-please bumps Cargo.toml but Cargo.lock is
+        # regenerated during resolution, leaving the tree dirty; that drift is
+        # expected and harmless for publishing.
+        run: cargo publish --no-verify --allow-dirty
 
   upload-assets:
     name: Upload Release Assets
