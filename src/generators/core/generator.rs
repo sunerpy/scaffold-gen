@@ -23,7 +23,7 @@ pub trait Generator {
         let template_path = self.get_template_path();
         let context = params.to_template_context();
 
-        println!("Generating {} structure", self.name());
+        tracing::info!("Generating {} structure", self.name());
 
         // 检查嵌入式模板目录是否存在
         if crate::template_engine::embedded_template_dir_exists(template_path) {
@@ -42,7 +42,7 @@ pub trait Generator {
             ));
         }
 
-        println!("{} structure generated", self.name());
+        tracing::info!("{} structure generated", self.name());
         Ok(())
     }
 

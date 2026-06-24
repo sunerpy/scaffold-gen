@@ -43,28 +43,28 @@ impl GoGenerator {
 
         match output {
             Ok(result) if result.status.success() => {
-                println!("Go module initialized: {project_name}");
+                tracing::debug!("Go module initialized: {project_name}");
                 Ok(())
             }
             Ok(result) => {
                 let stderr = String::from_utf8_lossy(&result.stderr);
-                eprintln!("go mod init failed: {stderr}");
+                tracing::warn!("go mod init failed: {stderr}");
 
                 // 手动创建 go.mod 文件
                 let go_mod_content = format!("module {project_name}\n\ngo 1.21\n");
                 let go_mod_path = output_path.join("go.mod");
                 std::fs::write(&go_mod_path, go_mod_content)?;
-                println!("Manually created go.mod file");
+                tracing::debug!("Manually created go.mod file");
                 Ok(())
             }
             Err(e) => {
-                eprintln!("Failed to execute go mod init: {e}");
+                tracing::warn!("Failed to execute go mod init: {e}");
 
                 // 手动创建 go.mod 文件
                 let go_mod_content = format!("module {project_name}\n\ngo 1.21\n");
                 let go_mod_path = output_path.join("go.mod");
                 std::fs::write(&go_mod_path, go_mod_content)?;
-                println!("Manually created go.mod file");
+                tracing::debug!("Manually created go.mod file");
                 Ok(())
             }
         }
@@ -74,11 +74,11 @@ impl GoGenerator {
     fn setup_dependencies(&self, output_path: &Path) -> Result<()> {
         match GoTools::mod_tidy(output_path) {
             Ok(_) => {
-                println!("Dependencies organized with go mod tidy");
+                tracing::debug!("Dependencies organized with go mod tidy");
                 Ok(())
             }
             Err(e) => {
-                eprintln!("Warning: go mod tidy failed: {e}");
+                tracing::warn!("Warning: go mod tidy failed: {e}");
                 // 不返回错误，因为这不是致命的
                 Ok(())
             }
@@ -109,7 +109,7 @@ impl Generator for GoGenerator {
         let template_path = self.get_template_path();
         let context = params.to_template_context();
 
-        println!("Generating {} structure", self.name());
+        tracing::info!("Generating {} structure", self.name());
 
         // 检查嵌入式模板目录是否存在
         if crate::template_engine::embedded_template_dir_exists(template_path) {
@@ -132,7 +132,7 @@ impl Generator for GoGenerator {
         // 设置依赖
         self.setup_dependencies(output_path)?;
 
-        println!("Go language generation completed successfully");
+        tracing::info!("Go language generation completed successfully");
         Ok(())
     }
 }

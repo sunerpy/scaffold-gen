@@ -17,7 +17,7 @@ impl ReactGenerator {
 
     /// 使用 pnpm create vite 创建 React 项目
     pub fn create_react_project(project_name: &str, output_path: &Path) -> Result<()> {
-        println!("🚀 Creating React project with Vite...");
+        tracing::debug!("🚀 Creating React project with Vite...");
 
         // 获取父目录
         let parent_dir = output_path.parent().unwrap_or_else(|| Path::new("."));
@@ -36,7 +36,7 @@ impl ReactGenerator {
             .context("Failed to execute pnpm create vite")?;
 
         if outcome.success() {
-            println!("✅ React project created successfully");
+            tracing::debug!("✅ React project created successfully");
             Ok(())
         } else {
             Err(anyhow::anyhow!(
@@ -49,7 +49,7 @@ impl ReactGenerator {
 
     /// 安装 Tailwind CSS
     pub fn install_tailwind(output_path: &Path) -> Result<()> {
-        println!("📦 Installing Tailwind CSS...");
+        tracing::debug!("📦 Installing Tailwind CSS...");
 
         // 安装 Tailwind CSS 依赖
         let outcome = ExternalCommand::new("pnpm")
@@ -67,7 +67,7 @@ impl ReactGenerator {
             .context("Failed to install Tailwind CSS")?;
 
         if !outcome.success() {
-            println!(
+            tracing::warn!(
                 "⚠️ Warning: Failed to install Tailwind CSS: {}",
                 outcome.stderr()
             );
@@ -81,9 +81,9 @@ impl ReactGenerator {
             .context("Failed to initialize Tailwind CSS")?;
 
         if outcome.success() {
-            println!("✅ Tailwind CSS installed successfully");
+            tracing::debug!("✅ Tailwind CSS installed successfully");
         } else {
-            println!(
+            tracing::warn!(
                 "⚠️ Warning: Failed to initialize Tailwind CSS: {}",
                 outcome.stderr()
             );
@@ -94,7 +94,7 @@ impl ReactGenerator {
 
     /// 安装 React Router
     pub fn install_router(output_path: &Path) -> Result<()> {
-        println!("📦 Installing React Router...");
+        tracing::debug!("📦 Installing React Router...");
 
         let outcome = ExternalCommand::new("pnpm")
             .args(["add", "react-router-dom"])
@@ -103,9 +103,9 @@ impl ReactGenerator {
             .context("Failed to install React Router")?;
 
         if outcome.success() {
-            println!("✅ React Router installed successfully");
+            tracing::debug!("✅ React Router installed successfully");
         } else {
-            println!(
+            tracing::warn!(
                 "⚠️ Warning: Failed to install React Router: {}",
                 outcome.stderr()
             );
@@ -116,7 +116,7 @@ impl ReactGenerator {
 
     /// 安装状态管理库
     pub fn install_state_management(output_path: &Path, state_management: &str) -> Result<()> {
-        println!("📦 Installing {state_management}...");
+        tracing::debug!("📦 Installing {state_management}...");
 
         let packages = match state_management {
             "zustand" => vec!["zustand"],
@@ -135,9 +135,9 @@ impl ReactGenerator {
             .context("Failed to install state management library")?;
 
         if outcome.success() {
-            println!("✅ {state_management} installed successfully");
+            tracing::debug!("✅ {state_management} installed successfully");
         } else {
-            println!(
+            tracing::warn!(
                 "⚠️ Warning: Failed to install {state_management}: {}",
                 outcome.stderr()
             );
@@ -148,7 +148,7 @@ impl ReactGenerator {
 
     /// 安装前端依赖
     pub fn install_dependencies(output_path: &Path) -> Result<()> {
-        println!("📦 Installing frontend dependencies...");
+        tracing::debug!("📦 Installing frontend dependencies...");
 
         let outcome = ExternalCommand::new("pnpm")
             .arg("install")
@@ -157,9 +157,9 @@ impl ReactGenerator {
             .context("Failed to execute pnpm install")?;
 
         if outcome.success() {
-            println!("✅ Dependencies installed successfully");
+            tracing::debug!("✅ Dependencies installed successfully");
         } else {
-            println!(
+            tracing::warn!(
                 "⚠️ Warning: Failed to install dependencies: {}",
                 outcome.stderr()
             );

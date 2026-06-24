@@ -94,10 +94,10 @@ impl GeneratorOrchestrator {
             .context("Failed to generate project files")?;
 
         if !spec.next_steps.is_empty() {
-            println!("\n📋 Next steps:");
-            println!("  cd {project_name}");
+            tracing::info!("\n📋 Next steps:");
+            tracing::info!("  cd {project_name}");
             for line in spec.next_steps {
-                println!("{line}");
+                tracing::info!("{line}");
             }
         }
 
@@ -144,11 +144,11 @@ impl GeneratorOrchestrator {
             request.enable_precommit,
         )?;
 
-        println!(
+        tracing::info!(
             "{} project generation completed successfully!",
             request.spec.language
         );
-        println!("Project created at: {}", output_path.display());
+        tracing::info!("Project created at: {}", output_path.display());
 
         Ok(())
     }
@@ -173,7 +173,7 @@ impl GeneratorOrchestrator {
         output_path: &Path,
         options: GinProjectOptions,
     ) -> Result<()> {
-        println!("Starting Gin project generation: {project_name}");
+        tracing::info!("Starting Gin project generation: {project_name}");
 
         let module_name = options
             .module_name
@@ -252,8 +252,8 @@ impl GeneratorOrchestrator {
             .post_process(&gin_params, output_path)
             .context("Failed to execute Gin post-processing")?;
 
-        println!("Gin project generation completed successfully!");
-        println!("Project created at: {}", output_path.display());
+        tracing::info!("Gin project generation completed successfully!");
+        tracing::info!("Project created at: {}", output_path.display());
 
         Ok(())
     }
@@ -265,7 +265,7 @@ impl GeneratorOrchestrator {
         output_path: &Path,
         enable_precommit: bool,
     ) -> Result<()> {
-        println!("Starting Python project generation: {project_name}");
+        tracing::info!("Starting Python project generation: {project_name}");
 
         // 获取实际的 uv 版本和 Python 版本
         let env_checker = EnvironmentChecker::new();
@@ -309,7 +309,7 @@ impl GeneratorOrchestrator {
         enable_proto_gen: bool,
         enable_error_gen: bool,
     ) -> Result<()> {
-        println!("Starting Rust project generation: {project_name}");
+        tracing::info!("Starting Rust project generation: {project_name}");
 
         // 获取实际的 Rust 版本
         let env_checker = EnvironmentChecker::new();
@@ -337,10 +337,10 @@ impl GeneratorOrchestrator {
         let output_path = request.output_path;
         let enable_precommit = request.enable_precommit;
 
-        println!("Starting Tauri project generation: {project_name}");
+        tracing::info!("Starting Tauri project generation: {project_name}");
 
         // 1. 环境预检查
-        println!("🔍 Checking environment prerequisites...");
+        tracing::debug!("🔍 Checking environment prerequisites...");
 
         // 检查 pnpm
         if !TauriGenerator::check_pnpm()? {
@@ -348,14 +348,14 @@ impl GeneratorOrchestrator {
                 "pnpm is not installed. Please install pnpm first:\n  npm install -g pnpm\n  or visit: https://pnpm.io/installation"
             ));
         }
-        println!("  ✅ pnpm: Available");
+        tracing::debug!("  ✅ pnpm: Available");
 
         // 检查 create-tauri-app
         if !TauriGenerator::check_create_tauri_app()? {
-            println!("  ⚠️ create-tauri-app not found, installing...");
+            tracing::debug!("  ⚠️ create-tauri-app not found, installing...");
             TauriGenerator::install_create_tauri_app()?;
         }
-        println!("  ✅ create-tauri-app: Available");
+        tracing::debug!("  ✅ create-tauri-app: Available");
 
         // 2. 删除已存在的目录（如果存在）
         if output_path.exists() {
@@ -383,13 +383,13 @@ impl GeneratorOrchestrator {
             .with_error_gen(request.enable_error_gen);
 
         // 7. 覆盖模板文件 - 添加骨架屏、Tailwind CSS 等功能
-        println!("📝 Applying enhanced templates...");
+        tracing::debug!("📝 Applying enhanced templates...");
         TauriGenerator::new()?
             .generate(tauri_params, output_path)
             .context("Failed to apply Tauri templates")?;
 
         // 8. 重新安装依赖（因为 package.json 可能已更新）
-        println!("📦 Reinstalling dependencies with updated package.json...");
+        tracing::debug!("📦 Reinstalling dependencies with updated package.json...");
         TauriGenerator::install_dependencies(output_path)?;
 
         // 9. 项目级别生成 - 生成 LICENSE 等
@@ -408,10 +408,10 @@ impl GeneratorOrchestrator {
         let output_path = request.output_path;
         let enable_precommit = request.enable_precommit;
 
-        println!("Starting Vue3 project generation: {project_name}");
+        tracing::info!("Starting Vue3 project generation: {project_name}");
 
         // 1. 环境预检查
-        println!("🔍 Checking environment prerequisites...");
+        tracing::debug!("🔍 Checking environment prerequisites...");
 
         // 检查 pnpm
         if !Vue3Generator::check_pnpm()? {
@@ -419,7 +419,7 @@ impl GeneratorOrchestrator {
                 "pnpm is not installed. Please install pnpm first:\n  npm install -g pnpm\n  or visit: https://pnpm.io/installation"
             ));
         }
-        println!("  ✅ pnpm: Available");
+        tracing::debug!("  ✅ pnpm: Available");
 
         // 2. 删除已存在的目录（如果存在）
         if output_path.exists() {
@@ -463,10 +463,10 @@ impl GeneratorOrchestrator {
         let output_path = request.output_path;
         let enable_precommit = request.enable_precommit;
 
-        println!("Starting React project generation: {project_name}");
+        tracing::info!("Starting React project generation: {project_name}");
 
         // 1. 环境预检查
-        println!("🔍 Checking environment prerequisites...");
+        tracing::debug!("🔍 Checking environment prerequisites...");
 
         // 检查 pnpm
         if !ReactGenerator::check_pnpm()? {
@@ -474,7 +474,7 @@ impl GeneratorOrchestrator {
                 "pnpm is not installed. Please install pnpm first:\n  npm install -g pnpm\n  or visit: https://pnpm.io/installation"
             ));
         }
-        println!("  ✅ pnpm: Available");
+        tracing::debug!("  ✅ pnpm: Available");
 
         // 2. 删除已存在的目录（如果存在）
         if output_path.exists() {
@@ -526,12 +526,12 @@ fn print_external_completion(
     project_name: &str,
     next_steps: &[&str],
 ) {
-    println!("✅ {label} project generation completed successfully!");
-    println!("📁 Project created at: {}", output_path.display());
-    println!("\n📋 Next steps:");
-    println!("  cd {project_name}");
+    tracing::info!("✅ {label} project generation completed successfully!");
+    tracing::info!("📁 Project created at: {}", output_path.display());
+    tracing::info!("\n📋 Next steps:");
+    tracing::info!("  cd {project_name}");
     for line in next_steps {
-        println!("{line}");
+        tracing::info!("{line}");
     }
 }
 

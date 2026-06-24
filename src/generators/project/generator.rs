@@ -112,11 +112,11 @@ impl ProjectGenerator for ProjectScaffolder {
 
         match status {
             Ok(status) if status.success() => {
-                println!("Initialized Git repository");
+                tracing::info!("Initialized Git repository");
                 Ok(())
             }
             _ => {
-                println!("⚠️  Warning: Failed to initialize Git repository");
+                tracing::warn!("⚠️  Warning: Failed to initialize Git repository");
                 Ok(())
             }
         }
@@ -126,7 +126,7 @@ impl ProjectGenerator for ProjectScaffolder {
         // 检查是否存在 .pre-commit-config.yaml 文件
         let precommit_config = output_path.join(".pre-commit-config.yaml");
         if !precommit_config.exists() {
-            println!("No .pre-commit-config.yaml found, skipping pre-commit installation");
+            tracing::debug!("No .pre-commit-config.yaml found, skipping pre-commit installation");
             return Ok(());
         }
 
@@ -138,13 +138,13 @@ impl ProjectGenerator for ProjectScaffolder {
 
         match status {
             Ok(status) if status.success() => {
-                println!("Pre-commit hooks installed");
+                tracing::info!("Pre-commit hooks installed");
             }
             _ => {
-                println!(
+                tracing::warn!(
                     "⚠️  Warning: Failed to install pre-commit hooks, you may need to install them manually"
                 );
-                println!("   Run: pre-commit install");
+                tracing::warn!("   Run: pre-commit install");
             }
         }
 

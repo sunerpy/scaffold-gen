@@ -18,7 +18,7 @@ impl RustGenerator {
 
     /// 构建项目以验证依赖
     fn build_project(&self, output_path: &Path) -> Result<()> {
-        println!("Building Rust workspace project...");
+        tracing::debug!("Building Rust workspace project...");
 
         let status = Command::new("cargo")
             .arg("build")
@@ -27,9 +27,9 @@ impl RustGenerator {
             .context("Failed to execute cargo build")?;
 
         if !status.success() {
-            println!("Warning: cargo build failed, you may need to run it manually");
+            tracing::warn!("Warning: cargo build failed, you may need to run it manually");
         } else {
-            println!("Rust workspace project built successfully");
+            tracing::debug!("Rust workspace project built successfully");
         }
 
         Ok(())
@@ -78,14 +78,14 @@ impl Generator for RustGenerator {
     fn generate(&mut self, params: Self::Params, output_path: &Path) -> Result<()> {
         params.validate()?;
 
-        println!("Generating {} structure with workspace", self.name());
+        tracing::info!("Generating {} structure with workspace", self.name());
 
         let mut template_processor = TemplateProcessor::new()?;
         let template_path = self.get_template_path();
         let context = params.to_template_context();
 
         if crate::template_engine::embedded_template_dir_exists(template_path) {
-            println!("Processing embedded templates from: {template_path}");
+            tracing::debug!("Processing embedded templates from: {template_path}");
             self.render_embedded_templates(
                 &mut template_processor,
                 template_path,
@@ -103,7 +103,7 @@ impl Generator for RustGenerator {
 
         self.build_project(output_path)?;
 
-        println!("Rust language generation completed successfully");
+        tracing::info!("Rust language generation completed successfully");
         Ok(())
     }
 
@@ -166,8 +166,8 @@ impl Generator for RustGenerator {
                     {
                         Ok(content) => content,
                         Err(e) => {
-                            eprintln!("❌ Template rendering error for: {template_file}");
-                            eprintln!("   Error: {e:?}");
+                            tracing::error!("❌ Template rendering error for: {template_file}");
+                            tracing::error!("   Error: {e:?}");
                             return Err(e).with_context(|| {
                                 format!("Failed to render embedded template: {template_file}")
                             });
@@ -181,7 +181,7 @@ impl Generator for RustGenerator {
                         )
                     })?;
 
-                    println!("📝 Rendered: {relative_path} -> {output_relative_path}");
+                    tracing::debug!("📝 Rendered: {relative_path} -> {output_relative_path}");
                 } else {
                     return Err(anyhow::anyhow!(
                         "Template content not found: {template_file}"
@@ -194,7 +194,7 @@ impl Generator for RustGenerator {
                     format!("Failed to write file: {}", output_file_path.display())
                 })?;
 
-                println!("📋 Copied: {relative_path} -> {output_relative_path}");
+                tracing::debug!("📋 Copied: {relative_path} -> {output_relative_path}");
             } else {
                 return Err(anyhow::anyhow!("File content not found: {template_file}"));
             }

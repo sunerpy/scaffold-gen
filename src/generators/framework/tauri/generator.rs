@@ -38,14 +38,14 @@ impl TauriGenerator {
 
     /// 安装 create-tauri-app
     pub fn install_create_tauri_app() -> Result<()> {
-        println!("📦 Installing create-tauri-app...");
+        tracing::debug!("📦 Installing create-tauri-app...");
         let outcome = ExternalCommand::new("cargo")
             .args(["install", "create-tauri-app"])
             .run()
             .context("Failed to install create-tauri-app")?;
 
         if outcome.success() {
-            println!("✅ create-tauri-app installed successfully");
+            tracing::debug!("✅ create-tauri-app installed successfully");
             Ok(())
         } else {
             Err(anyhow::anyhow!(
@@ -57,7 +57,7 @@ impl TauriGenerator {
 
     /// 使用 create-tauri-app 创建项目
     pub fn create_tauri_project(project_name: &str, output_path: &Path) -> Result<()> {
-        println!("🚀 Creating Tauri project with create-tauri-app...");
+        tracing::debug!("🚀 Creating Tauri project with create-tauri-app...");
 
         // 获取父目录
         let parent_dir = output_path.parent().unwrap_or_else(|| Path::new("."));
@@ -79,7 +79,7 @@ impl TauriGenerator {
             .context("Failed to execute cargo create-tauri-app")?;
 
         if outcome.success() {
-            println!("✅ Tauri project created successfully");
+            tracing::debug!("✅ Tauri project created successfully");
             Ok(())
         } else {
             Err(anyhow::anyhow!(
@@ -92,7 +92,7 @@ impl TauriGenerator {
 
     /// 安装前端依赖
     pub fn install_dependencies(output_path: &Path) -> Result<()> {
-        println!("📦 Installing frontend dependencies...");
+        tracing::debug!("📦 Installing frontend dependencies...");
 
         let outcome = ExternalCommand::new("pnpm")
             .arg("install")
@@ -101,9 +101,9 @@ impl TauriGenerator {
             .context("Failed to execute pnpm install")?;
 
         if outcome.success() {
-            println!("✅ Dependencies installed successfully");
+            tracing::debug!("✅ Dependencies installed successfully");
         } else {
-            println!(
+            tracing::warn!(
                 "⚠️ Warning: Failed to install dependencies: {}",
                 outcome.stderr()
             );
@@ -225,9 +225,9 @@ impl Generator for TauriGenerator {
                     {
                         Ok(content) => content,
                         Err(e) => {
-                            eprintln!("❌ Template rendering error for: {template_file}");
-                            eprintln!("   Error: {e:?}");
-                            eprintln!(
+                            tracing::error!("❌ Template rendering error for: {template_file}");
+                            tracing::error!("   Error: {e:?}");
+                            tracing::error!(
                                 "   Template preview: {}...",
                                 &template_content.chars().take(300).collect::<String>()
                             );
@@ -245,7 +245,7 @@ impl Generator for TauriGenerator {
                         )
                     })?;
 
-                    println!("📝 Rendered: {relative_path} -> {output_relative_path}");
+                    tracing::debug!("📝 Rendered: {relative_path} -> {output_relative_path}");
                 } else {
                     return Err(anyhow::anyhow!(
                         "Template content not found: {template_file}"
@@ -260,7 +260,7 @@ impl Generator for TauriGenerator {
                         format!("Failed to write file: {}", output_file_path.display())
                     })?;
 
-                    println!("📋 Copied: {relative_path} -> {output_relative_path}");
+                    tracing::debug!("📋 Copied: {relative_path} -> {output_relative_path}");
                 } else {
                     return Err(anyhow::anyhow!("File content not found: {template_file}"));
                 }

@@ -8,7 +8,7 @@ pub struct GoTools;
 impl GoTools {
     /// 运行 go mod tidy 命令
     pub fn mod_tidy(output_path: &Path) -> Result<()> {
-        println!("Running go mod tidy...");
+        tracing::debug!("Running go mod tidy...");
 
         let status = Command::new("go")
             .args(["mod", "tidy"])
@@ -17,9 +17,9 @@ impl GoTools {
             .context("Failed to execute go mod tidy command")?;
 
         if status.success() {
-            println!("Dependencies organized with go mod tidy");
+            tracing::debug!("Dependencies organized with go mod tidy");
         } else {
-            println!("Warning: Failed to run go mod tidy, you may need to run it manually");
+            tracing::warn!("Warning: Failed to run go mod tidy, you may need to run it manually");
         }
 
         Ok(())

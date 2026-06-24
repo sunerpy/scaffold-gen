@@ -103,7 +103,7 @@ impl Generator for GinGenerator {
                         )
                     })?;
 
-                    println!("📝 Rendered: {relative_path} -> {output_relative_path}");
+                    tracing::debug!("📝 Rendered: {relative_path} -> {output_relative_path}");
                 } else {
                     return Err(anyhow::anyhow!(
                         "Template content not found: {template_file}"
@@ -118,7 +118,7 @@ impl Generator for GinGenerator {
                         format!("Failed to write file: {}", output_file_path.display())
                     })?;
 
-                    println!("📋 Copied: {relative_path} -> {output_relative_path}");
+                    tracing::debug!("📋 Copied: {relative_path} -> {output_relative_path}");
                 } else {
                     return Err(anyhow::anyhow!("File content not found: {template_file}"));
                 }
@@ -133,7 +133,7 @@ impl GinGenerator {
     /// 后处理逻辑 - 处理 Swagger 文档生成
     pub fn post_process(&self, params: &GinParams, output_path: &Path) -> Result<()> {
         if params.enable_swagger() {
-            println!("Checking for swag command...");
+            tracing::debug!("Checking for swag command...");
 
             // 使用同步方式检查 swag 命令
             let has_swag = match std::process::Command::new("swag").arg("--version").output() {
@@ -142,10 +142,10 @@ impl GinGenerator {
             };
 
             if !has_swag {
-                println!(
+                tracing::warn!(
                     "Warning: 'swag' command not found. Please install swag to generate Swagger documentation:"
                 );
-                println!("   go install github.com/swaggo/swag/cmd/swag@latest");
+                tracing::warn!("   go install github.com/swaggo/swag/cmd/swag@latest");
                 return Ok(());
             }
 
@@ -159,10 +159,10 @@ impl GinGenerator {
                 .context("Failed to execute swag init command")?;
 
             if output.status.success() {
-                println!("Swagger documentation generated successfully");
+                tracing::debug!("Swagger documentation generated successfully");
 
                 // 升级 swag 版本以确保兼容性
-                println!("Upgrading swag to latest version...");
+                tracing::debug!("Upgrading swag to latest version...");
                 let upgrade_output = std::process::Command::new("go")
                     .arg("get")
                     .arg("-u")
@@ -172,10 +172,10 @@ impl GinGenerator {
                     .context("Failed to execute go get -u github.com/swaggo/swag command")?;
 
                 if upgrade_output.status.success() {
-                    println!("Swag upgraded successfully");
+                    tracing::debug!("Swag upgraded successfully");
                 } else {
                     let stderr = String::from_utf8_lossy(&upgrade_output.stderr);
-                    println!("Warning: Failed to upgrade swag: {stderr}");
+                    tracing::warn!("Warning: Failed to upgrade swag: {stderr}");
                 }
 
                 // 向 swagger.json 文件末尾添加空白行以符合格式规范
@@ -190,9 +190,9 @@ impl GinGenerator {
                         content.push('\n');
 
                         if let Err(e) = std::fs::write(&swagger_json_path, content) {
-                            println!("Warning: Failed to add newline to swagger.json: {e}");
+                            tracing::warn!("Warning: Failed to add newline to swagger.json: {e}");
                         } else {
-                            println!("Added newline to swagger.json for proper formatting");
+                            tracing::debug!("Added newline to swagger.json for proper formatting");
                         }
                     }
                 }
@@ -202,7 +202,7 @@ impl GinGenerator {
                     .context("Failed to run go mod tidy after Swagger generation")?;
             } else {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                println!("Failed to generate Swagger documentation: {stderr}");
+                tracing::warn!("Failed to generate Swagger documentation: {stderr}");
             }
         }
 

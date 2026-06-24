@@ -17,7 +17,7 @@ impl Vue3Generator {
 
     /// 使用 pnpm create vue 创建项目
     pub fn create_vue3_project(project_name: &str, output_path: &Path) -> Result<()> {
-        println!("🚀 Creating Vue3 project with create-vue...");
+        tracing::debug!("🚀 Creating Vue3 project with create-vue...");
 
         // 获取父目录
         let parent_dir = output_path.parent().unwrap_or_else(|| Path::new("."));
@@ -40,7 +40,7 @@ impl Vue3Generator {
             .context("Failed to execute pnpm create vue")?;
 
         if outcome.success() {
-            println!("✅ Vue3 project created successfully");
+            tracing::debug!("✅ Vue3 project created successfully");
             Ok(())
         } else {
             Err(anyhow::anyhow!(
@@ -53,7 +53,7 @@ impl Vue3Generator {
 
     /// 安装 Tailwind CSS
     pub fn install_tailwind(output_path: &Path) -> Result<()> {
-        println!("📦 Installing Tailwind CSS...");
+        tracing::debug!("📦 Installing Tailwind CSS...");
 
         // 安装 Tailwind CSS 依赖
         let outcome = ExternalCommand::new("pnpm")
@@ -71,7 +71,7 @@ impl Vue3Generator {
             .context("Failed to install Tailwind CSS")?;
 
         if !outcome.success() {
-            println!(
+            tracing::warn!(
                 "⚠️ Warning: Failed to install Tailwind CSS: {}",
                 outcome.stderr()
             );
@@ -85,9 +85,9 @@ impl Vue3Generator {
             .context("Failed to initialize Tailwind CSS")?;
 
         if outcome.success() {
-            println!("✅ Tailwind CSS installed successfully");
+            tracing::debug!("✅ Tailwind CSS installed successfully");
         } else {
-            println!(
+            tracing::warn!(
                 "⚠️ Warning: Failed to initialize Tailwind CSS: {}",
                 outcome.stderr()
             );
@@ -98,7 +98,7 @@ impl Vue3Generator {
 
     /// 安装前端依赖
     pub fn install_dependencies(output_path: &Path) -> Result<()> {
-        println!("📦 Installing frontend dependencies...");
+        tracing::debug!("📦 Installing frontend dependencies...");
 
         let outcome = ExternalCommand::new("pnpm")
             .arg("install")
@@ -107,9 +107,9 @@ impl Vue3Generator {
             .context("Failed to execute pnpm install")?;
 
         if outcome.success() {
-            println!("✅ Dependencies installed successfully");
+            tracing::debug!("✅ Dependencies installed successfully");
         } else {
-            println!(
+            tracing::warn!(
                 "⚠️ Warning: Failed to install dependencies: {}",
                 outcome.stderr()
             );

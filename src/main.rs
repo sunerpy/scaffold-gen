@@ -1,14 +1,15 @@
 use clap::{Parser, Subcommand};
-use colored::*;
 use std::process;
 
 mod commands;
 mod constants;
 mod generators;
+mod logging;
 mod template_engine;
 mod utils;
 
 use commands::new::NewCommand;
+use logging::Verbosity;
 
 #[derive(Parser)]
 #[command(name = env!("CARGO_PKG_NAME"))]
@@ -16,6 +17,15 @@ use commands::new::NewCommand;
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(color = clap::ColorChoice::Auto)]
 struct Cli {
+    #[arg(
+        short,
+        long,
+        global = true,
+        help = "Suppress progress output (errors only)"
+    )]
+    quiet: bool,
+    #[arg(short, long, global = true, help = "Enable verbose (debug) output")]
+    verbose: bool,
     #[command(subcommand)]
     command: Commands,
 }
@@ -69,6 +79,8 @@ enum Commands {
 async fn main() {
     let cli = Cli::parse();
 
+    logging::init(Verbosity::from_flags(cli.quiet, cli.verbose));
+
     let result = match cli.command {
         Commands::New {
             name,
@@ -100,7 +112,7 @@ async fn main() {
     };
 
     if let Err(e) = result {
-        eprintln!("{} {}", "Error:".red().bold(), e);
+        tracing::error!("Error: {e}");
         process::exit(1);
     }
 }

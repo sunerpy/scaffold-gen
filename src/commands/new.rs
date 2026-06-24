@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use colored::*;
 use inquire::{Confirm, Select, Text};
 use std::path::PathBuf;
 
@@ -107,7 +106,7 @@ impl NewCommand {
     }
 
     pub async fn execute(&self) -> Result<()> {
-        println!("Welcome to Scaffold-Gen Project Generator!");
+        tracing::info!("Welcome to Scaffold-Gen Project Generator!");
 
         // 交互式选择
         let language = self.select_language()?;
@@ -146,17 +145,17 @@ impl NewCommand {
 
         self.generate_project(params).await?;
 
-        println!("Project created successfully!");
-        println!("Project path: {}", project_path.display());
-        println!("Next steps:");
-        println!("  cd {}", self.project_name);
-        println!("  # Follow the README.md for further instructions");
+        tracing::info!("Project created successfully!");
+        tracing::info!("Project path: {}", project_path.display());
+        tracing::info!("Next steps:");
+        tracing::info!("  cd {}", self.project_name);
+        tracing::info!("  # Follow the README.md for further instructions");
 
         Ok(())
     }
 
     async fn check_environment(&self, language: &Language) -> Result<()> {
-        println!("Checking environment...");
+        tracing::info!("Checking environment...");
 
         let env_checker = EnvironmentChecker::new();
 
@@ -166,12 +165,12 @@ impl NewCommand {
                 "Git is not available. Please install Git first."
             ));
         }
-        println!("  Git: Available");
+        tracing::info!("  Git: Available");
 
         // 根据语言检查相应的环境
         match language {
             Language::Go => match env_checker.check_go().await {
-                Ok(true) => println!("  Go: Available"),
+                Ok(true) => tracing::info!("  Go: Available"),
                 Ok(false) => {
                     return Err(anyhow::anyhow!(
                         "Go is not available. Please install Go first."
@@ -180,7 +179,7 @@ impl NewCommand {
                 Err(e) => return Err(anyhow::anyhow!("Go version check failed: {e}")),
             },
             Language::Python => match env_checker.check_uv().await {
-                Ok(true) => println!("  uv: Available"),
+                Ok(true) => tracing::info!("  uv: Available"),
                 Ok(false) => {
                     return Err(anyhow::anyhow!(
                         "uv is not available. Please install uv first: https://docs.astral.sh/uv/"
@@ -191,7 +190,7 @@ impl NewCommand {
             Language::Rust => {
                 // 检查 Cargo
                 match env_checker.check_cargo().await {
-                    Ok(true) => println!("  Cargo: Available"),
+                    Ok(true) => tracing::info!("  Cargo: Available"),
                     Ok(false) => {
                         return Err(anyhow::anyhow!(
                             "Cargo is not available. Please install Rust first: https://rustup.rs/"
@@ -203,7 +202,7 @@ impl NewCommand {
                 // 如果选择了 Tauri 框架，还需要检查 pnpm
                 if self.framework.as_ref().map(|f| f.to_lowercase()) == Some("tauri".to_string()) {
                     match env_checker.check_pnpm().await {
-                        Ok(true) => println!("  pnpm: Available"),
+                        Ok(true) => tracing::info!("  pnpm: Available"),
                         Ok(false) => {
                             return Err(anyhow::anyhow!(
                                 "pnpm is not available. Please install pnpm first:\n  npm install -g pnpm\n  or visit: https://pnpm.io/installation"
@@ -216,7 +215,7 @@ impl NewCommand {
             Language::TypeScript => {
                 // 检查 Node.js
                 match env_checker.check_node().await {
-                    Ok(true) => println!("  Node.js: Available"),
+                    Ok(true) => tracing::info!("  Node.js: Available"),
                     Ok(false) => {
                         return Err(anyhow::anyhow!(
                             "Node.js is not available. Please install Node.js first: https://nodejs.org/"
@@ -227,7 +226,7 @@ impl NewCommand {
 
                 // 检查 pnpm
                 match env_checker.check_pnpm().await {
-                    Ok(true) => println!("  pnpm: Available"),
+                    Ok(true) => tracing::info!("  pnpm: Available"),
                     Ok(false) => {
                         return Err(anyhow::anyhow!(
                             "pnpm is not available. Please install pnpm first:\n  npm install -g pnpm\n  or visit: https://pnpm.io/installation"
@@ -264,7 +263,7 @@ impl NewCommand {
 
         // 当只有一个选项时，直接返回该选项
         if languages.len() == 1 {
-            println!("Programming language: {}", languages[0]);
+            tracing::info!("Programming language: {}", languages[0]);
             return Ok(languages[0]);
         }
 
@@ -311,7 +310,7 @@ impl NewCommand {
 
         // 如果只有一个框架选项，直接返回
         if frameworks.len() == 1 {
-            println!("Framework: {}", frameworks[0]);
+            tracing::info!("Framework: {}", frameworks[0]);
             return Ok(frameworks[0]);
         }
 
@@ -335,13 +334,13 @@ impl NewCommand {
             return Ok(("0.0.0.0".to_string(), 8080, 9000));
         }
 
-        println!("Configuring network settings...");
+        tracing::debug!("Configuring network settings...");
 
         let host = if let Some(ref h) = self.host {
-            println!("Using provided host: {h}");
+            tracing::debug!("Using provided host: {h}");
             h.clone()
         } else {
-            println!("Prompting for host address...");
+            tracing::debug!("Prompting for host address...");
             Text::new("Host address:")
                 .with_default("0.0.0.0")
                 .prompt()
@@ -349,7 +348,7 @@ impl NewCommand {
         };
 
         let port = if let Some(p) = self.port {
-            println!("Using provided port: {p}");
+            tracing::debug!("Using provided port: {p}");
             p
         } else {
             let default_port = match framework {
@@ -360,7 +359,7 @@ impl NewCommand {
                 Framework::Vue3 => 5173,
                 Framework::React => 5173,
             };
-            println!("Prompting for HTTP port...");
+            tracing::debug!("Prompting for HTTP port...");
             Text::new("HTTP port:")
                 .with_default(&default_port.to_string())
                 .prompt()
@@ -370,10 +369,10 @@ impl NewCommand {
         };
 
         let grpc_port = if let Some(p) = self.grpc_port {
-            println!("Using provided gRPC port: {p}");
+            tracing::debug!("Using provided gRPC port: {p}");
             p
         } else if matches!(framework, Framework::GoZero) {
-            println!("Prompting for gRPC port...");
+            tracing::debug!("Prompting for gRPC port...");
             Text::new("gRPC port:")
                 .with_default("9000")
                 .prompt()
@@ -381,7 +380,7 @@ impl NewCommand {
                 .parse::<u16>()
                 .context("Invalid gRPC port number")?
         } else {
-            println!("Using default gRPC port: 9000");
+            tracing::debug!("Using default gRPC port: 9000");
             9000 // 默认值，对于不需要gRPC的框架
         };
 
@@ -389,13 +388,13 @@ impl NewCommand {
     }
 
     fn configure_precommit(&self) -> Result<bool> {
-        println!("Configuring pre-commit settings...");
+        tracing::debug!("Configuring pre-commit settings...");
 
         if let Some(enable) = self.enable_precommit {
-            println!("Using provided pre-commit setting: {enable}");
+            tracing::debug!("Using provided pre-commit setting: {enable}");
             Ok(enable)
         } else {
-            println!("Prompting for pre-commit hooks...");
+            tracing::debug!("Prompting for pre-commit hooks...");
             Confirm::new("Enable pre-commit hooks?")
                 .with_default(false)
                 .prompt()
@@ -404,13 +403,13 @@ impl NewCommand {
     }
 
     fn configure_license(&self) -> Result<String> {
-        println!("Configuring license...");
+        tracing::debug!("Configuring license...");
 
         if let Some(ref license) = self.license {
-            println!("Using provided license: {license}");
+            tracing::debug!("Using provided license: {license}");
             Ok(license.clone())
         } else {
-            println!("Prompting for license selection...");
+            tracing::debug!("Prompting for license selection...");
             let licenses = vec!["MIT", "Apache-2.0", "GPL-3.0", "BSD-3-Clause", "None"];
             Select::new("Select a license:", licenses)
                 .prompt()
@@ -434,11 +433,8 @@ impl NewCommand {
         let swag_available = env_checker.check_swag().await.unwrap_or(false);
 
         if !swag_available {
-            println!(
-                "{}",
-                "⚠️  Swag command not found. Swagger documentation will be disabled.".yellow()
-            );
-            println!(
+            tracing::warn!("⚠️  Swag command not found. Swagger documentation will be disabled.");
+            tracing::warn!(
                 "   To enable Swagger, install swag: go install github.com/swaggo/swag/cmd/swag@latest"
             );
             return Ok(false);
@@ -466,10 +462,10 @@ impl NewCommand {
             return Ok((false, false));
         }
 
-        println!("Configuring Rust code generation tools...");
+        tracing::debug!("Configuring Rust code generation tools...");
 
         let enable_proto_gen = if let Some(enable) = self.enable_proto_gen {
-            println!("Using provided proto-gen setting: {enable}");
+            tracing::debug!("Using provided proto-gen setting: {enable}");
             enable
         } else {
             Confirm::new("Enable proto-gen? (Protobuf code generator)")
@@ -479,7 +475,7 @@ impl NewCommand {
         };
 
         let enable_error_gen = if let Some(enable) = self.enable_error_gen {
-            println!("Using provided error-gen setting: {enable}");
+            tracing::debug!("Using provided error-gen setting: {enable}");
             enable
         } else {
             Confirm::new("Enable error-gen? (Error type generator)")
@@ -511,7 +507,7 @@ impl NewCommand {
     }
 
     async fn generate_project(&self, params: ProjectParams) -> Result<()> {
-        println!("{}", "正在生成项目...".green());
+        tracing::info!("正在生成项目...");
 
         // 验证语言和框架组合是否有效
         let valid_frameworks = Framework::frameworks_for_language(params.language);

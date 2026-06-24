@@ -16,7 +16,7 @@ impl PythonGenerator {
 
     /// 使用 uv init 初始化项目
     fn init_uv_project(&self, params: &PythonParams, output_path: &Path) -> Result<()> {
-        println!("Initializing Python project with uv...");
+        tracing::debug!("Initializing Python project with uv...");
 
         let project_name = &params.base_params().project_name;
 
@@ -34,13 +34,13 @@ impl PythonGenerator {
             return Err(anyhow::anyhow!("uv init failed"));
         }
 
-        println!("Python project initialized with uv");
+        tracing::debug!("Python project initialized with uv");
         Ok(())
     }
 
     /// 添加必要的依赖
     fn add_dependencies(&self, output_path: &Path) -> Result<()> {
-        println!("Adding Python dependencies...");
+        tracing::debug!("Adding Python dependencies...");
 
         let dependencies = vec!["pydantic", "python-dotenv", "rich"];
 
@@ -54,17 +54,17 @@ impl PythonGenerator {
                 .context(format!("Failed to add dependency: {}", dep))?;
 
             if !status.success() {
-                println!("Warning: Failed to add dependency {}", dep);
+                tracing::warn!("Warning: Failed to add dependency {}", dep);
             }
         }
 
-        println!("Dependencies added successfully");
+        tracing::debug!("Dependencies added successfully");
         Ok(())
     }
 
     /// 安装依赖
     fn install_dependencies(&self, output_path: &Path) -> Result<()> {
-        println!("Installing Python dependencies...");
+        tracing::debug!("Installing Python dependencies...");
 
         let status = Command::new("uv")
             .arg("sync")
@@ -74,9 +74,9 @@ impl PythonGenerator {
             .context("Failed to execute uv sync")?;
 
         if !status.success() {
-            println!("Warning: uv sync failed, you may need to run it manually");
+            tracing::warn!("Warning: uv sync failed, you may need to run it manually");
         } else {
-            println!("Python dependencies installed successfully");
+            tracing::debug!("Python dependencies installed successfully");
         }
 
         Ok(())
@@ -98,7 +98,7 @@ impl Generator for PythonGenerator {
         // 验证参数
         params.validate()?;
 
-        println!("Generating {} structure", self.name());
+        tracing::info!("Generating {} structure", self.name());
 
         // 1. 使用 uv init 创建基础项目结构
         self.init_uv_project(&params, output_path)?;
@@ -116,7 +116,7 @@ impl Generator for PythonGenerator {
                 context,
             )?;
         } else {
-            println!(
+            tracing::warn!(
                 "Warning: {} embedded templates not found at: {}",
                 self.name(),
                 template_path
@@ -129,7 +129,7 @@ impl Generator for PythonGenerator {
         // 4. 安装依赖
         self.install_dependencies(output_path)?;
 
-        println!("Python language generation completed successfully");
+        tracing::info!("Python language generation completed successfully");
         Ok(())
     }
 }

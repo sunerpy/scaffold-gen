@@ -51,11 +51,11 @@ impl TemplateEngine {
     ) -> Result<String> {
         let relative_path = normalize_path(&template_path.to_string_lossy());
 
-        println!("Reading embedded template: {relative_path}");
+        tracing::debug!("Reading embedded template: {relative_path}");
         let template_content = read_embedded_template(&relative_path)
             .with_context(|| format!("Failed to read embedded template: {relative_path}"))?;
 
-        println!(
+        tracing::debug!(
             "Embedded template read successfully, content length: {}",
             template_content.len()
         );
