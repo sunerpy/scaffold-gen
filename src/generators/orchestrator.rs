@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 
+use crate::constants::{Framework, Language};
+use crate::generators::registry::{FrameworkSpec, GenKind};
 use crate::generators::{
     core::Generator,
     framework::gin::{GinGenerator, GinParams},
@@ -13,6 +15,20 @@ use crate::generators::{
     project::{ProjectParams, ProjectScaffolder},
 };
 use crate::utils::env_checker::EnvironmentChecker;
+
+/// 统一生成管线的输入 —— 由 `new.rs` 在解析出规格后填充。
+///
+/// 用数据 + 一个规格替代旧版 6 个签名各异的 `generate_xxx_project` 调用。
+pub struct GenerationRequest<'a> {
+    pub spec: FrameworkSpec,
+    pub project_name: String,
+    pub output_path: &'a Path,
+    pub license: String,
+    pub enable_precommit: bool,
+    pub enable_proto_gen: bool,
+    pub enable_error_gen: bool,
+    pub gin_options: GinProjectOptions,
+}
 
 /// 生成器编排器，负责协调三层架构的生成器
 pub struct GeneratorOrchestrator {
@@ -31,6 +47,123 @@ impl GeneratorOrchestrator {
             python_generator: PythonGenerator::new()?,
             gin_generator: GinGenerator::new()?,
         })
+    }
+
+    /// 统一的数据驱动生成入口 —— 由规格的 `kind` 选择管线。
+    ///
+    /// 这是替代旧版 6 个签名各异方法的唯一入口；框架差异由 `FrameworkSpec`
+    /// 数据 + 一个小的 typed hook（match kind）表达，而非分散的调度。
+    pub async fn generate(&mut self, mut request: GenerationRequest<'_>) -> Result<()> {
+        // 规格驱动：不接受 proto/error-gen 的框架强制清零这两个开关
+        if !request.spec.accepts_proto_error_gen {
+            request.enable_proto_gen = false;
+            request.enable_error_gen = false;
+        }
+
+        match request.spec.kind {
+            GenKind::GinSync => self.generate_gin_project(
+                request.project_name,
+                request.output_path,
+                request.gin_options,
+            ),
+            GenKind::EmbeddedAsync => self.generate_embedded(&request).await,
+            GenKind::ExternalAsync => self.generate_external(&request).await,
+            GenKind::Unimplemented => Err(anyhow::anyhow!("GoZero 项目生成尚未实现")),
+        }
+    }
+
+    /// 共享尾段：构造 ProjectParams、运行 project_generator、打印 "Next steps"。
+    ///
+    /// 取代旧版在 6 个方法中复制粘贴的 ProjectParams 构造 + project_generator 调用。
+    fn run_project_step(
+        &mut self,
+        spec: &FrameworkSpec,
+        project_name: &str,
+        output_path: &Path,
+        license: String,
+        enable_precommit: bool,
+    ) -> Result<()> {
+        let project_params = ProjectParams::new(project_name.to_string())
+            .with_license(license)
+            .with_git(true)
+            .with_precommit(enable_precommit)
+            .with_description(spec.description(project_name));
+
+        self.project_generator
+            .generate(project_params, output_path)
+            .context("Failed to generate project files")?;
+
+        if !spec.next_steps.is_empty() {
+            println!("\n📋 Next steps:");
+            println!("  cd {project_name}");
+            for line in spec.next_steps {
+                println!("{line}");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 异步内嵌模板生成（Python / 纯 Rust）。
+    async fn generate_embedded(&mut self, request: &GenerationRequest<'_>) -> Result<()> {
+        let project_name = &request.project_name;
+        let output_path = request.output_path;
+
+        match request.spec.language {
+            Language::Python => {
+                self.generate_python_language(
+                    project_name.clone(),
+                    output_path,
+                    request.enable_precommit,
+                )
+                .await?;
+            }
+            Language::Rust => {
+                self.generate_rust_language(
+                    project_name.clone(),
+                    output_path,
+                    request.enable_precommit,
+                    request.enable_proto_gen,
+                    request.enable_error_gen,
+                )
+                .await?;
+            }
+            Language::Go | Language::TypeScript => {
+                return Err(anyhow::anyhow!(
+                    "Embedded generation is not supported for {} without a framework",
+                    request.spec.language
+                ));
+            }
+        }
+
+        self.run_project_step(
+            &request.spec,
+            project_name,
+            output_path,
+            request.license.clone(),
+            request.enable_precommit,
+        )?;
+
+        println!(
+            "{} project generation completed successfully!",
+            request.spec.language
+        );
+        println!("Project created at: {}", output_path.display());
+
+        Ok(())
+    }
+
+    /// 异步外部脚手架生成（Tauri / Vue3 / React）。
+    async fn generate_external(&mut self, request: &GenerationRequest<'_>) -> Result<()> {
+        match request.spec.framework {
+            Framework::Tauri => self.generate_tauri_project(request).await,
+            Framework::Vue3 => self.generate_vue3_project(request).await,
+            Framework::React => self.generate_react_project(request).await,
+            _ => Err(anyhow::anyhow!(
+                "Framework {:?} is not an external scaffolder",
+                request.spec.framework
+            )),
+        }
     }
 
     /// 生成完整的Gin项目
@@ -125,12 +258,11 @@ impl GeneratorOrchestrator {
         Ok(())
     }
 
-    /// 生成完整的Python项目
-    pub async fn generate_python_project(
+    /// 语言级别生成 (Python) - 使用 uv init 创建项目。项目级尾段由 run_project_step 处理。
+    async fn generate_python_language(
         &mut self,
         project_name: String,
         output_path: &Path,
-        license: String,
         enable_precommit: bool,
     ) -> Result<()> {
         println!("Starting Python project generation: {project_name}");
@@ -156,7 +288,6 @@ impl GeneratorOrchestrator {
             .await
             .unwrap_or_else(|_| "3.12".to_string());
 
-        // 1. 语言级别生成 (Python) - 使用 uv init 创建项目
         let python_params = PythonParams::new(project_name.clone())
             .with_version(python_version)
             .with_uv_version(uv_version)
@@ -166,29 +297,14 @@ impl GeneratorOrchestrator {
             .generate(python_params, output_path)
             .context("Failed to generate Python files")?;
 
-        // 2. 项目级别生成 - 生成 LICENSE、README 等
-        let project_params = ProjectParams::new(project_name.clone())
-            .with_license(license)
-            .with_git(true)
-            .with_precommit(enable_precommit)
-            .with_description(format!("A Python project: {project_name}"));
-
-        self.project_generator
-            .generate(project_params, output_path)
-            .context("Failed to generate project files")?;
-
-        println!("Python project generation completed successfully!");
-        println!("Project created at: {}", output_path.display());
-
         Ok(())
     }
 
-    /// 生成完整的Rust项目
-    pub async fn generate_rust_project(
+    /// 语言级别生成 (Rust) - 使用模板创建项目。项目级尾段由 run_project_step 处理。
+    async fn generate_rust_language(
         &mut self,
         project_name: String,
         output_path: &Path,
-        license: String,
         enable_precommit: bool,
         enable_proto_gen: bool,
         enable_error_gen: bool,
@@ -202,47 +318,25 @@ impl GeneratorOrchestrator {
             .await
             .unwrap_or_else(|_| crate::constants::defaults::RUST_VERSION.to_string());
 
-        // 1. 语言级别生成 (Rust) - 使用模板创建项目
-        let rust_params = RustParams::new(project_name.clone())
+        let mut rust_params = RustParams::new(project_name.clone())
             .with_rust_version(rust_version)
             .with_proto_gen(enable_proto_gen)
             .with_error_gen(enable_error_gen);
-
-        // 设置 precommit
-        let mut rust_params = rust_params;
         rust_params.base.enable_precommit = enable_precommit;
 
         RustGenerator::new()?
             .generate(rust_params, output_path)
             .context("Failed to generate Rust files")?;
 
-        // 2. 项目级别生成 - 生成 LICENSE、README 等
-        let project_params = ProjectParams::new(project_name.clone())
-            .with_license(license)
-            .with_git(true)
-            .with_precommit(enable_precommit)
-            .with_description(format!("A Rust project: {project_name}"));
-
-        self.project_generator
-            .generate(project_params, output_path)
-            .context("Failed to generate project files")?;
-
-        println!("Rust project generation completed successfully!");
-        println!("Project created at: {}", output_path.display());
-
         Ok(())
     }
 
     /// 生成完整的Tauri项目
-    pub async fn generate_tauri_project(
-        &mut self,
-        project_name: String,
-        output_path: &Path,
-        license: String,
-        enable_precommit: bool,
-        enable_proto_gen: bool,
-        enable_error_gen: bool,
-    ) -> Result<()> {
+    async fn generate_tauri_project(&mut self, request: &GenerationRequest<'_>) -> Result<()> {
+        let project_name = &request.project_name;
+        let output_path = request.output_path;
+        let enable_precommit = request.enable_precommit;
+
         println!("Starting Tauri project generation: {project_name}");
 
         // 1. 环境预检查
@@ -269,24 +363,24 @@ impl GeneratorOrchestrator {
         }
 
         // 3. 使用 create-tauri-app 创建项目
-        TauriGenerator::create_tauri_project(&project_name, output_path)?;
+        TauriGenerator::create_tauri_project(project_name, output_path)?;
 
         // 4. 安装前端依赖
         TauriGenerator::install_dependencies(output_path)?;
 
         // 5. 创建项目参数
         let project_params = ProjectParams::new(project_name.clone())
-            .with_license(license.clone())
+            .with_license(request.license.clone())
             .with_git(true)
             .with_precommit(enable_precommit)
-            .with_description(format!("A Tauri desktop application: {project_name}"));
+            .with_description(request.spec.description(project_name));
 
         // 6. 创建 Tauri 参数
         let tauri_params = TauriParams::from_project_name(project_name.clone())
             .with_project(project_params.clone())
             .with_precommit(enable_precommit)
-            .with_proto_gen(enable_proto_gen)
-            .with_error_gen(enable_error_gen);
+            .with_proto_gen(request.enable_proto_gen)
+            .with_error_gen(request.enable_error_gen);
 
         // 7. 覆盖模板文件 - 添加骨架屏、Tailwind CSS 等功能
         println!("📝 Applying enhanced templates...");
@@ -303,24 +397,17 @@ impl GeneratorOrchestrator {
             .generate(project_params, output_path)
             .context("Failed to generate project files")?;
 
-        println!("✅ Tauri project generation completed successfully!");
-        println!("📁 Project created at: {}", output_path.display());
-        println!("\n📋 Next steps:");
-        println!("  cd {project_name}");
-        println!("  cargo tauri dev    # Start development server");
-        println!("  cargo tauri build  # Build for production");
+        print_external_completion("Tauri", output_path, project_name, request.spec.next_steps);
 
         Ok(())
     }
 
     /// 生成完整的Vue3项目
-    pub async fn generate_vue3_project(
-        &mut self,
-        project_name: String,
-        output_path: &Path,
-        license: String,
-        enable_precommit: bool,
-    ) -> Result<()> {
+    async fn generate_vue3_project(&mut self, request: &GenerationRequest<'_>) -> Result<()> {
+        let project_name = &request.project_name;
+        let output_path = request.output_path;
+        let enable_precommit = request.enable_precommit;
+
         println!("Starting Vue3 project generation: {project_name}");
 
         // 1. 环境预检查
@@ -340,7 +427,7 @@ impl GeneratorOrchestrator {
         }
 
         // 3. 使用 pnpm create vue 创建项目
-        Vue3Generator::create_vue3_project(&project_name, output_path)?;
+        Vue3Generator::create_vue3_project(project_name, output_path)?;
 
         // 4. 安装前端依赖
         Vue3Generator::install_dependencies(output_path)?;
@@ -350,10 +437,10 @@ impl GeneratorOrchestrator {
 
         // 6. 创建项目参数
         let project_params = ProjectParams::new(project_name.clone())
-            .with_license(license.clone())
+            .with_license(request.license.clone())
             .with_git(true)
             .with_precommit(enable_precommit)
-            .with_description(format!("A Vue3 frontend application: {project_name}"));
+            .with_description(request.spec.description(project_name));
 
         // 7. 创建 Vue3 参数
         let _vue3_params = Vue3Params::from_project_name(project_name.clone())
@@ -365,24 +452,17 @@ impl GeneratorOrchestrator {
             .generate(project_params, output_path)
             .context("Failed to generate project files")?;
 
-        println!("✅ Vue3 project generation completed successfully!");
-        println!("📁 Project created at: {}", output_path.display());
-        println!("\n📋 Next steps:");
-        println!("  cd {project_name}");
-        println!("  pnpm dev    # Start development server");
-        println!("  pnpm build  # Build for production");
+        print_external_completion("Vue3", output_path, project_name, request.spec.next_steps);
 
         Ok(())
     }
 
     /// 生成完整的React项目
-    pub async fn generate_react_project(
-        &mut self,
-        project_name: String,
-        output_path: &Path,
-        license: String,
-        enable_precommit: bool,
-    ) -> Result<()> {
+    async fn generate_react_project(&mut self, request: &GenerationRequest<'_>) -> Result<()> {
+        let project_name = &request.project_name;
+        let output_path = request.output_path;
+        let enable_precommit = request.enable_precommit;
+
         println!("Starting React project generation: {project_name}");
 
         // 1. 环境预检查
@@ -402,7 +482,7 @@ impl GeneratorOrchestrator {
         }
 
         // 3. 使用 pnpm create vite 创建项目
-        ReactGenerator::create_react_project(&project_name, output_path)?;
+        ReactGenerator::create_react_project(project_name, output_path)?;
 
         // 4. 安装前端依赖
         ReactGenerator::install_dependencies(output_path)?;
@@ -418,10 +498,10 @@ impl GeneratorOrchestrator {
 
         // 8. 创建项目参数
         let project_params = ProjectParams::new(project_name.clone())
-            .with_license(license.clone())
+            .with_license(request.license.clone())
             .with_git(true)
             .with_precommit(enable_precommit)
-            .with_description(format!("A React frontend application: {project_name}"));
+            .with_description(request.spec.description(project_name));
 
         // 9. 创建 React 参数
         let _react_params = ReactParams::from_project_name(project_name.clone())
@@ -433,14 +513,25 @@ impl GeneratorOrchestrator {
             .generate(project_params, output_path)
             .context("Failed to generate project files")?;
 
-        println!("✅ React project generation completed successfully!");
-        println!("📁 Project created at: {}", output_path.display());
-        println!("\n📋 Next steps:");
-        println!("  cd {project_name}");
-        println!("  pnpm dev    # Start development server");
-        println!("  pnpm build  # Build for production");
+        print_external_completion("React", output_path, project_name, request.spec.next_steps);
 
         Ok(())
+    }
+}
+
+/// 外部脚手架框架的完成提示 —— 取代 Tauri/Vue3/React 各自复制的 4 行尾段。
+fn print_external_completion(
+    label: &str,
+    output_path: &Path,
+    project_name: &str,
+    next_steps: &[&str],
+) {
+    println!("✅ {label} project generation completed successfully!");
+    println!("📁 Project created at: {}", output_path.display());
+    println!("\n📋 Next steps:");
+    println!("  cd {project_name}");
+    for line in next_steps {
+        println!("{line}");
     }
 }
 

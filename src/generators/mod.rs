@@ -4,6 +4,7 @@ pub mod framework;
 pub mod language;
 pub mod orchestrator;
 pub mod project;
+pub mod registry;
 
 // 重新导出核心类型
 

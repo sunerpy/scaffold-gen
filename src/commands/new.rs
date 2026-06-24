@@ -4,6 +4,8 @@ use inquire::{Confirm, Select, Text};
 use std::path::PathBuf;
 
 use crate::constants::{Framework, Language};
+use crate::generators::orchestrator::GenerationRequest;
+use crate::generators::registry;
 use crate::generators::{GeneratorOrchestrator, GinProjectOptions};
 use crate::utils::env_checker::EnvironmentChecker;
 
@@ -529,6 +531,19 @@ impl NewCommand {
             ));
         }
 
+        // 单一调度点：把 (语言, 框架) 解析为唯一的生成规格
+        let spec = registry::resolve(params.language, params.framework).ok_or_else(|| {
+            anyhow::anyhow!(
+                "{} language requires a framework. Please choose one from: {}",
+                params.language,
+                valid_frameworks
+                    .iter()
+                    .map(|f| f.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?;
+
         // 创建项目目录
         std::fs::create_dir_all(&params.project_path).with_context(|| {
             format!(
@@ -537,99 +552,24 @@ impl NewCommand {
             )
         })?;
 
+        let gin_options = GinProjectOptions::new()
+            .with_license(params.license.clone())
+            .with_server(params.host.clone(), params.port)
+            .with_swagger(params.enable_swagger)
+            .with_precommit(params.enable_precommit);
+
         let mut orchestrator = GeneratorOrchestrator::new()?;
-
-        // 根据框架类型生成项目
-        match params.framework {
-            Framework::Gin => {
-                let options = GinProjectOptions::new()
-                    .with_license(params.license.clone())
-                    .with_server(params.host.clone(), params.port)
-                    .with_swagger(params.enable_swagger)
-                    .with_precommit(params.enable_precommit);
-
-                orchestrator.generate_gin_project(
-                    self.project_name.clone(),
-                    &params.project_path,
-                    options,
-                )?;
-            }
-            Framework::GoZero => {
-                // TODO: 实现 GoZero 项目生成
-                return Err(anyhow::anyhow!("GoZero 项目生成尚未实现"));
-            }
-            Framework::Tauri => {
-                orchestrator
-                    .generate_tauri_project(
-                        self.project_name.clone(),
-                        &params.project_path,
-                        params.license.clone(),
-                        params.enable_precommit,
-                        params.enable_proto_gen,
-                        params.enable_error_gen,
-                    )
-                    .await?;
-            }
-            Framework::Vue3 => {
-                orchestrator
-                    .generate_vue3_project(
-                        self.project_name.clone(),
-                        &params.project_path,
-                        params.license.clone(),
-                        params.enable_precommit,
-                    )
-                    .await?;
-            }
-            Framework::React => {
-                orchestrator
-                    .generate_react_project(
-                        self.project_name.clone(),
-                        &params.project_path,
-                        params.license.clone(),
-                        params.enable_precommit,
-                    )
-                    .await?;
-            }
-            Framework::None => {
-                // 根据语言生成纯语言项目
-                match params.language {
-                    Language::Python => {
-                        orchestrator
-                            .generate_python_project(
-                                self.project_name.clone(),
-                                &params.project_path,
-                                params.license.clone(),
-                                params.enable_precommit,
-                            )
-                            .await?;
-                    }
-                    Language::Rust => {
-                        orchestrator
-                            .generate_rust_project(
-                                self.project_name.clone(),
-                                &params.project_path,
-                                params.license.clone(),
-                                params.enable_precommit,
-                                params.enable_proto_gen,
-                                params.enable_error_gen,
-                            )
-                            .await?;
-                    }
-                    _ => {
-                        return Err(anyhow::anyhow!(
-                            "{} language requires a framework. Please choose one from: {}",
-                            params.language,
-                            valid_frameworks
-                                .iter()
-                                .map(|f| f.as_str())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        ));
-                    }
-                }
-            }
-        }
-
-        Ok(())
+        orchestrator
+            .generate(GenerationRequest {
+                spec,
+                project_name: self.project_name.clone(),
+                output_path: &params.project_path,
+                license: params.license.clone(),
+                enable_precommit: params.enable_precommit,
+                enable_proto_gen: params.enable_proto_gen,
+                enable_error_gen: params.enable_error_gen,
+                gin_options,
+            })
+            .await
     }
 }
