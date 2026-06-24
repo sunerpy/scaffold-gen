@@ -1,0 +1,15 @@
+# ============================================================================
+#  <<project_name>> — MCP Server runtime configuration (active)
+#  This is the file the server loads by default (-config config.toml).
+#  Copy config.example.toml over it to reset to documented defaults.
+# ============================================================================
+
+[server]
+addr = "<<default_host>>:<<default_port>>"
+mcp_path = "/mcp"
+sse_path = "/sse"
+trusted_proxy_cidrs = []
+
+[log]
+level = "info"
+format = "console"

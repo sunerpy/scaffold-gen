@@ -1,0 +1,192 @@
+# <<project_name>>
+
+> 一个基于 **Gin + [go-sdk](https://github.com/modelcontextprotocol/go-sdk)** 的 MCP（Model Context Protocol）服务器脚手架，
+> 同时支持 **streamable-HTTP** 与 **SSE** 两种传输格式，并用
+> **[protoc-gen-jsonschema](https://github.com/sunerpy/protoc-gen-jsonschema)**
+> 把 MCP 工具的入参约束定义在 Protobuf 里（proto = 入参约束的唯一真相来源）。
+>
+> A Gin + go-sdk MCP server scaffold supporting BOTH streamable-HTTP and SSE
+> transports, with tool input schemas defined in Protobuf via protoc-gen-jsonschema.
+
+---
+
+## 必要说明 (What is this)
+
+这是一个开箱即用的 Go MCP 服务器：
+
+- **配置和代码分离**：改监听地址 / 端口 / 路径，只改 `config.toml`，**不用碰代码**（goctl 风格）。
+- **双传输格式**：
+  - **streamable HTTP**（默认 `/mcp`）—— go-sdk 的 `StreamableHTTPHandler`，无状态、`JSONResponse`，现代 MCP 客户端首选。
+  - **SSE**（默认 `/sse`）—— go-sdk 的 `SSEHandler`（2024-11-05 规范），`GET /sse` 打开事件流。
+- **proto 即约束**：工具入参的 JSON Schema 由 `proto/echo.proto` 通过 `buf generate` 生成，
+  服务器用生成的 `EchoArgs{}.GetJSONSchemaBytes()` 作为 `inputSchema`，**proto 改了 schema 就改，无漂移**。
+- **业务代码集中**：工具实现都写在 `internal/tools/`，注册都在 `internal/mcpserver/server.go`。
+
+```
+<<project_name>>/
+├── config.toml                     # ★ 监听地址/端口/路径/日志级别 —— 改这里
+├── config.example.toml             # 配置范例（复制为 config.toml 用）
+├── buf.yaml / buf.gen.yaml         # buf：proto + JSON Schema 代码生成
+├── Makefile                        # make generate / build / run / test / fmt / lint
+├── cmd/server/main.go              # 启动入口：读配置 → 建 MCP server → 挂到 Gin → 运行
+├── proto/
+│   ├── echo.proto                  # ★★★ 工具入参约束写在这里（mcp.jsonschema 选项）★★★
+│   └── gen/                        # buf generate 的产物（echo.pb.go + echo_jsonschema.pb.go）
+└── internal/
+    ├── config/config.go            # 读取 config.toml（一般不用动）
+    ├── log/logger.go               # zap 日志（一般不用动）
+    ├── mcpserver/server.go         # ★ 工具注册（AddTool）★
+    ├── transport/gin.go            # Gin 路由：/mcp（streamable）+ /sse（SSE）+ /healthz
+    └── tools/echo.go               # ★★★ 你的业务代码写在这里（范例 echo 工具）★★★
+```
+
+---
+
+## 必要工具 (Requirements)
+
+- **Go <<go_version>>+**
+- **[buf](https://buf.build/docs/installation)** —— Protobuf 构建工具（驱动代码生成）。
+- **protoc-gen-jsonschema** —— 把 proto 生成 JSON Schema 的插件：
+
+  ```bash
+  go install github.com/sunerpy/protoc-gen-jsonschema/cmd/protoc-gen-jsonschema@latest
+  ```
+
+  Go 库依赖：`go get github.com/sunerpy/protoc-gen-jsonschema`（生成的 schema 依赖 `google/jsonschema-go`）。
+
+---
+
+## 使用方法 (Usage)
+
+```bash
+# 1. 生成 proto + JSON Schema（首次克隆后必须先跑一次）
+make generate
+
+# 2. 整理依赖
+go mod tidy
+
+# 3. 启动服务（读取 config.toml 里的 addr / 路径）
+make run
+```
+
+服务起来后，两个 MCP 端点：
+
+- **streamable HTTP**：`http://<<default_host>>:<<default_port>>/mcp`（POST JSON-RPC，无状态）
+- **SSE**：`http://<<default_host>>:<<default_port>>/sse`（`GET` 打开事件流）
+- 健康检查：`http://<<default_host>>:<<default_port>>/healthz`
+
+### 改监听地址 / 端口 / 路径 (Change addr / port / paths)
+
+编辑 `config.toml`，**不要改代码**：
+
+```toml
+[server]
+addr = "0.0.0.0:8080"   # 改监听地址 / 端口
+mcp_path = "/mcp"        # streamable HTTP 端点
+sse_path = "/sse"        # SSE 端点
+```
+
+### 用 curl 试一下 streamable HTTP 端点
+
+```bash
+# 列出工具
+curl -s http://<<default_host>>:<<default_port>>/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+# 调用 echo 工具
+curl -s http://<<default_host>>:<<default_port>>/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"text":"hi","repeat":2}}}'
+```
+
+---
+
+## 开发流程 (How to add a new MCP tool)
+
+加一个工具只需 **4 步**：
+
+1. **定义 proto 消息**：在 `proto/echo.proto`（或新建 `.proto`）里写一个消息，用
+   `mcp.jsonschema` 选项声明约束：
+
+   ```proto
+   message SearchArgs {
+     option (mcp.jsonschema.title) = "Search Arguments";
+     string query = 1 [
+       (mcp.jsonschema.required) = true,
+       (mcp.jsonschema.min_length) = 1,
+       (mcp.jsonschema.description) = "The search query."
+     ];
+   }
+   ```
+
+2. **生成 schema**：`make generate` —— 产出 `proto/gen/*_jsonschema.pb.go`，
+   暴露 `SearchArgs{}.GetJSONSchemaBytes()`。
+
+3. **注册工具**：在 `internal/mcpserver/server.go` 的 `Register` 里加一段，用生成的
+   schema 作为 `InputSchema`：
+
+   ```go
+   mcp.AddTool(srv, &mcp.Tool{
+       Name:        "search",
+       Description: "...",
+       InputSchema: json.RawMessage((&gen.SearchArgs{}).GetJSONSchemaBytes()),
+   }, search.Handle)
+   ```
+
+4. **实现 handler**：在 `internal/tools/` 写处理函数（照着 `echo.go` 抄），
+   输入结构体的字段与 proto 消息字段一一对应。
+
+> 关键：`InputSchema` 显式设置成 proto 生成的 schema，typed `mcp.AddTool` 就**不会**用 Go
+> 结构体推断的 schema 覆盖它 —— 这就是 proto 作为唯一真相来源的原理。
+
+### 生成客户端代码 / 连接客户端 (Generate client code / connect a client)
+
+MCP 客户端通过上面的端点连接服务器。用官方 go-sdk 写一个 Go 客户端：
+
+```go
+import (
+    "context"
+    "net/http"
+
+    "github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+func dial(ctx context.Context) (*mcp.ClientSession, error) {
+    client := mcp.NewClient(&mcp.Implementation{Name: "my-client", Version: "0.1.0"}, nil)
+
+    // streamable HTTP transport（对应服务器的 /mcp）
+    transport := &mcp.StreamableClientTransport{
+        Endpoint:   "http://<<default_host>>:<<default_port>>/mcp",
+        HTTPClient: http.DefaultClient,
+    }
+    return client.Connect(ctx, transport, nil)
+}
+```
+
+- 连 **streamable HTTP**：用 `mcp.StreamableClientTransport`，`Endpoint` 指向 `/mcp`。
+- 连 **SSE**：用 go-sdk 的 SSE 客户端 transport，`Endpoint` 指向 `/sse`。
+- 其它语言（Python / TypeScript）的 MCP SDK 同理：把传输地址指向 `/mcp`（streamable）或 `/sse`（SSE）即可；
+  工具的入参 schema 由服务器在 `tools/list` 里返回，客户端据此校验/补全参数。
+
+---
+
+## 推荐工具：CodeGraph (Recommended)
+
+当项目变大、或你用 AI 编程助手时，推荐集成
+**[codegraph-rust](https://github.com/sunerpy/codegraph-rust)** 作为代码分析工具：
+
+- 基于 **tree-sitter + SQLite/FTS5** 的确定性代码知识图谱，**不含任何 AI/LLM**，输出字节级稳定。
+- 提供符号 / 调用 / 依赖关系图，支持 **CLI 与 MCP server** 两种用法，可直接喂给 AI 编程 Agent。
+- **单一二进制、易用、极高性能**：显著提升开发效率，同时大幅降低 token 消耗。
+
+```bash
+codegraph sync                 # 建立/更新索引
+codegraph explore "your code"  # 探索符号与调用关系
+```
+
+---
+
+## License
+
+<<license>>

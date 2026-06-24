@@ -1,0 +1,59 @@
+// Package applog builds the application's zap logger from config values.
+package applog
+
+import (
+	"fmt"
+	"os"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+)
+
+// New constructs a *zap.Logger for the given level and format.
+//
+// format "console" produces a colored, human-readable renderer for local
+// development; format "json" produces structured JSON for production parsing.
+// level is parsed from the config string (debug|info|warn|error). It returns an
+// error (never panics) when level or format is invalid. If POD_NAME is set, it
+// is attached as a field on every log line (handy in Kubernetes).
+func New(level, format string) (*zap.Logger, error) {
+	var lvl zapcore.Level
+	if err := lvl.UnmarshalText([]byte(level)); err != nil {
+		return nil, fmt.Errorf("log: invalid level %q: %w", level, err)
+	}
+
+	encCfg := zapcore.EncoderConfig{
+		TimeKey:        "time",
+		LevelKey:       "level",
+		NameKey:        "logger",
+		CallerKey:      "caller",
+		MessageKey:     "msg",
+		StacktraceKey:  "stacktrace",
+		LineEnding:     zapcore.DefaultLineEnding,
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeDuration: zapcore.SecondsDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
+	}
+
+	var encoder zapcore.Encoder
+	switch format {
+	case "console":
+		encCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
+		encoder = zapcore.NewConsoleEncoder(encCfg)
+	case "json":
+		encCfg.EncodeLevel = zapcore.LowercaseLevelEncoder
+		encoder = zapcore.NewJSONEncoder(encCfg)
+	default:
+		return nil, fmt.Errorf("log: unknown format %q (want console|json)", format)
+	}
+
+	atom := zap.NewAtomicLevelAt(lvl)
+	core := zapcore.NewCore(encoder, zapcore.Lock(os.Stdout), atom)
+	logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
+
+	if pod := os.Getenv("POD_NAME"); pod != "" {
+		logger = logger.With(zap.String("pod", pod))
+	}
+
+	return logger, nil
+}

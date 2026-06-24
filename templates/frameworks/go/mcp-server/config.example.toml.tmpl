@@ -1,0 +1,33 @@
+# ============================================================================
+#  <<project_name>> — MCP Server runtime configuration
+# ----------------------------------------------------------------------------
+#  ★ This is the file you change most ★
+#  Edit the listen address / port / paths / log level HERE — never in code.
+#  Loaded at startup by internal/config; the running server uses these values.
+#  改监听地址 / 端口 / 路径 / 日志级别，只改这里，不要改代码。
+# ============================================================================
+
+[server]
+# Listen address (host:port). Use 127.0.0.1 for local dev, 0.0.0.0 to expose.
+# 监听地址。本机调试用 127.0.0.1；容器/对外暴露用 0.0.0.0。
+addr = "<<default_host>>:<<default_port>>"
+
+# Path the STREAMABLE-HTTP MCP handler is mounted at. Also mounted at the
+# trailing-slash variant so "/mcp" and "/mcp/" both work (no 307 redirect).
+# Streamable-HTTP MCP 端点路径（同时挂载 /mcp 与 /mcp/，避免 307）。
+mcp_path = "/mcp"
+
+# Path the classic SSE handler is mounted at (GET opens the event stream).
+# SSE MCP 端点路径（GET 打开事件流）。
+sse_path = "/sse"
+
+# Proxy CIDRs gin trusts when resolving the client IP from X-Forwarded-For.
+# Empty list -> trust the loopback only. Set to your VPC/ALB CIDR behind a proxy.
+# gin 信任的代理 CIDR（解析 X-Forwarded-For）。留空 = 仅信任回环地址。
+trusted_proxy_cidrs = []
+
+[log]
+# Level: "debug" | "info" | "warn" | "error".
+level = "info"
+# Renderer: "console" (human-readable, dev) or "json" (production).
+format = "console"

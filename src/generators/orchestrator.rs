@@ -140,6 +140,15 @@ impl GeneratorOrchestrator {
                 self.generate_vue3_embedded(project_name.clone(), output_path)
                     .await?;
             }
+            Language::Go if request.spec.framework == Framework::McpServer => {
+                self.generate_mcp_server_embedded(
+                    project_name.clone(),
+                    output_path,
+                    request.gin_options.host.clone(),
+                    request.gin_options.port,
+                )
+                .await?;
+            }
             Language::Go | Language::TypeScript => {
                 return Err(anyhow::anyhow!(
                     "Embedded generation is not supported for {} without a framework",
@@ -428,6 +437,66 @@ impl GeneratorOrchestrator {
         } else {
             tracing::warn!(
                 "⚠️ Warning: pnpm is not installed. Please run `pnpm install` manually in the project directory."
+            );
+        }
+
+        Ok(())
+    }
+
+    /// 框架级别生成 (Go MCP Server) - 纯内嵌模板渲染（可离线、可测试）。
+    ///
+    /// 复用 GoParams 上下文得到 module_name / go_version / project_name_snake；
+    /// host/port 写入上下文，生成的 config.toml 即据此驱动监听地址。
+    /// 渲染后若本机有 go 则尝试 `go mod tidy`（非致命，失败仅告警）。
+    async fn generate_mcp_server_embedded(
+        &mut self,
+        project_name: String,
+        output_path: &Path,
+        host: Option<String>,
+        port: Option<u16>,
+    ) -> Result<()> {
+        tracing::info!("Starting Go MCP server generation: {project_name}");
+
+        let mut go_params =
+            GoParams::from_project_name(project_name).with_version("1.24".to_string());
+        go_params.base.host = Some(host.unwrap_or_else(|| "0.0.0.0".to_string()));
+        go_params.base.port = Some(port.unwrap_or(8080));
+
+        let template_path = "frameworks/go/mcp-server";
+        if !crate::template_engine::embedded_template_dir_exists(template_path) {
+            return Err(anyhow::anyhow!(
+                "MCP server embedded templates not found at: {template_path}"
+            ));
+        }
+
+        let context = go_params.to_template_context();
+        let mut template_processor = TemplateProcessor::new()?;
+        template_processor
+            .process_embedded_template_directory(template_path, output_path, context)
+            .context("Failed to generate MCP server files")?;
+
+        tracing::info!("MCP server structure generated");
+
+        if crate::utils::toolchain::tool_available("go") {
+            tracing::info!("📦 Running go mod tidy...");
+            let outcome = crate::utils::toolchain::ExternalCommand::new("go")
+                .arg("mod")
+                .arg("tidy")
+                .current_dir(output_path)
+                .run()
+                .context("Failed to execute go mod tidy")?;
+
+            if outcome.success() {
+                tracing::info!("✅ go mod tidy completed");
+            } else {
+                tracing::warn!(
+                    "⚠️ Warning: go mod tidy failed (run `make generate && go mod tidy` after editing proto): {}",
+                    outcome.stderr()
+                );
+            }
+        } else {
+            tracing::warn!(
+                "⚠️ Warning: go is not installed. Run `make generate` then `go mod tidy` manually."
             );
         }
 

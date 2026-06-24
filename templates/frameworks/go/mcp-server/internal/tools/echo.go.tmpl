@@ -1,0 +1,74 @@
+// Package tools holds the MCP tool handlers — THIS IS WHERE YOU WRITE BUSINESS CODE.
+//
+// Each tool is: (1) an input struct that mirrors the proto message in proto/, and
+// (2) a Handle method with the go-sdk signature ToolHandlerFor[In, Out]. Failures
+// are returned as an IsError CallToolResult (NOT a Go error), so the MCP client
+// sees a structured tool error rather than a transport error.
+//
+// To add a new tool, see the README "开发流程 / How to add a new MCP tool".
+package tools
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+// EchoInput is the typed input for the echo tool. Its fields MUST mirror the
+// EchoArgs message in proto/echo.proto — the proto is the single source of truth
+// for the JSON Schema constraints (required / min / max), this struct is the Go
+// decode target. Keep the json tags in sync with the proto field names.
+type EchoInput struct {
+	Text   string `json:"text"`
+	Repeat int    `json:"repeat,omitempty"`
+}
+
+// echoResult is the JSON document returned in the tool's TextContent.
+type echoResult struct {
+	Echoed string `json:"echoed"`
+	Repeat int    `json:"repeat"`
+}
+
+// Echo is the example tool implementation. It carries no collaborators — a pure
+// transform. Real tools embed their dependencies (DB handles, HTTP clients, …)
+// as struct fields and wire them in their constructor.
+type Echo struct{}
+
+// NewEcho builds the echo tool.
+func NewEcho() *Echo {
+	return &Echo{}
+}
+
+// Handle is the go-sdk ToolHandlerFor[EchoInput, any] handler. The SDK has
+// already validated the input against the proto-generated JSON Schema before
+// this runs, so an empty Text here would have been rejected upstream; the guard
+// stays as defense for direct callers.
+func (t *Echo) Handle(_ context.Context, _ *mcp.CallToolRequest, in EchoInput) (*mcp.CallToolResult, any, error) {
+	text := strings.TrimSpace(in.Text)
+	if text == "" {
+		return errorResult("text is required and must be non-empty"), nil, nil
+	}
+
+	repeat := in.Repeat
+	if repeat <= 0 {
+		repeat = 1
+	}
+
+	echoed := strings.TrimSpace(strings.Repeat(text+" ", repeat))
+	result := echoResult{Echoed: echoed, Repeat: repeat}
+
+	return &mcp.CallToolResult{
+		Content:           []mcp.Content{&mcp.TextContent{Text: echoed}},
+		StructuredContent: result,
+	}, result, nil
+}
+
+// errorResult wraps a sanitized message in an IsError CallToolResult.
+func errorResult(msg string) *mcp.CallToolResult {
+	return &mcp.CallToolResult{
+		IsError: true,
+		Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("error: %s", msg)}},
+	}
+}

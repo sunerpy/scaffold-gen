@@ -1,0 +1,24 @@
+version: v2
+
+plugins:
+  # 1. Standard protobuf Go types (echo.pb.go)
+  - remote: buf.build/protocolbuffers/go
+    out: proto/gen
+    opt:
+      - paths=source_relative
+
+  # 2. protoc-gen-jsonschema — generates echo_jsonschema.pb.go exposing
+  #    EchoArgs{}.GetJSONSchemaBytes(); this byte slice is the MCP tool inputSchema
+  #    (single source of truth, no drift). format=go_const = zero-overhead Go const.
+  #
+  #    Install the local plugin first (README "必要工具"):
+  #      go install github.com/sunerpy/protoc-gen-jsonschema/cmd/protoc-gen-jsonschema@latest
+  - local: protoc-gen-jsonschema
+    out: proto/gen
+    opt:
+      - paths=source_relative
+      - format=go_const
+      - preserve_order=true
+
+inputs:
+  - directory: proto

@@ -38,6 +38,8 @@ pub enum Framework {
     None,
     Gin,
     GoZero,
+    /// Go MCP server（Gin + go-sdk，streamable-HTTP + SSE，proto-gen-jsonschema 约束）
+    McpServer,
     /// Python FastAPI（配置驱动、业务代码集中的脚手架）
     FastApi,
     Tauri,
@@ -52,6 +54,7 @@ impl Framework {
             Framework::None => "None",
             Framework::Gin => "Gin",
             Framework::GoZero => "go-zero",
+            Framework::McpServer => "mcp-server",
             Framework::FastApi => "fastapi",
             Framework::Tauri => "Tauri",
             Framework::Vue3 => "Vue3",
@@ -65,6 +68,7 @@ impl Framework {
             Framework::None => "None (Pure Language Project)",
             Framework::Gin => "Gin (Web Framework)",
             Framework::GoZero => "go-zero (Microservice Framework)",
+            Framework::McpServer => "MCP Server (Gin + go-sdk, streamable-HTTP + SSE)",
             Framework::FastApi => "FastAPI (Config-driven API Framework)",
             Framework::Tauri => "Tauri (Desktop App Framework)",
             Framework::Vue3 => "Vue3 (Frontend Framework)",
@@ -78,6 +82,7 @@ impl Framework {
             "none" | "" => Some(Framework::None),
             "gin" => Some(Framework::Gin),
             "go-zero" => Some(Framework::GoZero),
+            "mcp-server" | "mcp" => Some(Framework::McpServer),
             "fastapi" | "fast-api" => Some(Framework::FastApi),
             "tauri" => Some(Framework::Tauri),
             "vue3" | "vue" => Some(Framework::Vue3),
@@ -89,7 +94,7 @@ impl Framework {
     /// 获取指定语言支持的所有框架
     pub fn frameworks_for_language(language: Language) -> Vec<Framework> {
         match language {
-            Language::Go => vec![Framework::Gin, Framework::GoZero],
+            Language::Go => vec![Framework::Gin, Framework::GoZero, Framework::McpServer],
             Language::Python => vec![Framework::None, Framework::FastApi],
             Language::Rust => vec![Framework::None, Framework::Tauri],
             Language::TypeScript => vec![Framework::Vue3, Framework::React],
@@ -193,6 +198,25 @@ mod tests {
         let python_frameworks = Framework::frameworks_for_language(Language::Python);
         assert!(python_frameworks.contains(&Framework::FastApi));
         assert!(python_frameworks.contains(&Framework::None));
+    }
+
+    #[test]
+    fn mcp_server_parses_round_trips_and_is_listed_for_go() {
+        assert_eq!(
+            Framework::parse_from_str("mcp-server"),
+            Some(Framework::McpServer)
+        );
+        assert_eq!(Framework::parse_from_str("mcp"), Some(Framework::McpServer));
+        assert_eq!(Framework::McpServer.as_str(), "mcp-server");
+        assert_eq!(
+            Framework::parse_from_str(Framework::McpServer.as_str()),
+            Some(Framework::McpServer)
+        );
+
+        let go_frameworks = Framework::frameworks_for_language(Language::Go);
+        assert!(go_frameworks.contains(&Framework::McpServer));
+        assert!(go_frameworks.contains(&Framework::Gin));
+        assert!(go_frameworks.contains(&Framework::GoZero));
     }
 
     #[test]

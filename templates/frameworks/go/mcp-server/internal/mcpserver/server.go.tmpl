@@ -1,0 +1,56 @@
+// Package mcpserver builds the <<project_name>> MCP server and registers its
+// tools. The example tool ("echo") demonstrates the proto-driven flow: its input
+// schema comes from proto/echo.proto via the generated EchoArgs.GetJSONSchemaBytes(),
+// so the proto is the single source of truth for argument constraints.
+//
+// IMPORTANT: the generated package proto/gen does not exist until you run
+// `make generate` (buf generate). A fresh clone must run `make generate` once
+// before `go build`. See the README "必要工具 / 开发流程".
+package mcpserver
+
+import (
+	"encoding/json"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"go.uber.org/zap"
+
+	"<<module_name>>/internal/tools"
+	gen "<<module_name>>/proto/gen"
+)
+
+// Deps carries the collaborators the MCP tool handlers need. Each field is
+// optional; a tool whose collaborator is nil should return a sanitized IsError
+// result instead of a transport error. Add your tools' dependencies here.
+type Deps struct {
+	// Logger is the structured logger shared by tool handlers. May be nil.
+	Logger *zap.Logger
+}
+
+// NewServer builds the MCP server shell and registers all tools on it.
+func NewServer(deps Deps) *mcp.Server {
+	srv := mcp.NewServer(&mcp.Implementation{
+		Name:    "<<project_name>>",
+		Version: "0.1.0",
+	}, nil)
+	Register(srv, deps)
+	return srv
+}
+
+// Register adds the tools to srv. The echo tool's InputSchema is the JSON Schema
+// generated from proto/echo.proto (EchoArgs) — set explicitly so the typed
+// mcp.AddTool does NOT override it with one inferred from the Go struct. This is
+// what keeps the proto as the single source of truth for the tool's arguments.
+//
+// To add your own tool: define its message in proto/echo.proto (or a new .proto),
+// run `make generate`, then add an mcp.AddTool block here using
+// gen.YourArgs{}.GetJSONSchemaBytes() as the InputSchema.
+func Register(srv *mcp.Server, deps Deps) {
+	echo := tools.NewEcho()
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "echo",
+		Description: "Echo the input text back, optionally repeated. Example tool whose input schema is generated from proto/echo.proto.",
+		InputSchema: json.RawMessage((&gen.EchoArgs{}).GetJSONSchemaBytes()),
+	}, echo.Handle)
+
+	_ = deps
+}

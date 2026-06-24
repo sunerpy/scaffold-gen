@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package <<project_name_snake>>.v1;
+
+import "mcp/jsonschema/jsonschema.proto";
+
+option go_package = "<<module_name>>/proto/gen;gen";
+
+<# ===========================================================================
+   This proto is the SINGLE SOURCE OF TRUTH for the "echo" tool's input schema.
+   `buf generate` (make generate) emits echo_jsonschema.pb.go next to this file's
+   generated *.pb.go, exposing EchoArgs{}.GetJSONSchemaBytes() — handed directly
+   to the MCP server as the tool inputSchema. Edit constraints HERE, never in Go.
+   =========================================================================== #>
+message EchoArgs {
+  option (mcp.jsonschema.title) = "Echo Tool Arguments";
+  option (mcp.jsonschema.message_description) =
+    "Arguments for the example echo tool. Replace this message with your own tool's input.";
+
+  // Text to echo back to the caller.
+  string text = 1 [
+    (mcp.jsonschema.required) = true,
+    (mcp.jsonschema.min_length) = 1,
+    (mcp.jsonschema.max_length) = 4096,
+    (mcp.jsonschema.description) = "The text the tool should echo back.",
+    (mcp.jsonschema.example) = "hello world"
+  ];
+
+  // Number of times to repeat the text (1-10).
+  int32 repeat = 2 [
+    (mcp.jsonschema.minimum) = 1,
+    (mcp.jsonschema.maximum) = 10,
+    (mcp.jsonschema.description) = "How many times to repeat the text (default 1)."
+  ];
+}

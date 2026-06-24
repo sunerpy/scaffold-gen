@@ -1,0 +1,68 @@
+SHELL = /bin/bash
+PROJECT_NAME = <<project_name>>
+MODULE_NAME = <<module_name>>
+DIST_DIR = dist
+
+GO_FILES = $(shell find . -name "*.go" -not -path "./vendor/*")
+
+.PHONY: all generate build run test fmt lint clean help
+
+all: fmt lint build
+
+## generate: regenerate protobuf + JSON Schema from proto/ (buf generate)
+generate:
+	@echo "Running buf generate (proto + JSON Schema)..."
+	@if command -v buf > /dev/null 2>&1; then \
+		buf dep update && buf generate; \
+	else \
+		echo "buf not found. Install: https://buf.build/docs/installation"; \
+		echo "Also install the JSON Schema plugin:"; \
+		echo "  go install github.com/sunerpy/protoc-gen-jsonschema/cmd/protoc-gen-jsonschema@latest"; \
+		exit 1; \
+	fi
+
+## build: compile the server binary (run `make generate` first on a fresh clone)
+build:
+	@echo "Building $(PROJECT_NAME)..."
+	@mkdir -p $(DIST_DIR)
+	CGO_ENABLED=0 go build -ldflags="-s -w" -o $(DIST_DIR)/$(PROJECT_NAME) ./cmd/server
+
+## run: build and run the server (reads config.toml)
+run: build
+	@echo "Starting $(PROJECT_NAME) (config.toml)..."
+	./$(DIST_DIR)/$(PROJECT_NAME) -config config.toml
+
+## test: run tests with the race detector
+test:
+	CGO_ENABLED=1 go test ./... -count=1 -race
+
+## fmt: format Go code (gofumpt + goimports if available, else gofmt)
+fmt:
+	@echo "Formatting Go code..."
+	@if command -v goimports > /dev/null 2>&1; then \
+		echo "$(GO_FILES)" | tr ' ' '\n' | xargs -P 4 goimports -w -local $(MODULE_NAME); \
+	fi
+	@if command -v gofumpt > /dev/null 2>&1; then \
+		echo "$(GO_FILES)" | tr ' ' '\n' | xargs -P 4 gofumpt -extra -w; \
+	else \
+		gofmt -w $(GO_FILES); \
+	fi
+
+## lint: run golangci-lint (falls back to go vet)
+lint:
+	@echo "Running linters..."
+	@if command -v golangci-lint > /dev/null 2>&1; then \
+		golangci-lint run ./...; \
+	else \
+		echo "golangci-lint not found. Running go vet..."; \
+		go vet ./...; \
+	fi
+
+## clean: remove build artifacts
+clean:
+	@rm -rf $(DIST_DIR)
+	@go clean -cache -testcache
+
+## help: list targets
+help:
+	@grep -E '^##' $(MAKEFILE_LIST) | sed -e 's/## //'

@@ -1,0 +1,70 @@
+// Command server is the entry point for the <<project_name>> MCP server.
+//
+// It loads configuration from a TOML file, builds the logger, builds the MCP
+// server with its tools, wires it onto a Gin engine over BOTH streamable HTTP
+// (/mcp) and SSE (/sse), and serves. The listen address, paths, and log level
+// all come from config.toml — change them there, never in this file.
+package main
+
+import (
+	"flag"
+	"os"
+
+	"go.uber.org/zap"
+
+	"<<module_name>>/internal/config"
+	applog "<<module_name>>/internal/log"
+	"<<module_name>>/internal/mcpserver"
+	"<<module_name>>/internal/transport"
+)
+
+func main() {
+	configPath := flag.String("config", "config.toml", "path to the TOML config file")
+	validate := flag.Bool("validate", false, "load and validate config, then exit")
+	flag.Parse()
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		os.Stderr.WriteString("failed to load config: " + err.Error() + "\n")
+		os.Exit(1)
+	}
+
+	logger, err := applog.New(cfg.Log.Level, cfg.Log.Format)
+	if err != nil {
+		os.Stderr.WriteString("failed to build logger: " + err.Error() + "\n")
+		os.Exit(1)
+	}
+	defer func() { _ = logger.Sync() }()
+
+	logger.Info("config loaded",
+		zap.String("config_path", *configPath),
+		zap.String("server.addr", cfg.Server.Addr),
+		zap.String("server.mcp_path", cfg.Server.McpPath),
+		zap.String("server.sse_path", cfg.Server.SSEPath),
+		zap.String("log.level", cfg.Log.Level),
+		zap.String("log.format", cfg.Log.Format),
+	)
+
+	if *validate {
+		logger.Info("config valid; exiting (validate mode)")
+		os.Exit(0)
+	}
+
+	srv := mcpserver.NewServer(mcpserver.Deps{Logger: logger})
+
+	r := transport.NewRouter(srv, logger, transport.Options{
+		McpPath:           cfg.Server.McpPath,
+		SSEPath:           cfg.Server.SSEPath,
+		TrustedProxyCIDRs: cfg.Server.TrustedProxyCIDRs,
+	})
+
+	logger.Info("starting MCP server",
+		zap.String("addr", cfg.Server.Addr),
+		zap.String("streamable_http", cfg.Server.McpPath),
+		zap.String("sse", cfg.Server.SSEPath),
+	)
+	if err := r.Run(cfg.Server.Addr); err != nil {
+		logger.Error("server exited with error", zap.Error(err))
+		os.Exit(1)
+	}
+}

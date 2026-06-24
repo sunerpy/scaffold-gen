@@ -1,0 +1,107 @@
+// Package transport wires the MCP server onto a Gin HTTP engine, exposing it in
+// BOTH supported MCP transport formats plus a health endpoint:
+//
+//   - STREAMABLE HTTP (mcp_path, default /mcp): the official go-sdk
+//     StreamableHTTPHandler in STATELESS mode (POST-only JSON-RPC, JSONResponse
+//     so replies are application/json rather than an SSE stream). Mounted at both
+//     "/mcp" and "/mcp/" so neither variant eats a 307 redirect. This is the
+//     modern transport — connect an MCP client with a streamable-HTTP transport.
+//
+//   - SSE (sse_path, default /sse): the go-sdk SSEHandler implementing the
+//     2024-11-05 spec. A GET to /sse opens the event stream and the handler
+//     advertises a per-session message endpoint the client POSTs to. Use this for
+//     clients that only speak classic SSE.
+//
+//   - GET /healthz: plain text, OUTSIDE both MCP handlers, for load-balancer
+//     health checks.
+package transport
+
+import (
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"go.uber.org/zap"
+)
+
+// Options configures the router's mount paths and trusted proxies.
+type Options struct {
+	// McpPath is where the stateless streamable-HTTP handler mounts (default /mcp).
+	McpPath string
+	// SSEPath is where the classic SSE handler mounts (default /sse).
+	SSEPath string
+	// TrustedProxyCIDRs are the proxy networks gin trusts for X-Forwarded-For.
+	TrustedProxyCIDRs []string
+}
+
+// NewRouter builds the Gin engine that serves the MCP server over BOTH streamable
+// HTTP and SSE, plus a health endpoint. The same srv instance is returned for
+// every request (stateless); getServer ignores the request.
+func NewRouter(srv *mcp.Server, logger *zap.Logger, opts Options) *gin.Engine {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	if opts.McpPath == "" {
+		opts.McpPath = "/mcp"
+	}
+	if opts.SSEPath == "" {
+		opts.SSEPath = "/sse"
+	}
+
+	getServer := func(*http.Request) *mcp.Server { return srv }
+
+	// Streamable HTTP, stateless: JSONResponse:true => application/json replies.
+	streamable := mcp.NewStreamableHTTPHandler(
+		getServer,
+		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true},
+	)
+
+	// Classic SSE: GET opens the event stream; the handler manages the per-session
+	// message endpoint internally.
+	sse := mcp.NewSSEHandler(getServer, nil)
+
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
+	if len(opts.TrustedProxyCIDRs) > 0 {
+		if err := r.SetTrustedProxies(opts.TrustedProxyCIDRs); err != nil {
+			logger.Error("set trusted proxies failed; c.ClientIP() falls back to RemoteAddr",
+				zap.Strings("cidrs", opts.TrustedProxyCIDRs), zap.Error(err))
+		}
+	}
+	r.Use(gin.Recovery())
+	r.Use(requestLogger(logger))
+
+	// Health check: plain text, outside the MCP handlers.
+	r.GET("/healthz", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	// Streamable HTTP at the bare path AND the trailing-slash path (no 307).
+	// r.Any forwards every method; in stateless mode the handler rejects non-POST.
+	streamableWrapped := gin.WrapH(streamable)
+	r.Any(opts.McpPath, streamableWrapped)
+	r.Any(opts.McpPath+"/", streamableWrapped)
+
+	// SSE: GET opens the stream; POST delivers messages to the session endpoint.
+	sseWrapped := gin.WrapH(sse)
+	r.Any(opts.SSEPath, sseWrapped)
+	r.Any(opts.SSEPath+"/", sseWrapped)
+
+	return r
+}
+
+// requestLogger logs one structured line per request after it completes.
+func requestLogger(logger *zap.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		logger.Info("http request",
+			zap.String("method", c.Request.Method),
+			zap.String("path", c.Request.URL.Path),
+			zap.Int("status", c.Writer.Status()),
+			zap.Duration("latency", time.Since(start)),
+			zap.String("client_ip", c.ClientIP()),
+		)
+	}
+}

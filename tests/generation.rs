@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use scaffold_gen::generators::core::{Parameters, TemplateProcessor};
+use scaffold_gen::generators::language::go::GoParams;
 use scaffold_gen::generators::language::python::PythonParams;
 use walkdir::WalkDir;
 
@@ -212,4 +213,86 @@ fn vue3_embedded_generation_renders_without_external_tools() {
             );
         }
     }
+}
+
+#[test]
+fn mcp_server_embedded_generation_renders_without_external_tools() {
+    // Given: 一个带 host/port 的 GoParams（MCP server 复用 Go 上下文得到 module_name）
+    let mut params =
+        GoParams::from_project_name("mcp-demo".to_string()).with_version("1.24".to_string());
+    params.base.host = Some("0.0.0.0".to_string());
+    params.base.port = Some(8080);
+    let context = params.to_template_context();
+
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+
+    // When: 走 live 渲染路径渲染 frameworks/go/mcp-server（不触发 go/buf/protoc）
+    processor
+        .process_embedded_template_directory("frameworks/go/mcp-server", tmp.path(), context)
+        .expect("render embedded mcp-server templates");
+
+    // Then(1): 关键文件存在且 .tmpl 后缀已剥离
+    let files = collect_relative_files(tmp.path());
+    for expected in [
+        "go.mod",
+        "cmd/server/main.go",
+        "config.toml",
+        "config.example.toml",
+        "README.md",
+        "Makefile",
+        "buf.yaml",
+        "buf.gen.yaml",
+        "internal/config/config.go",
+        "internal/mcpserver/server.go",
+        "internal/transport/gin.go",
+        "internal/tools/echo.go",
+        "proto/echo.proto",
+    ] {
+        assert!(
+            files.iter().any(|f| f == expected),
+            "expected {expected}, got: {files:?}"
+        );
+    }
+    assert!(
+        !files.iter().any(|f| f.ends_with(".tmpl")),
+        "no .tmpl files should remain, got: {files:?}"
+    );
+
+    // Then(2): 任何文件都不得残留自定义分隔符 `<<` 或 `%>`（Go 模板里不使用左移运算符）
+    for rel in &files {
+        let content = fs::read_to_string(tmp.path().join(rel))
+            .unwrap_or_else(|_| panic!("read generated file {rel}"));
+        assert!(
+            !content.contains("<<"),
+            "file {rel} still contains unrendered `<<`"
+        );
+        assert!(
+            !content.contains("%>"),
+            "file {rel} still contains unrendered `%>`"
+        );
+    }
+
+    // Then(3): module_name 被替换进 go.mod，host/port 被写入 config.toml，proto 含 mcp.jsonschema 约束
+    let go_mod = fs::read_to_string(tmp.path().join("go.mod")).expect("read go.mod");
+    assert!(
+        go_mod.contains("github.com/example/mcp-demo"),
+        "module_name not substituted into go.mod:\n{go_mod}"
+    );
+    let config = fs::read_to_string(tmp.path().join("config.toml")).expect("read config.toml");
+    assert!(
+        config.contains("0.0.0.0") && config.contains("8080"),
+        "host/port not driven into config.toml:\n{config}"
+    );
+    let proto = fs::read_to_string(tmp.path().join("proto/echo.proto")).expect("read echo.proto");
+    assert!(
+        proto.contains("mcp.jsonschema.required")
+            && proto.contains("import \"mcp/jsonschema/jsonschema.proto\""),
+        "proto missing mcp.jsonschema constraints:\n{proto}"
+    );
+    let readme = fs::read_to_string(tmp.path().join("README.md")).expect("read README.md");
+    assert!(
+        readme.contains("mcp-demo") && readme.contains("streamable") && readme.contains("/sse"),
+        "README missing project name / transport sections:\n{readme}"
+    );
 }

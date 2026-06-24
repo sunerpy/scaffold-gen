@@ -64,6 +64,17 @@ const REGISTRY: &[FrameworkSpec] = &[
         next_steps: &[],
     },
     FrameworkSpec {
+        framework: Framework::McpServer,
+        language: Language::Go,
+        kind: GenKind::EmbeddedAsync,
+        description_template: "A Go MCP server (Gin + go-sdk): {name}",
+        accepts_proto_error_gen: false,
+        next_steps: &[
+            "  make generate                 # buf generate: proto + JSON Schema",
+            "  make run                      # Start the MCP server (reads config.toml)",
+        ],
+    },
+    FrameworkSpec {
         framework: Framework::FastApi,
         language: Language::Python,
         kind: GenKind::EmbeddedAsync,
@@ -258,6 +269,17 @@ mod tests {
         let spec = resolve(Language::Python, Framework::FastApi).expect("fastapi spec exists");
         assert_eq!(spec.framework, Framework::FastApi);
         assert_eq!(spec.language, Language::Python);
+        assert_eq!(spec.kind, GenKind::EmbeddedAsync);
+        assert!(!spec.accepts_proto_error_gen);
+        assert!(!spec.next_steps.is_empty());
+    }
+
+    /// McpServer 解析为 Go + EmbeddedAsync，且不接受 proto/error-gen。
+    #[test]
+    fn mcp_server_resolves_to_go_embedded_async() {
+        let spec = resolve(Language::Go, Framework::McpServer).expect("mcp-server spec exists");
+        assert_eq!(spec.framework, Framework::McpServer);
+        assert_eq!(spec.language, Language::Go);
         assert_eq!(spec.kind, GenKind::EmbeddedAsync);
         assert!(!spec.accepts_proto_error_gen);
         assert!(!spec.next_steps.is_empty());
