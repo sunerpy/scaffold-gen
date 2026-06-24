@@ -1,5 +1,4 @@
 pub mod gin;
-pub mod go_zero;
 pub mod react;
 pub mod tauri;
 pub mod vue3;

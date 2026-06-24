@@ -3,8 +3,7 @@ use std::path::Path;
 use std::process::Command;
 
 use super::parameters::ReactParams;
-use crate::constants::{Framework, Language};
-use crate::generators::core::{FrameworkGenerator as FrameworkGeneratorTrait, Generator};
+use crate::generators::core::Generator;
 
 /// React框架级别生成器实现
 #[derive(Debug)]
@@ -167,16 +166,6 @@ impl ReactGenerator {
             Ok(())
         }
     }
-
-    /// 检查是否应该跳过pre-commit相关文件
-    #[allow(dead_code)]
-    fn should_skip_precommit_file(&self, file_name: &str, params: &ReactParams) -> bool {
-        if !params.enable_precommit() {
-            file_name == ".pre-commit-config.yaml.tmpl" || file_name == ".pre-commit-config.yaml"
-        } else {
-            false
-        }
-    }
 }
 
 impl Default for ReactGenerator {
@@ -192,40 +181,7 @@ impl Generator for ReactGenerator {
         "React"
     }
 
-    fn description(&self) -> Option<&'static str> {
-        Some("Generates React frontend application with TypeScript")
-    }
-
     fn get_template_path(&self) -> &'static str {
         "frameworks/typescript/react"
-    }
-}
-
-impl FrameworkGeneratorTrait for ReactGenerator {
-    fn framework(&self) -> &'static str {
-        Framework::React.as_str()
-    }
-
-    fn language(&self) -> &'static str {
-        Language::TypeScript.as_str()
-    }
-
-    fn generate_basic_structure(
-        &mut self,
-        _params: &Self::Params,
-        _output_path: &Path,
-    ) -> Result<()> {
-        // 不再需要自定义结构生成，完全依赖模板
-        Ok(())
-    }
-
-    fn generate_config(&mut self, _params: &Self::Params, _output_path: &Path) -> Result<()> {
-        // 配置文件通过模板生成
-        Ok(())
-    }
-
-    fn generate_middleware(&mut self, _params: &Self::Params, _output_path: &Path) -> Result<()> {
-        // React 不需要中间件
-        Ok(())
     }
 }

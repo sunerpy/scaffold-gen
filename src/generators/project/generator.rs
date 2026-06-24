@@ -52,10 +52,6 @@ impl Generator for ProjectGenerator {
         "project"
     }
 
-    fn description(&self) -> Option<&'static str> {
-        Some("Generates basic project files like LICENSE, README, and Git repository")
-    }
-
     fn get_template_path(&self) -> &'static str {
         "project"
     }
@@ -132,40 +128,6 @@ impl ProjectGeneratorTrait for ProjectGenerator {
                 Ok(())
             }
         }
-    }
-
-    fn generate_readme(&mut self, params: &Self::Params, output_path: &Path) -> Result<()> {
-        let readme_template = "README.md.tmpl";
-
-        if !self.template_processor.template_exists(readme_template) {
-            // 如果没有模板，创建基础 README
-            let readme_content = format!(
-                "# {}\n\n{}\n\n## Author\n\n{}\n\n## License\n\n{}\n",
-                params.name(),
-                params
-                    .description()
-                    .as_deref()
-                    .unwrap_or("No description provided"),
-                params.author().as_deref().unwrap_or("Unknown"),
-                params.license()
-            );
-
-            let readme_file = output_path.join("README.md");
-            std::fs::write(&readme_file, readme_content)
-                .context("Failed to write README.md file")?;
-        } else {
-            let template_path = self.template_processor.get_template_path(readme_template)?;
-            let readme_file = output_path.join("README.md");
-            let context = params.to_template_context();
-
-            let mut template_processor = TemplateProcessor::new()?;
-            template_processor
-                .process_template_file(&template_path, &readme_file, context)
-                .context("Failed to generate README.md file")?;
-        }
-
-        println!("Generated README.md file");
-        Ok(())
     }
 
     fn install_precommit(&mut self, output_path: &Path) -> Result<()> {

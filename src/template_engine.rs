@@ -11,12 +11,10 @@ fn normalize_path(path: &str) -> String {
 /// 模板引擎 - 使用自定义分隔符 << >> 避免与 JS/TS 的 {{ }} 冲突
 pub struct TemplateEngine {
     env: Environment<'static>,
-    #[allow(dead_code)]
-    templates_dir: PathBuf,
 }
 
 impl TemplateEngine {
-    pub fn new(templates_dir: PathBuf) -> Result<Self> {
+    pub fn new(_templates_dir: PathBuf) -> Result<Self> {
         let mut env = Environment::new();
 
         // 自定义分隔符: <<var>>, <%if%>, <#comment#>
@@ -32,7 +30,7 @@ impl TemplateEngine {
         env.add_filter("to_camel_case", to_camel_case_filter);
         env.add_filter("to_snake_case", to_snake_case_filter);
 
-        Ok(Self { env, templates_dir })
+        Ok(Self { env })
     }
 
     pub fn render_template_content(

@@ -2,11 +2,7 @@ use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Command;
 
-use crate::constants::Language;
-use crate::generators::core::{
-    Generator, InheritableParams, LanguageGenerator as LanguageGeneratorTrait, Parameters,
-    TemplateProcessor,
-};
+use crate::generators::core::{Generator, InheritableParams, Parameters, TemplateProcessor};
 use crate::generators::language::python::parameters::PythonParams;
 
 /// Python 语言生成器
@@ -100,10 +96,6 @@ impl Generator for PythonGenerator {
         "Python Language"
     }
 
-    fn description(&self) -> Option<&'static str> {
-        Some("Python language project generator")
-    }
-
     fn get_template_path(&self) -> &'static str {
         "languages/python"
     }
@@ -144,36 +136,6 @@ impl Generator for PythonGenerator {
         self.install_dependencies(output_path)?;
 
         println!("Python language generation completed successfully");
-        Ok(())
-    }
-}
-
-impl LanguageGeneratorTrait for PythonGenerator {
-    fn language(&self) -> &'static str {
-        Language::Python.as_str()
-    }
-
-    fn setup_environment(&mut self, params: &Self::Params, output_path: &Path) -> Result<()> {
-        // 初始化 Python 项目
-        self.init_uv_project(params, output_path)?;
-
-        // 安装依赖
-        self.install_dependencies(output_path)?;
-
-        Ok(())
-    }
-
-    fn generate_language_config(
-        &mut self,
-        params: &Self::Params,
-        output_path: &Path,
-    ) -> Result<()> {
-        // 确保 pyproject.toml 文件存在
-        let pyproject_path = output_path.join("pyproject.toml");
-        if !pyproject_path.exists() {
-            self.init_uv_project(params, output_path)?;
-        }
-
         Ok(())
     }
 }

@@ -5,7 +5,6 @@ use std::process;
 mod commands;
 mod constants;
 mod generators;
-mod scaffold;
 mod template_engine;
 mod utils;
 

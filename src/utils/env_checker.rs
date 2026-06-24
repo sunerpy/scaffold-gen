@@ -77,118 +77,11 @@ impl EnvironmentChecker {
         }
     }
 
-    /// 获取Go版本字符串（用于模板参数）
-    #[allow(dead_code)]
-    pub async fn get_go_version(&self) -> Result<String> {
-        let output = Command::new("go").arg("version").output()?;
-
-        if !output.status.success() {
-            return Err(anyhow!("Failed to get Go version"));
-        }
-
-        let version_str = String::from_utf8_lossy(&output.stdout);
-        let re = Regex::new(r"go(\d+)\.(\d+)(?:\.(\d+))?")?;
-
-        if let Some(captures) = re.captures(&version_str) {
-            let major = captures.get(1).unwrap().as_str();
-            let minor = captures.get(2).unwrap().as_str();
-
-            // 返回格式化的版本字符串，如 "1.25"
-            Ok(format!("{major}.{minor}"))
-        } else {
-            Err(anyhow!("Unable to parse Go version"))
-        }
-    }
-
     /// 检查 Node.js 是否可用
-    #[allow(dead_code)]
     pub async fn check_node(&self) -> Result<bool> {
         match which("node") {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
-        }
-    }
-
-    /// 检查 Rust 是否可用并验证版本
-    #[allow(dead_code)]
-    pub async fn check_rust(&self) -> Result<bool> {
-        match which("cargo") {
-            Ok(_) => {
-                // 检查Rust版本是否满足要求 (>= 1.88)
-                self.check_rust_version().await
-            }
-            Err(_) => Ok(false),
-        }
-    }
-
-    /// 检查Rust版本是否满足要求
-    #[allow(dead_code)]
-    async fn check_rust_version(&self) -> Result<bool> {
-        let output = Command::new("rustc").arg("--version").output()?;
-
-        if !output.status.success() {
-            return Ok(false);
-        }
-
-        let version_str = String::from_utf8_lossy(&output.stdout);
-        let re = Regex::new(r"rustc (\d+)\.(\d+)\.(\d+)")?;
-
-        if let Some(captures) = re.captures(&version_str) {
-            let major: u32 = captures.get(1).unwrap().as_str().parse()?;
-            let minor: u32 = captures.get(2).unwrap().as_str().parse()?;
-
-            // 要求Rust版本 >= 1.88
-            if major > 1 || (major == 1 && minor >= 88) {
-                Ok(true)
-            } else {
-                Err(anyhow!(
-                    "Rust version {major}.{minor} is not supported. Minimum required version is 1.88"
-                ))
-            }
-        } else {
-            Err(anyhow!("Unable to parse Rust version"))
-        }
-    }
-
-    /// 检查 Python 是否可用并验证版本和uv工具
-    #[allow(dead_code)]
-    pub async fn check_python(&self) -> Result<bool> {
-        // 首先检查Python版本
-        let python_ok = self.check_python_version().await?;
-        if !python_ok {
-            return Ok(false);
-        }
-
-        // 然后检查uv工具
-        self.check_uv().await
-    }
-
-    /// 检查Python版本是否满足要求
-    #[allow(dead_code)]
-    async fn check_python_version(&self) -> Result<bool> {
-        let output = Command::new("python").arg("--version").output()?;
-
-        if !output.status.success() {
-            return Ok(false);
-        }
-
-        let version_str = String::from_utf8_lossy(&output.stdout);
-        let re = Regex::new(r"Python (\d+)\.(\d+)\.(\d+)")?;
-
-        if let Some(captures) = re.captures(&version_str) {
-            let major: u32 = captures.get(1).unwrap().as_str().parse()?;
-            let minor: u32 = captures.get(2).unwrap().as_str().parse()?;
-
-            // 要求Python版本 >= 3.12
-            if major > 3 || (major == 3 && minor >= 12) {
-                Ok(true)
-            } else {
-                Err(anyhow!(
-                    "Python version {major}.{minor} is not supported. Minimum required version is 3.12"
-                ))
-            }
-        } else {
-            Err(anyhow!("Unable to parse Python version"))
         }
     }
 
@@ -258,21 +151,7 @@ impl EnvironmentChecker {
         }
     }
 
-    /// 获取Cargo版本字符串
-    #[allow(dead_code)]
-    pub async fn get_cargo_version(&self) -> Result<String> {
-        let output = Command::new("cargo").arg("--version").output()?;
-
-        if !output.status.success() {
-            return Err(anyhow!("Failed to get cargo version"));
-        }
-
-        let version_str = String::from_utf8_lossy(&output.stdout);
-        Ok(version_str.trim().to_string())
-    }
-
     /// 获取Rust版本字符串（用于模板参数）
-    #[allow(dead_code)]
     pub async fn get_rust_version(&self) -> Result<String> {
         let output = Command::new("rustc").arg("--version").output()?;
 
@@ -291,30 +170,6 @@ impl EnvironmentChecker {
             Ok(format!("{major}.{minor}"))
         } else {
             Err(anyhow!("Unable to parse Rust version"))
-        }
-    }
-
-    /// 获取Node.js版本字符串（用于模板参数）
-    #[allow(dead_code)]
-    pub async fn get_node_version(&self) -> Result<String> {
-        let output = Command::new("node").arg("--version").output()?;
-
-        if !output.status.success() {
-            return Err(anyhow!("Failed to get Node.js version"));
-        }
-
-        let version_str = String::from_utf8_lossy(&output.stdout);
-        // Node.js 版本格式为 "v20.10.0"
-        let re = Regex::new(r"v(\d+)\.(\d+)(?:\.(\d+))?")?;
-
-        if let Some(captures) = re.captures(&version_str) {
-            let major = captures.get(1).unwrap().as_str();
-            let minor = captures.get(2).unwrap().as_str();
-
-            // 返回格式化的版本字符串，如 "20.10"
-            Ok(format!("{major}.{minor}"))
-        } else {
-            Err(anyhow!("Unable to parse Node.js version"))
         }
     }
 

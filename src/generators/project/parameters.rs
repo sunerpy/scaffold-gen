@@ -14,14 +14,6 @@ impl InheritableParams for ProjectParams {
         &self.base
     }
 
-    fn base_params_mut(&mut self) -> &mut BaseParams {
-        &mut self.base
-    }
-
-    fn from_base(base: BaseParams) -> Self {
-        Self { base }
-    }
-
     // ProjectParams没有额外的参数，所以不需要重写extended_template_context
 }
 
@@ -71,46 +63,20 @@ impl ProjectParams {
         self
     }
 
-    /// 设置版本
-    #[allow(dead_code)]
-    pub fn with_version(mut self, version: String) -> Self {
-        self.base.project_version = version;
-        self
-    }
-
     // 为了向后兼容，提供访问器方法
-    #[allow(dead_code)]
-    pub fn name(&self) -> &str {
-        &self.base.project_name
-    }
-
-    #[allow(dead_code)]
-    pub fn description(&self) -> &Option<String> {
-        &self.base.project_description
-    }
-
-    #[allow(dead_code)]
     pub fn author(&self) -> &Option<String> {
         &self.base.author
     }
 
-    #[allow(dead_code)]
     pub fn license(&self) -> &str {
         &self.base.license
     }
 
-    #[allow(dead_code)]
     pub fn enable_git(&self) -> bool {
         self.base.enable_git
     }
 
-    #[allow(dead_code)]
     pub fn enable_precommit(&self) -> bool {
         self.base.enable_precommit
-    }
-
-    #[allow(dead_code)]
-    pub fn version(&self) -> &str {
-        &self.base.project_version
     }
 }

@@ -23,29 +23,6 @@ impl Language {
             Language::TypeScript => "TypeScript",
         }
     }
-
-    /// 获取语言的小写字符串表示
-    #[allow(dead_code)]
-    pub fn as_lowercase(&self) -> &'static str {
-        match self {
-            Language::Go => "go",
-            Language::Python => "python",
-            Language::Rust => "rust",
-            Language::TypeScript => "typescript",
-        }
-    }
-
-    /// 从字符串解析语言
-    #[allow(dead_code)]
-    pub fn parse_from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "go" => Some(Language::Go),
-            "python" => Some(Language::Python),
-            "rust" => Some(Language::Rust),
-            "typescript" | "ts" => Some(Language::TypeScript),
-            _ => None,
-        }
-    }
 }
 
 impl std::fmt::Display for Language {
@@ -68,7 +45,6 @@ pub enum Framework {
 
 impl Framework {
     /// 获取框架的字符串表示
-    #[allow(dead_code)]
     pub fn as_str(&self) -> &'static str {
         match self {
             Framework::None => "None",
@@ -92,19 +68,6 @@ impl Framework {
         }
     }
 
-    /// 获取框架的小写字符串表示
-    #[allow(dead_code)]
-    pub fn as_lowercase(&self) -> &'static str {
-        match self {
-            Framework::None => "none",
-            Framework::Gin => "gin",
-            Framework::GoZero => "go-zero",
-            Framework::Tauri => "tauri",
-            Framework::Vue3 => "vue3",
-            Framework::React => "react",
-        }
-    }
-
     /// 从字符串解析框架
     pub fn parse_from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
@@ -118,25 +81,6 @@ impl Framework {
         }
     }
 
-    /// 获取框架对应的语言
-    #[allow(dead_code)]
-    pub fn language(&self) -> Option<Language> {
-        match self {
-            Framework::None => None,
-            Framework::Gin => Some(Language::Go),
-            Framework::GoZero => Some(Language::Go),
-            Framework::Tauri => Some(Language::Rust),
-            Framework::Vue3 => Some(Language::TypeScript),
-            Framework::React => Some(Language::TypeScript),
-        }
-    }
-
-    /// 检查是否为无框架
-    #[allow(dead_code)]
-    pub fn is_none(&self) -> bool {
-        matches!(self, Framework::None)
-    }
-
     /// 获取指定语言支持的所有框架
     pub fn frameworks_for_language(language: Language) -> Vec<Framework> {
         match language {
@@ -146,19 +90,6 @@ impl Framework {
             Language::TypeScript => vec![Framework::Vue3, Framework::React],
         }
     }
-
-    /// 获取所有框架
-    #[allow(dead_code)]
-    pub fn all() -> Vec<Framework> {
-        vec![
-            Framework::None,
-            Framework::Gin,
-            Framework::GoZero,
-            Framework::Tauri,
-            Framework::Vue3,
-            Framework::React,
-        ]
-    }
 }
 
 impl std::fmt::Display for Framework {
@@ -167,62 +98,10 @@ impl std::fmt::Display for Framework {
     }
 }
 
-// 模板变量名常量 - 用于模板渲染时的变量替换
-#[allow(dead_code)]
-pub const PROJECT_NAME: &str = "project_name";
-#[allow(dead_code)]
-pub const FRAMEWORK: &str = "framework";
-#[allow(dead_code)]
-pub const GO_VERSION: &str = "go_version";
-
-// 网络配置常量 - 预留用于后期扩展的网络配置功能
-#[allow(dead_code)]
-pub const DEFAULT_HOST: &str = "default_host";
-#[allow(dead_code)]
-pub const DEFAULT_PORT: &str = "default_port";
-#[allow(dead_code)]
-pub const HOST: &str = "host";
-#[allow(dead_code)]
-pub const PORT: &str = "port";
-// API 端口配置 - 预留用于后期扩展的 API 服务配置
-#[allow(dead_code)]
-pub const API_PORT: &str = "api_port";
-// RPC 端口配置 - 预留用于后期扩展的 RPC 服务配置
-#[allow(dead_code)]
-pub const RPC_PORT: &str = "rpc_port";
-
 // 默认值常量 - 用于各种工具和语言的默认版本配置
-#[allow(dead_code)]
 pub mod defaults {
-    // ===== 语言版本 =====
-    /// Go 默认版本
-    pub const GO_VERSION: &str = "1.24";
-    /// Python 默认版本
-    pub const PYTHON_VERSION: &str = "3.12";
     /// Rust 默认版本
     pub const RUST_VERSION: &str = "1.75";
-    /// Node.js 默认版本
-    pub const NODE_VERSION: &str = "20";
-    /// TypeScript 默认版本
-    pub const TYPESCRIPT_VERSION: &str = "5.0";
-
-    // ===== 工具版本 =====
-    /// uv 默认版本
-    pub const UV_VERSION: &str = "0.9.5";
-
-    // ===== 网络配置 =====
-    /// 默认主机地址
-    pub const HOST: &str = "0.0.0.0";
-    /// 默认 HTTP 端口
-    pub const PORT: i32 = 8080;
-    /// API 服务端口
-    pub const API_PORT: i32 = 8888;
-    /// RPC 服务端口
-    pub const RPC_PORT: i32 = 9999;
-    /// Vue3/React 开发服务器端口
-    pub const VITE_PORT: i32 = 5173;
-    /// Tauri 开发服务器端口
-    pub const TAURI_PORT: i32 = 1420;
 }
 
 /// 字符串转换工具函数
@@ -251,7 +130,9 @@ pub mod string_utils {
         result
     }
 
-    /// 将字符串转换为kebab-case (预留给未来的模板渲染功能)
+    /// 将字符串转换为kebab-case
+    /// allow(dead_code): not yet wired into a template helper, but locked by a
+    /// unit test (test_to_kebab_case) that is part of the Phase 1 safety net.
     #[allow(dead_code)]
     pub fn to_kebab_case(s: &str) -> String {
         let mut result = String::new();

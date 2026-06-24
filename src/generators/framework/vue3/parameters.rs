@@ -55,34 +55,9 @@ impl InheritableParams for Vue3Params {
     fn base_params(&self) -> &BaseParams {
         &self.base
     }
-
-    fn base_params_mut(&mut self) -> &mut BaseParams {
-        &mut self.base
-    }
-
-    fn from_base(base: BaseParams) -> Self {
-        Self {
-            base,
-            project: ProjectParams::default(),
-            node_version: "20".to_string(),
-            enable_typescript: true,
-            enable_tailwind: true,
-            enable_router: true,
-            enable_pinia: true,
-            enable_eslint: true,
-            enable_prettier: true,
-            package_manager: "pnpm".to_string(),
-        }
-    }
 }
 
 impl Vue3Params {
-    /// 创建新的Vue3参数
-    #[allow(dead_code)]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// 从项目名称创建
     pub fn from_project_name(project_name: String) -> Self {
         let mut base = BaseParams::new(project_name.clone());
@@ -112,39 +87,6 @@ impl Vue3Params {
     /// 设置是否启用pre-commit
     pub fn with_precommit(mut self, enable_precommit: bool) -> Self {
         self.base.enable_precommit = enable_precommit;
-        self
-    }
-
-    /// 获取是否启用pre-commit
-    pub fn enable_precommit(&self) -> bool {
-        self.base.enable_precommit
-    }
-
-    /// 设置是否启用 Tailwind CSS
-    #[allow(dead_code)]
-    pub fn with_tailwind(mut self, enable: bool) -> Self {
-        self.enable_tailwind = enable;
-        self
-    }
-
-    /// 设置是否启用 Vue Router
-    #[allow(dead_code)]
-    pub fn with_router(mut self, enable: bool) -> Self {
-        self.enable_router = enable;
-        self
-    }
-
-    /// 设置是否启用 Pinia
-    #[allow(dead_code)]
-    pub fn with_pinia(mut self, enable: bool) -> Self {
-        self.enable_pinia = enable;
-        self
-    }
-
-    /// 设置 Node.js 版本
-    #[allow(dead_code)]
-    pub fn with_node_version(mut self, version: String) -> Self {
-        self.node_version = version;
         self
     }
 }

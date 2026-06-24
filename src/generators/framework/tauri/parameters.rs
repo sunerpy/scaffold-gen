@@ -62,26 +62,6 @@ impl InheritableParams for TauriParams {
         &self.base
     }
 
-    fn base_params_mut(&mut self) -> &mut BaseParams {
-        &mut self.base
-    }
-
-    fn from_base(base: BaseParams) -> Self {
-        Self {
-            base,
-            project: ProjectParams::default(),
-            rust: RustParams::default(),
-            frontend_framework: "vue".to_string(),
-            enable_dark_mode: true,
-            enable_skeleton: true,
-            window_width: 800,
-            window_height: 600,
-            identifier: "com.example.app".to_string(),
-            enable_proto_gen: false,
-            enable_error_gen: false,
-        }
-    }
-
     fn extended_template_context(&self) -> HashMap<String, Value> {
         let mut context = HashMap::new();
 
@@ -123,12 +103,6 @@ impl InheritableParams for TauriParams {
 }
 
 impl TauriParams {
-    /// 创建新的Tauri参数
-    #[allow(dead_code)]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// 从项目名称创建
     pub fn from_project_name(project_name: String) -> Self {
         let mut base = BaseParams::new(project_name.clone());
@@ -155,52 +129,9 @@ impl TauriParams {
         }
     }
 
-    /// 设置前端框架
-    #[allow(dead_code)]
-    pub fn with_frontend_framework(mut self, framework: String) -> Self {
-        self.frontend_framework = framework;
-        self
-    }
-
-    /// 设置是否启用暗黑模式
-    #[allow(dead_code)]
-    pub fn with_dark_mode(mut self, enable: bool) -> Self {
-        self.enable_dark_mode = enable;
-        self
-    }
-
-    /// 设置是否启用骨架屏
-    #[allow(dead_code)]
-    pub fn with_skeleton(mut self, enable: bool) -> Self {
-        self.enable_skeleton = enable;
-        self
-    }
-
-    /// 设置窗口尺寸
-    #[allow(dead_code)]
-    pub fn with_window_size(mut self, width: u32, height: u32) -> Self {
-        self.window_width = width;
-        self.window_height = height;
-        self
-    }
-
-    /// 设置应用标识符
-    #[allow(dead_code)]
-    pub fn with_identifier(mut self, identifier: String) -> Self {
-        self.identifier = identifier;
-        self
-    }
-
     /// 设置项目参数
     pub fn with_project(mut self, project: ProjectParams) -> Self {
         self.project = project;
-        self
-    }
-
-    /// 设置Rust参数
-    #[allow(dead_code)]
-    pub fn with_rust(mut self, rust: RustParams) -> Self {
-        self.rust = rust;
         self
     }
 
@@ -216,7 +147,6 @@ impl TauriParams {
     }
 
     /// 设置是否启用proto-gen工具
-    #[allow(dead_code)]
     pub fn with_proto_gen(mut self, enable: bool) -> Self {
         self.enable_proto_gen = enable;
         self

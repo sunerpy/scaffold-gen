@@ -55,34 +55,9 @@ impl InheritableParams for ReactParams {
     fn base_params(&self) -> &BaseParams {
         &self.base
     }
-
-    fn base_params_mut(&mut self) -> &mut BaseParams {
-        &mut self.base
-    }
-
-    fn from_base(base: BaseParams) -> Self {
-        Self {
-            base,
-            project: ProjectParams::default(),
-            node_version: "20".to_string(),
-            enable_typescript: true,
-            enable_tailwind: true,
-            enable_router: true,
-            state_management: "zustand".to_string(),
-            enable_eslint: true,
-            enable_prettier: true,
-            package_manager: "pnpm".to_string(),
-        }
-    }
 }
 
 impl ReactParams {
-    /// 创建新的React参数
-    #[allow(dead_code)]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// 从项目名称创建
     pub fn from_project_name(project_name: String) -> Self {
         let mut base = BaseParams::new(project_name.clone());
@@ -112,39 +87,6 @@ impl ReactParams {
     /// 设置是否启用pre-commit
     pub fn with_precommit(mut self, enable_precommit: bool) -> Self {
         self.base.enable_precommit = enable_precommit;
-        self
-    }
-
-    /// 获取是否启用pre-commit
-    pub fn enable_precommit(&self) -> bool {
-        self.base.enable_precommit
-    }
-
-    /// 设置是否启用 Tailwind CSS
-    #[allow(dead_code)]
-    pub fn with_tailwind(mut self, enable: bool) -> Self {
-        self.enable_tailwind = enable;
-        self
-    }
-
-    /// 设置是否启用 React Router
-    #[allow(dead_code)]
-    pub fn with_router(mut self, enable: bool) -> Self {
-        self.enable_router = enable;
-        self
-    }
-
-    /// 设置状态管理方案
-    #[allow(dead_code)]
-    pub fn with_state_management(mut self, state_management: String) -> Self {
-        self.state_management = state_management;
-        self
-    }
-
-    /// 设置 Node.js 版本
-    #[allow(dead_code)]
-    pub fn with_node_version(mut self, version: String) -> Self {
-        self.node_version = version;
         self
     }
 }

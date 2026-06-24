@@ -89,7 +89,6 @@ impl NewCommand {
         self
     }
 
-    #[allow(dead_code)]
     pub fn with_swagger(mut self, enable_swagger: Option<bool>) -> Self {
         self.enable_swagger = enable_swagger;
         self

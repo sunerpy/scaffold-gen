@@ -253,70 +253,13 @@ impl BaseParams {
         self
     }
 
-    /// 设置服务器配置
-    #[allow(dead_code)]
-    pub fn with_server(mut self, host: String, port: u16) -> Self {
-        self.host = Some(host);
-        self.port = Some(port);
-        self
-    }
-
     /// 设置数据库配置
+    /// allow(dead_code): no production caller yet, but locked by the Phase 1
+    /// safety-net test `to_template_context_includes_author_and_database_when_present`.
     #[allow(dead_code)]
     pub fn with_database(mut self, db_type: String) -> Self {
         self.enable_database = true;
         self.database_type = Some(db_type);
-        self
-    }
-
-    /// 设置语言版本
-    #[allow(dead_code)]
-    pub fn with_language_version(mut self, version: String) -> Self {
-        self.language_version = Some(version);
-        self
-    }
-
-    /// 启用功能
-    #[allow(dead_code)]
-    pub fn enable_feature(mut self, feature: &str) -> Self {
-        match feature {
-            "swagger" => self.enable_swagger = true,
-            "cors" => self.enable_cors = true,
-            "logging" => self.enable_logging = true,
-            "recovery" => self.enable_recovery = true,
-            "rate_limit" => self.enable_rate_limit = true,
-            "jwt" => self.enable_jwt = true,
-            "database" => self.enable_database = true,
-            "redis" => self.enable_redis = true,
-            "git" => self.enable_git = true,
-            "precommit" => self.enable_precommit = true,
-            "modules" => self.enable_modules = true,
-            "cgo" => self.enable_cgo = true,
-            "vendor" => self.enable_vendor = true,
-            _ => {} // 忽略未知功能
-        }
-        self
-    }
-
-    /// 禁用功能
-    #[allow(dead_code)]
-    pub fn disable_feature(mut self, feature: &str) -> Self {
-        match feature {
-            "swagger" => self.enable_swagger = false,
-            "cors" => self.enable_cors = false,
-            "logging" => self.enable_logging = false,
-            "recovery" => self.enable_recovery = false,
-            "rate_limit" => self.enable_rate_limit = false,
-            "jwt" => self.enable_jwt = false,
-            "database" => self.enable_database = false,
-            "redis" => self.enable_redis = false,
-            "git" => self.enable_git = false,
-            "precommit" => self.enable_precommit = false,
-            "modules" => self.enable_modules = false,
-            "cgo" => self.enable_cgo = false,
-            "vendor" => self.enable_vendor = false,
-            _ => {} // 忽略未知功能
-        }
         self
     }
 }
@@ -325,14 +268,6 @@ impl BaseParams {
 pub trait InheritableParams: Parameters {
     /// 获取基础参数的引用
     fn base_params(&self) -> &BaseParams;
-
-    /// 获取基础参数的可变引用
-    #[allow(dead_code)]
-    fn base_params_mut(&mut self) -> &mut BaseParams;
-
-    /// 从基础参数创建
-    #[allow(dead_code)]
-    fn from_base(base: BaseParams) -> Self;
 
     /// 获取扩展的模板上下文（子类特有的参数）
     fn extended_template_context(&self) -> HashMap<String, Value> {

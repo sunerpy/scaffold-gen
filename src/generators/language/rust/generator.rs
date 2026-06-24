@@ -4,10 +4,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
-use crate::constants::Language;
-use crate::generators::core::{
-    Generator, LanguageGenerator as LanguageGeneratorTrait, Parameters, TemplateProcessor,
-};
+use crate::generators::core::{Generator, Parameters, TemplateProcessor};
 use crate::generators::language::rust::parameters::RustParams;
 
 /// Rust 语言生成器
@@ -78,10 +75,6 @@ impl Generator for RustGenerator {
 
     fn name(&self) -> &'static str {
         "Rust Language"
-    }
-
-    fn description(&self) -> Option<&'static str> {
-        Some("Rust language project generator with workspace structure")
     }
 
     fn get_template_path(&self) -> &'static str {
@@ -213,26 +206,6 @@ impl Generator for RustGenerator {
             }
         }
 
-        Ok(())
-    }
-}
-
-impl LanguageGeneratorTrait for RustGenerator {
-    fn language(&self) -> &'static str {
-        Language::Rust.as_str()
-    }
-
-    fn setup_environment(&mut self, _params: &Self::Params, _output_path: &Path) -> Result<()> {
-        // 模板处理器会自动创建目录结构
-        Ok(())
-    }
-
-    fn generate_language_config(
-        &mut self,
-        _params: &Self::Params,
-        _output_path: &Path,
-    ) -> Result<()> {
-        // 配置文件由模板生成
         Ok(())
     }
 }

@@ -28,14 +28,6 @@ impl InheritableParams for GoParams {
         &self.base
     }
 
-    fn base_params_mut(&mut self) -> &mut BaseParams {
-        &mut self.base
-    }
-
-    fn from_base(base: BaseParams) -> Self {
-        Self { base }
-    }
-
     // Go参数没有额外的参数，所有参数都在BaseParams中
 }
 
@@ -72,27 +64,6 @@ impl GoParams {
         self
     }
 
-    /// 启用CGO
-    #[allow(dead_code)]
-    pub fn with_cgo(mut self, enable: bool) -> Self {
-        self.base.enable_cgo = enable;
-        self
-    }
-
-    /// 添加构建标签
-    #[allow(dead_code)]
-    pub fn with_build_tag(mut self, tag: String) -> Self {
-        self.base.build_tags.push(tag);
-        self
-    }
-
-    /// 启用vendor
-    #[allow(dead_code)]
-    pub fn with_vendor(mut self, enable: bool) -> Self {
-        self.base.enable_vendor = enable;
-        self
-    }
-
     /// 从项目名称推断模块名称
     pub fn infer_module_name(project_name: &str) -> String {
         // 简单的模块名称推断逻辑
@@ -100,36 +71,5 @@ impl GoParams {
             "github.com/example/{}",
             project_name.to_lowercase().replace(' ', "-")
         )
-    }
-
-    // 为了向后兼容，提供访问器方法
-    #[allow(dead_code)]
-    pub fn version(&self) -> Option<&String> {
-        self.base.language_version.as_ref()
-    }
-
-    #[allow(dead_code)]
-    pub fn module_name(&self) -> Option<&String> {
-        self.base.module_name.as_ref()
-    }
-
-    #[allow(dead_code)]
-    pub fn enable_modules(&self) -> bool {
-        self.base.enable_modules
-    }
-
-    #[allow(dead_code)]
-    pub fn enable_cgo(&self) -> bool {
-        self.base.enable_cgo
-    }
-
-    #[allow(dead_code)]
-    pub fn build_tags(&self) -> &Vec<String> {
-        &self.base.build_tags
-    }
-
-    #[allow(dead_code)]
-    pub fn enable_vendor(&self) -> bool {
-        self.base.enable_vendor
     }
 }

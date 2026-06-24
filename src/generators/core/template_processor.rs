@@ -3,7 +3,6 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::scaffold::{ParameterScope, Scaffold};
 use crate::template_engine::TemplateEngine;
 
 /// 模板处理器 - 封装模板处理的核心逻辑
@@ -95,29 +94,6 @@ impl TemplateProcessor {
                 }
             }
         }
-
-        Ok(())
-    }
-
-    /// 处理单个模板目录
-    pub fn process_template_directory(
-        &self,
-        template_path: &Path,
-        output_path: &Path,
-        context: HashMap<String, Value>,
-    ) -> Result<()> {
-        // 转换为ParameterScope
-        let mut params = ParameterScope::new();
-        for (key, value) in context {
-            params.add(&key, value);
-        }
-
-        // 使用Scaffold处理模板
-        Scaffold::new(template_path)?
-            .output_to(output_path)
-            .with_params(params)
-            .process()?
-            .run_post_processors()?;
 
         Ok(())
     }

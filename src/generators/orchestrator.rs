@@ -4,7 +4,6 @@ use std::path::Path;
 use crate::generators::{
     core::Generator,
     framework::gin::{GinGenerator, GinParams},
-    framework::go_zero::GoZeroGenerator,
     framework::react::{ReactGenerator, ReactParams},
     framework::tauri::{TauriGenerator, TauriParams},
     framework::vue3::{Vue3Generator, Vue3Params},
@@ -20,17 +19,7 @@ pub struct GeneratorOrchestrator {
     project_generator: ProjectGenerator,
     go_generator: GoGenerator,
     python_generator: PythonGenerator,
-    #[allow(dead_code)]
-    rust_generator: RustGenerator,
     gin_generator: GinGenerator,
-    #[allow(dead_code)]
-    go_zero_generator: GoZeroGenerator,
-    #[allow(dead_code)]
-    tauri_generator: TauriGenerator,
-    #[allow(dead_code)]
-    vue3_generator: Vue3Generator,
-    #[allow(dead_code)]
-    react_generator: ReactGenerator,
 }
 
 impl GeneratorOrchestrator {
@@ -40,12 +29,7 @@ impl GeneratorOrchestrator {
             project_generator: ProjectGenerator::new()?,
             go_generator: GoGenerator::new()?,
             python_generator: PythonGenerator::new()?,
-            rust_generator: RustGenerator::new()?,
             gin_generator: GinGenerator::new()?,
-            go_zero_generator: GoZeroGenerator::new()?,
-            tauri_generator: TauriGenerator::new()?,
-            vue3_generator: Vue3Generator::new()?,
-            react_generator: ReactGenerator::new()?,
         })
     }
 
@@ -217,7 +201,6 @@ impl GeneratorOrchestrator {
     }
 
     /// 生成完整的Rust项目
-    #[allow(dead_code)]
     pub async fn generate_rust_project(
         &mut self,
         project_name: String,
@@ -246,7 +229,7 @@ impl GeneratorOrchestrator {
         let mut rust_params = rust_params;
         rust_params.base.enable_precommit = enable_precommit;
 
-        self.rust_generator
+        RustGenerator::new()?
             .generate(rust_params, output_path)
             .context("Failed to generate Rust files")?;
 
@@ -324,7 +307,7 @@ impl GeneratorOrchestrator {
 
         // 7. 覆盖模板文件 - 添加骨架屏、Tailwind CSS 等功能
         println!("📝 Applying enhanced templates...");
-        self.tauri_generator
+        TauriGenerator::new()?
             .generate(tauri_params, output_path)
             .context("Failed to apply Tauri templates")?;
 
@@ -514,37 +497,9 @@ impl GinProjectOptions {
         Self::default()
     }
 
-    /// 设置项目描述
-    #[allow(dead_code)]
-    pub fn with_description(mut self, description: String) -> Self {
-        self.description = Some(description);
-        self
-    }
-
-    /// 设置作者
-    #[allow(dead_code)]
-    pub fn with_author(mut self, author: String) -> Self {
-        self.author = Some(author);
-        self
-    }
-
     /// 设置许可证
     pub fn with_license(mut self, license: String) -> Self {
         self.license = Some(license);
-        self
-    }
-
-    /// 设置Go版本
-    #[allow(dead_code)]
-    pub fn with_go_version(mut self, version: String) -> Self {
-        self.go_version = Some(version);
-        self
-    }
-
-    /// 设置模块名称
-    #[allow(dead_code)]
-    pub fn with_module_name(mut self, module_name: String) -> Self {
-        self.module_name = Some(module_name);
         self
     }
 
@@ -564,13 +519,6 @@ impl GinProjectOptions {
     /// 启用pre-commit
     pub fn with_precommit(mut self, enable: bool) -> Self {
         self.enable_precommit = Some(enable);
-        self
-    }
-
-    /// 启用数据库
-    #[allow(dead_code)]
-    pub fn with_database(mut self, db_type: String) -> Self {
-        self.database_type = Some(db_type);
         self
     }
 }

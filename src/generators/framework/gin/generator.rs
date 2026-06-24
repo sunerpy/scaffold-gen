@@ -4,10 +4,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use super::parameters::GinParams;
-use crate::constants::{Framework, Language};
-use crate::generators::core::{
-    FrameworkGenerator as FrameworkGeneratorTrait, Generator, TemplateProcessor,
-};
+use crate::generators::core::{Generator, TemplateProcessor};
 use crate::utils::go_tools::GoTools;
 
 /// Gin框架级别生成器实现
@@ -32,10 +29,6 @@ impl Generator for GinGenerator {
 
     fn name(&self) -> &'static str {
         "Gin"
-    }
-
-    fn description(&self) -> Option<&'static str> {
-        Some("Generates Gin web framework specific files and structure")
     }
 
     fn get_template_path(&self) -> &'static str {
@@ -245,34 +238,5 @@ impl GinGenerator {
         } else {
             false
         }
-    }
-}
-
-impl FrameworkGeneratorTrait for GinGenerator {
-    fn framework(&self) -> &'static str {
-        Framework::Gin.as_str()
-    }
-
-    fn language(&self) -> &'static str {
-        Language::Go.as_str()
-    }
-
-    fn generate_basic_structure(
-        &mut self,
-        _params: &Self::Params,
-        _output_path: &Path,
-    ) -> Result<()> {
-        // 不再需要自定义结构生成，完全依赖模板
-        Ok(())
-    }
-
-    fn generate_config(&mut self, _params: &Self::Params, _output_path: &Path) -> Result<()> {
-        // 配置文件通过模板生成
-        Ok(())
-    }
-
-    fn generate_middleware(&mut self, _params: &Self::Params, _output_path: &Path) -> Result<()> {
-        // 中间件通过模板生成
-        Ok(())
     }
 }

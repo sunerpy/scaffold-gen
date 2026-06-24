@@ -3,25 +3,16 @@ use std::path::Path;
 use std::process::Command;
 
 use super::parameters::GoParams;
-use crate::constants::Language;
-use crate::generators::core::{
-    Generator, InheritableParams, LanguageGenerator as LanguageGeneratorTrait, Parameters,
-    TemplateProcessor,
-};
+use crate::generators::core::{Generator, InheritableParams, Parameters, TemplateProcessor};
 use crate::utils::go_tools::GoTools;
 
 /// Go语言级别生成器实现
-pub struct GoGenerator {
-    #[allow(dead_code)]
-    template_processor: TemplateProcessor,
-}
+pub struct GoGenerator {}
 
 impl GoGenerator {
     /// 创建新的Go生成器
     pub fn new() -> Result<Self> {
-        Ok(Self {
-            template_processor: TemplateProcessor::new()?,
-        })
+        Ok(Self {})
     }
 
     /// 检查Go是否已安装
@@ -108,10 +99,6 @@ impl Generator for GoGenerator {
         "Go Language"
     }
 
-    fn description(&self) -> Option<&'static str> {
-        Some("Go language project generator")
-    }
-
     fn get_template_path(&self) -> &'static str {
         "languages/go"
     }
@@ -152,40 +139,6 @@ impl Generator for GoGenerator {
         self.setup_dependencies(output_path)?;
 
         println!("Go language generation completed successfully");
-        Ok(())
-    }
-}
-
-impl LanguageGeneratorTrait for GoGenerator {
-    fn language(&self) -> &'static str {
-        Language::Go.as_str()
-    }
-
-    fn setup_environment(&mut self, params: &Self::Params, output_path: &Path) -> Result<()> {
-        // 初始化Go模块
-        if params.enable_modules() {
-            self.init_go_module(params, output_path)?;
-        }
-
-        // 整理依赖
-        self.setup_dependencies(output_path)?;
-
-        Ok(())
-    }
-
-    fn generate_language_config(
-        &mut self,
-        params: &Self::Params,
-        output_path: &Path,
-    ) -> Result<()> {
-        // 如果启用了Go modules，确保go.mod文件存在
-        if params.enable_modules() {
-            let go_mod_path = output_path.join("go.mod");
-            if !go_mod_path.exists() {
-                self.init_go_module(params, output_path)?;
-            }
-        }
-
         Ok(())
     }
 }

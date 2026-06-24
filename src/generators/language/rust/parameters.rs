@@ -41,20 +41,6 @@ impl InheritableParams for RustParams {
         &self.base
     }
 
-    fn base_params_mut(&mut self) -> &mut BaseParams {
-        &mut self.base
-    }
-
-    fn from_base(base: BaseParams) -> Self {
-        Self {
-            base,
-            rust_version: None,
-            cargo_version: None,
-            enable_proto_gen: false,
-            enable_error_gen: false,
-        }
-    }
-
     fn extended_template_context(&self) -> HashMap<String, Value> {
         let mut context = HashMap::new();
 
@@ -94,17 +80,9 @@ impl RustParams {
     }
 
     /// 设置Rust版本
-    #[allow(dead_code)]
     pub fn with_rust_version(mut self, version: String) -> Self {
         self.rust_version = Some(version.clone());
         self.base.language_version = Some(version);
-        self
-    }
-
-    /// 设置Cargo版本
-    #[allow(dead_code)]
-    pub fn with_cargo_version(mut self, version: String) -> Self {
-        self.cargo_version = Some(version);
         self
     }
 
@@ -118,18 +96,6 @@ impl RustParams {
     pub fn with_error_gen(mut self, enable: bool) -> Self {
         self.enable_error_gen = enable;
         self
-    }
-
-    /// 获取Rust版本
-    #[allow(dead_code)]
-    pub fn version(&self) -> Option<&String> {
-        self.rust_version.as_ref()
-    }
-
-    /// 获取Cargo版本
-    #[allow(dead_code)]
-    pub fn get_cargo_version(&self) -> Option<&String> {
-        self.cargo_version.as_ref()
     }
 
     /// 获取是否启用proto-gen工具
