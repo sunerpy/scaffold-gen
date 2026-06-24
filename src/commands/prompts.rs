@@ -98,11 +98,11 @@ impl NewCommand {
         framework: &Framework,
         language: &Language,
     ) -> Result<(String, u16, u16)> {
-        // Rust、Python 和 TypeScript 语言不需要网络配置
-        if matches!(
-            language,
-            Language::Rust | Language::Python | Language::TypeScript
-        ) {
+        // Python FastAPI 是配置驱动的 API 服务，需要 host/port；其余 Python/Rust/TS
+        // 纯项目不需要网络配置。
+        let needs_network =
+            matches!(language, Language::Go) || matches!(framework, Framework::FastApi);
+        if !needs_network {
             return Ok(("0.0.0.0".to_string(), 8080, 9000));
         }
 
@@ -127,6 +127,7 @@ impl NewCommand {
                 Framework::None => 8080,
                 Framework::Gin => 8080,
                 Framework::GoZero => 8888,
+                Framework::FastApi => 8000,
                 Framework::Tauri => 1420,
                 Framework::Vue3 => 5173,
                 Framework::React => 5173,

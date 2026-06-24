@@ -1,0 +1,27 @@
+"""<<project_name>> FastAPI 应用工厂 (app factory).
+
+负责创建 FastAPI 实例并挂载 app/routes/ 下的所有业务路由。
+★ 普通用户无需修改本文件 ★ —— 加接口请到 app/routes/ 新建文件。
+You normally never edit this file — add endpoints under app/routes/.
+"""
+
+from fastapi import FastAPI
+
+from app.routes import register_routes
+from app.settings import settings
+
+
+def create_app() -> FastAPI:
+    """构建并返回 FastAPI 应用实例."""
+    app = FastAPI(
+        title=settings.app.title,
+        version="<<project_version>>",
+    )
+
+    # 自动挂载 app/routes/ 下注册的全部路由
+    register_routes(app)
+
+    return app
+
+
+app = create_app()

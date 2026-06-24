@@ -38,6 +38,8 @@ pub enum Framework {
     None,
     Gin,
     GoZero,
+    /// Python FastAPI（配置驱动、业务代码集中的脚手架）
+    FastApi,
     Tauri,
     Vue3,
     React,
@@ -50,6 +52,7 @@ impl Framework {
             Framework::None => "None",
             Framework::Gin => "Gin",
             Framework::GoZero => "go-zero",
+            Framework::FastApi => "fastapi",
             Framework::Tauri => "Tauri",
             Framework::Vue3 => "Vue3",
             Framework::React => "React",
@@ -62,6 +65,7 @@ impl Framework {
             Framework::None => "None (Pure Language Project)",
             Framework::Gin => "Gin (Web Framework)",
             Framework::GoZero => "go-zero (Microservice Framework)",
+            Framework::FastApi => "FastAPI (Config-driven API Framework)",
             Framework::Tauri => "Tauri (Desktop App Framework)",
             Framework::Vue3 => "Vue3 (Frontend Framework)",
             Framework::React => "React (Frontend Framework)",
@@ -74,6 +78,7 @@ impl Framework {
             "none" | "" => Some(Framework::None),
             "gin" => Some(Framework::Gin),
             "go-zero" => Some(Framework::GoZero),
+            "fastapi" | "fast-api" => Some(Framework::FastApi),
             "tauri" => Some(Framework::Tauri),
             "vue3" | "vue" => Some(Framework::Vue3),
             "react" => Some(Framework::React),
@@ -85,7 +90,7 @@ impl Framework {
     pub fn frameworks_for_language(language: Language) -> Vec<Framework> {
         match language {
             Language::Go => vec![Framework::Gin, Framework::GoZero],
-            Language::Python => vec![], // Python 目前没有框架选项
+            Language::Python => vec![Framework::None, Framework::FastApi],
             Language::Rust => vec![Framework::None, Framework::Tauri],
             Language::TypeScript => vec![Framework::Vue3, Framework::React],
         }
@@ -167,6 +172,28 @@ pub mod string_utils {
 #[cfg(test)]
 mod tests {
     use super::string_utils::*;
+    use super::{Framework, Language};
+
+    #[test]
+    fn fastapi_parses_round_trips_and_is_listed_for_python() {
+        assert_eq!(
+            Framework::parse_from_str("fastapi"),
+            Some(Framework::FastApi)
+        );
+        assert_eq!(
+            Framework::parse_from_str("FastAPI"),
+            Some(Framework::FastApi)
+        );
+        assert_eq!(Framework::FastApi.as_str(), "fastapi");
+        assert_eq!(
+            Framework::parse_from_str(Framework::FastApi.as_str()),
+            Some(Framework::FastApi)
+        );
+
+        let python_frameworks = Framework::frameworks_for_language(Language::Python);
+        assert!(python_frameworks.contains(&Framework::FastApi));
+        assert!(python_frameworks.contains(&Framework::None));
+    }
 
     #[test]
     fn test_to_pascal_case() {

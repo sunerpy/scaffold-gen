@@ -1,0 +1,14 @@
+"""健康检查 (health check) —— 框架自带端点，建议保留不动.
+
+This is a framework-provided endpoint. You normally leave it as-is.
+"""
+
+from fastapi import APIRouter
+
+router = APIRouter(tags=["system"])
+
+
+@router.get("/health")
+async def health() -> dict[str, str]:
+    """探活接口，返回服务状态."""
+    return {"status": "ok"}

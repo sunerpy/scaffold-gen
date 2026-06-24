@@ -1,0 +1,144 @@
+# <<project_name>>
+
+<<project_description>>
+
+> 一个**配置驱动**的 FastAPI 脚手架：监听地址、端口写在 `config.toml`，
+> 你**只需在 `app/routes/` 里写业务代码**，其余交给框架。
+> A config-driven FastAPI scaffold — set host/port in `config.toml`,
+> and just write your business code under `app/routes/`.
+
+---
+
+## 必要说明 (What is this)
+
+这是一个开箱即用的 FastAPI 项目，遵循 "goctl 风格" 的理念：
+
+- **配置和代码分离**：改监听地址 / 端口，只改 `config.toml`（或 `.env`），**不用碰代码**。
+- **业务代码集中**：所有接口都写在 `app/routes/` 目录里，新建一个文件就是一个新模块。
+- **零样板装配**：`app/routes/` 下的路由会被**自动发现并挂载**，你不用改 `main.py`。
+
+适合：想快速起一个 API、又不想被项目结构和样板代码困住的人（包括非专业开发者）。
+
+```
+<<project_name>>/
+├── config.toml              # ★ 监听地址/端口/日志级别 —— 改这里
+├── .env.example             # 环境变量覆盖层（复制为 .env 使用）
+├── main.py                  # 启动入口：读配置 → 跑 uvicorn
+├── pyproject.toml           # 依赖 (uv 管理)
+└── app/
+    ├── settings.py          # 读取 config.toml / .env（一般不用动）
+    ├── main.py              # FastAPI 应用工厂（一般不用动）
+    └── routes/              # ★★★ 你的业务代码写在这里 ★★★
+        ├── __init__.py      # 路由自动发现（不用动）
+        ├── health.py        # /health 健康检查（框架自带）
+        └── example.py       # ★ 范例端点：照着它加接口 ★
+```
+
+---
+
+## 必要工具 (Requirements)
+
+- **Python <<python_version>>+**
+- **[uv](https://docs.astral.sh/uv/)** —— 极快的 Python 包管理器（安装：`curl -LsSf https://astral.sh/uv/install.sh | sh`）
+
+---
+
+## 使用方法 (Usage)
+
+```bash
+# 1. 安装依赖（uv 会自动建虚拟环境）
+uv sync
+
+# 2. 启动服务（会读取 config.toml 里的 host/port）
+uv run python main.py
+```
+
+启动后打开：
+
+- 接口文档 (Swagger UI)：http://<<default_host>>:<<default_port>>/docs
+- 健康检查：http://<<default_host>>:<<default_port>>/health
+- 范例接口：http://<<default_host>>:<<default_port>>/api/items
+
+### 改监听地址 / 端口 (Change host / port)
+
+编辑 `config.toml`，**不要改代码**：
+
+```toml
+[server]
+host = "0.0.0.0"   # 改这里
+port = 8000        # 改这里
+```
+
+或用环境变量覆盖（复制 `.env.example` 为 `.env`）：
+
+```bash
+SERVER__HOST=0.0.0.0
+SERVER__PORT=9000
+```
+
+---
+
+## 开发流程 (How to add a business endpoint)
+
+加一个接口只需 **3 步**，全程只动 `app/routes/`：
+
+1. **新建文件**：在 `app/routes/` 下创建一个 `.py` 文件，例如 `orders.py`。
+2. **定义 router**：在文件里定义一个名为 `router` 的 `APIRouter`（变量名必须叫 `router`）。
+3. **写函数**：用 `@router.get(...)` / `@router.post(...)` 写你的接口函数。保存即生效。
+
+最小例子：
+
+```python
+# app/routes/orders.py
+from fastapi import APIRouter
+
+router = APIRouter(prefix="/api", tags=["orders"])
+
+
+@router.get("/orders")
+async def list_orders() -> list[str]:
+    return ["order-1", "order-2"]
+```
+
+重启服务后，`GET /api/orders` 就可用了 —— 你**没有**改过 `main.py` 或
+`routes/__init__.py`。完整范例见 `app/routes/example.py`（含 Pydantic 模型校验）。
+
+### 代码检查与格式化 (Lint & format)
+
+本项目用 [Ruff](https://docs.astral.sh/ruff/)：
+
+```bash
+uv run ruff check .     # 检查
+uv run ruff format .    # 格式化
+```
+
+<% if enable_precommit %>
+### Pre-commit 钩子
+
+```bash
+uv run pre-commit install            # 安装
+uv run pre-commit run --all-files    # 全量运行
+```
+<% endif %>
+
+---
+
+## 推荐工具：CodeGraph (Recommended)
+
+当项目变大、或你用 AI 编程助手时，推荐集成
+**[codegraph-rust](https://github.com/sunerpy/codegraph-rust)** 作为代码分析工具：
+
+- 基于 **tree-sitter + SQLite/FTS5** 的确定性代码知识图谱，**不含任何 AI/LLM**，输出字节级稳定。
+- 提供符号 / 调用 / 依赖关系图，支持 **CLI 与 MCP server** 两种用法，可直接喂给 AI 编程 Agent。
+- **单一二进制、易用、极高性能**：显著提升开发效率，同时大幅降低 token 消耗。
+
+```bash
+codegraph sync                 # 建立/更新索引
+codegraph explore "your code"  # 探索符号与调用关系
+```
+
+---
+
+## License
+
+<<license>>

@@ -1,0 +1,29 @@
+"""<<project_name>> 启动入口 (entrypoint).
+
+读取 config.toml / .env 中的 host、port，按其启动 uvicorn。
+改监听地址/端口请改 config.toml，不要改这里。
+Reads host/port from config.toml / .env and starts uvicorn accordingly.
+To change the listen address/port, edit config.toml — not this file.
+
+启动 / Run:
+    uv run python main.py
+"""
+
+import uvicorn
+
+from app.settings import settings
+
+
+def main() -> None:
+    """按配置启动 HTTP 服务."""
+    uvicorn.run(
+        "app.main:app",
+        host=settings.server.host,
+        port=settings.server.port,
+        reload=settings.server.reload,
+        log_level=settings.app.log_level,
+    )
+
+
+if __name__ == "__main__":
+    main()

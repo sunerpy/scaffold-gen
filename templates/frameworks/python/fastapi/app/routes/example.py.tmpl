@@ -1,0 +1,62 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  ★★★  你的业务代码写在这里 (WRITE YOUR BUSINESS CODE HERE)  ★★★
+# ───────────────────────────────────────────────────────────────────────────
+#  这是一个"可直接照抄"的范例端点。新增一个接口只需 3 步：
+#  Adding an endpoint takes 3 steps — just copy this file and edit:
+#
+#    1) 在 app/routes/ 下新建一个 .py 文件（例如 orders.py）。
+#       Create a new .py file under app/routes/ (e.g. orders.py).
+#    2) 文件里定义一个名为 `router` 的 APIRouter（变量名必须叫 router）。
+#       Define an APIRouter named exactly `router` (the name matters).
+#    3) 用 @router.get / @router.post 等装饰器写你的函数 —— 完成！
+#       Decorate your functions with @router.get / @router.post — done!
+#
+#  应用会自动发现并挂载它，你不需要改 main.py 或 routes/__init__.py。
+#  The app auto-discovers it; you never touch main.py or routes/__init__.py.
+# ═══════════════════════════════════════════════════════════════════════════
+
+from fastapi import APIRouter
+from pydantic import BaseModel
+
+# `router` 是被自动发现的关键变量。prefix 决定 URL 前缀，tags 用于接口文档分组。
+# `router` is the variable the app looks for. prefix = URL prefix, tags = docs group.
+router = APIRouter(prefix="/api", tags=["example"])
+
+
+# ── 1. 用 Pydantic 模型描述请求/响应数据（自动校验 + 自动生成文档）─────────────
+#    Describe request/response shapes with Pydantic — free validation + docs.
+class Item(BaseModel):
+    """一个示例资源 (a sample resource)."""
+
+    name: str
+    price: float
+    in_stock: bool = True
+
+
+# 简单的内存"数据库"，仅作演示。真实项目请替换为你的存储。
+# A tiny in-memory store for demo only. Replace with your real storage.
+_ITEMS: dict[int, Item] = {
+    1: Item(name="example-widget", price=9.99),
+}
+
+
+# ── 2. 写你的接口函数 (write your endpoint functions) ────────────────────────
+
+
+@router.get("/items")
+async def list_items() -> dict[int, Item]:
+    """列出全部示例资源 —— 访问 GET /api/items 试试."""
+    return _ITEMS
+
+
+@router.get("/items/{item_id}")
+async def get_item(item_id: int) -> Item:
+    """按 ID 取一个资源 —— 访问 GET /api/items/1 试试."""
+    return _ITEMS.get(item_id, Item(name="not-found", price=0.0, in_stock=False))
+
+
+@router.post("/items/{item_id}")
+async def create_item(item_id: int, item: Item) -> Item:
+    """新建一个资源 —— FastAPI 会按 Item 模型自动校验请求体."""
+    _ITEMS[item_id] = item
+    return item

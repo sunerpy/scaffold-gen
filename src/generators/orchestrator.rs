@@ -5,7 +5,7 @@ use crate::constants::{Framework, Language};
 use crate::generators::gin_options::GinProjectOptions;
 use crate::generators::registry::{FrameworkSpec, GenKind};
 use crate::generators::{
-    core::Generator,
+    core::{Generator, Parameters, TemplateProcessor},
     framework::gin::{GinGenerator, GinParams},
     language::go::{GoGenerator, GoParams},
     language::python::{PythonGenerator, PythonParams},
@@ -108,6 +108,16 @@ impl GeneratorOrchestrator {
         let output_path = request.output_path;
 
         match request.spec.language {
+            Language::Python if request.spec.framework == Framework::FastApi => {
+                self.generate_fastapi_language(
+                    project_name.clone(),
+                    output_path,
+                    request.gin_options.host.clone(),
+                    request.gin_options.port,
+                    request.enable_precommit,
+                )
+                .await?;
+            }
             Language::Python => {
                 self.generate_python_language(
                     project_name.clone(),
@@ -295,6 +305,50 @@ impl GeneratorOrchestrator {
             .generate(python_params, output_path)
             .context("Failed to generate Python files")?;
 
+        Ok(())
+    }
+
+    /// 框架级别生成 (FastAPI) - 纯内嵌模板渲染（不调用 uv）。
+    ///
+    /// 与基础 Python 路径不同：FastAPI 是配置驱动的完整项目，pyproject/main/config
+    /// 全部由模板生成，无需 `uv init`/`uv add`/`uv sync`（这也让渲染可离线、可测试）。
+    /// host/port 写入模板上下文，生成的 config.toml 即据此驱动监听地址。
+    async fn generate_fastapi_language(
+        &mut self,
+        project_name: String,
+        output_path: &Path,
+        host: Option<String>,
+        port: Option<u16>,
+        enable_precommit: bool,
+    ) -> Result<()> {
+        tracing::info!("Starting FastAPI project generation: {project_name}");
+
+        let env_checker = EnvironmentChecker::new();
+        let python_version = env_checker
+            .get_python_version()
+            .await
+            .unwrap_or_else(|_| "3.12".to_string());
+
+        let mut python_params = PythonParams::new(project_name.clone())
+            .with_version(python_version)
+            .with_precommit(enable_precommit);
+        python_params.base.host = Some(host.unwrap_or_else(|| "0.0.0.0".to_string()));
+        python_params.base.port = Some(port.unwrap_or(8080));
+
+        let template_path = "frameworks/python/fastapi";
+        if !crate::template_engine::embedded_template_dir_exists(template_path) {
+            return Err(anyhow::anyhow!(
+                "FastAPI embedded templates not found at: {template_path}"
+            ));
+        }
+
+        let context = python_params.to_template_context();
+        let mut template_processor = TemplateProcessor::new()?;
+        template_processor
+            .process_embedded_template_directory(template_path, output_path, context)
+            .context("Failed to generate FastAPI files")?;
+
+        tracing::info!("FastAPI structure generated");
         Ok(())
     }
 

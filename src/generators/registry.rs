@@ -64,6 +64,17 @@ const REGISTRY: &[FrameworkSpec] = &[
         next_steps: &[],
     },
     FrameworkSpec {
+        framework: Framework::FastApi,
+        language: Language::Python,
+        kind: GenKind::EmbeddedAsync,
+        description_template: "A FastAPI service: {name}",
+        accepts_proto_error_gen: false,
+        next_steps: &[
+            "  uv sync                       # Install dependencies",
+            "  uv run python main.py         # Start the API (reads config.toml / .env)",
+        ],
+    },
+    FrameworkSpec {
         framework: Framework::Tauri,
         language: Language::Rust,
         kind: GenKind::ExternalAsync,
@@ -239,5 +250,16 @@ mod tests {
             spec.description("myapp"),
             "A Tauri desktop application: myapp"
         );
+    }
+
+    /// FastAPI 解析为 Python + EmbeddedAsync，且不接受 proto/error-gen。
+    #[test]
+    fn fastapi_resolves_to_python_embedded_async() {
+        let spec = resolve(Language::Python, Framework::FastApi).expect("fastapi spec exists");
+        assert_eq!(spec.framework, Framework::FastApi);
+        assert_eq!(spec.language, Language::Python);
+        assert_eq!(spec.kind, GenKind::EmbeddedAsync);
+        assert!(!spec.accepts_proto_error_gen);
+        assert!(!spec.next_steps.is_empty());
     }
 }
