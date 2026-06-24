@@ -36,15 +36,17 @@
 
 ## 支持的框架
 
-| 语言       | 框架    | 状态      |
-| ---------- | ------- | --------- |
-| Go         | Gin     | ✅        |
-| Go         | Go-Zero | ⚠️ 未实现 |
-| Rust       | CLI App | ✅        |
-| Rust       | Tauri   | ✅        |
-| TypeScript | Vue 3   | ✅        |
-| TypeScript | React   | ✅        |
-| Python     | Basic   | ✅        |
+| 语言       | 框架       | 状态                        |
+| ---------- | ---------- | --------------------------- |
+| Go         | Gin        | ✅                          |
+| Go         | Go-Zero    | ⚠️ 未实现                   |
+| Go         | MCP Server | ✅（streamable-HTTP + SSE） |
+| Rust       | CLI App    | ✅                          |
+| Rust       | Tauri      | ✅                          |
+| TypeScript | Vue 3      | ✅（离线内嵌脚手架）        |
+| TypeScript | React      | ✅                          |
+| Python     | Basic      | ✅                          |
+| Python     | FastAPI    | ✅（配置驱动 API）          |
 
 ## 安装
 
@@ -83,6 +85,8 @@ scafgen new my-gozero-app --framework go-zero
 scafgen new my-tauri-app  --framework tauri
 scafgen new my-vue-app    --framework vue3
 scafgen new my-react-app  --framework react
+scafgen new my-api        --framework fastapi --language python
+scafgen new my-mcp        --framework mcp-server --language go
 
 # 全局开关（对所有子命令生效）
 scafgen -q new my-project   # 静默：仅显示错误
@@ -103,7 +107,7 @@ curl -fsSL https://raw.githubusercontent.com/sunerpy/scaffold-gen/main/scripts/i
 - `scafgen new --help` —— 查看可用 flag 和框架。
 - `scafgen --version` —— 打印版本。
 
-框架：`gin`、`go-zero`、`tauri`、`vue3`、`react`。错误输出到 stderr 并返回非零退出码。
+框架：`gin`、`go-zero`、`mcp-server`、`tauri`、`vue3`、`react`、`fastapi`。错误输出到 stderr 并返回非零退出码。
 
 ## 架构设计
 

@@ -37,15 +37,17 @@ defaults, a LICENSE, and an initialized git repo.
 
 ## Supported Frameworks
 
-| Language   | Framework | Status             |
-| ---------- | --------- | ------------------ |
-| Go         | Gin       | ✅                 |
-| Go         | Go-Zero   | ⚠️ not implemented |
-| Rust       | CLI App   | ✅                 |
-| Rust       | Tauri     | ✅                 |
-| TypeScript | Vue 3     | ✅                 |
-| TypeScript | React     | ✅                 |
-| Python     | Basic     | ✅                 |
+| Language   | Framework  | Status                         |
+| ---------- | ---------- | ------------------------------ |
+| Go         | Gin        | ✅                             |
+| Go         | Go-Zero    | ⚠️ not implemented             |
+| Go         | MCP Server | ✅ (streamable-HTTP + SSE)     |
+| Rust       | CLI App    | ✅                             |
+| Rust       | Tauri      | ✅                             |
+| TypeScript | Vue 3      | ✅ (offline embedded scaffold) |
+| TypeScript | React      | ✅                             |
+| Python     | Basic      | ✅                             |
+| Python     | FastAPI    | ✅ (config-driven API)         |
 
 ## Install
 
@@ -84,6 +86,8 @@ scafgen new my-gozero-app --framework go-zero
 scafgen new my-tauri-app  --framework tauri
 scafgen new my-vue-app    --framework vue3
 scafgen new my-react-app  --framework react
+scafgen new my-api        --framework fastapi --language python
+scafgen new my-mcp        --framework mcp-server --language go
 
 # Global flags (work on all subcommands)
 scafgen -q new my-project   # quiet: errors only
@@ -104,7 +108,7 @@ curl -fsSL https://raw.githubusercontent.com/sunerpy/scaffold-gen/main/scripts/i
 - `scafgen new --help` — discover available flags and frameworks.
 - `scafgen --version` — print the version.
 
-Frameworks: `gin`, `go-zero`, `tauri`, `vue3`, `react`. Errors go to stderr with
+Frameworks: `gin`, `go-zero`, `mcp-server`, `tauri`, `vue3`, `react`, `fastapi`. Errors go to stderr with
 a non-zero exit code.
 
 ## Architecture
