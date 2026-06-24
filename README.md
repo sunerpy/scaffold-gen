@@ -28,23 +28,24 @@ defaults, a LICENSE, and an initialized git repo.
 
 ## Features
 
-- **Three-layer generator architecture** — Project, Language, and Framework levels compose cleanly.
+- **Data-driven registry** — a `FrameworkSpec` table + `GenKind` enum dispatch; adding a framework
+  is one registry row + a template directory, not a code change.
 - **Interactive CLI** — `inquire`-driven prompts for language, framework, ports, and license.
 - **Embedded templates** — everything ships inside the binary; no runtime file dependencies.
 - **Environment validation** — checks required toolchains (Go ≥ 1.24, Rust ≥ 1.88, Python ≥ 3.12) before generating.
-- **Extensible** — add a framework by implementing the `FrameworkGenerator` trait.
+- **Structured logging** — quiet (`-q`) / verbose (`-v`) global flags; output via `tracing` to stderr.
 
 ## Supported Frameworks
 
-| Language   | Framework | Status |
-| ---------- | --------- | ------ |
-| Go         | Gin       | ✅     |
-| Go         | Go-Zero   | ✅     |
-| Rust       | CLI App   | ✅     |
-| Rust       | Tauri     | ✅     |
-| TypeScript | Vue 3     | ✅     |
-| TypeScript | React     | ✅     |
-| Python     | Basic     | ✅     |
+| Language   | Framework | Status             |
+| ---------- | --------- | ------------------ |
+| Go         | Gin       | ✅                 |
+| Go         | Go-Zero   | ⚠️ not implemented |
+| Rust       | CLI App   | ✅                 |
+| Rust       | Tauri     | ✅                 |
+| TypeScript | Vue 3     | ✅                 |
+| TypeScript | React     | ✅                 |
+| Python     | Basic     | ✅                 |
 
 ## Install
 
@@ -83,6 +84,10 @@ scafgen new my-gozero-app --framework go-zero
 scafgen new my-tauri-app  --framework tauri
 scafgen new my-vue-app    --framework vue3
 scafgen new my-react-app  --framework react
+
+# Global flags (work on all subcommands)
+scafgen -q new my-project   # quiet: errors only
+scafgen -v new my-project   # verbose: debug output
 ```
 
 Run `scafgen new --help` for the full option list.
@@ -104,10 +109,13 @@ a non-zero exit code.
 
 ## Architecture
 
-scaffold-gen uses a three-layer generator system (Project → Language → Framework)
-and a hierarchical, binary-embedded template system. See
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, template layout,
-and variable reference.
+scaffold-gen uses a data-driven registry (`FrameworkSpec` + `GenKind` enum) to dispatch
+generation. A single `resolve(language, framework)` lookup returns the spec; the
+orchestrator's `generate(GenerationRequest)` pipeline branches on `GenKind` (GinSync /
+EmbeddedAsync / ExternalAsync / Unimplemented). Templates are minijinja-rendered with
+custom `<<>>` delimiters and embedded in the binary at compile time. See
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, template layout, and
+variable reference.
 
 ## Development
 

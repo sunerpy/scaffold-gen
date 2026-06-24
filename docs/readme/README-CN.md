@@ -27,23 +27,24 @@
 
 ## 特性
 
-- **三层生成器架构** —— 项目级、语言级、框架级清晰组合。
+- **数据驱动注册表** —— `FrameworkSpec` 表 + `GenKind` 枚举调度；新增框架只需一行注册表记录 +
+  模板目录，无需改代码。
 - **交互式 CLI** —— 基于 `inquire` 的提示，覆盖语言、框架、端口、许可证。
 - **内嵌模板** —— 所有模板编译进二进制，运行时无外部文件依赖。
 - **环境验证** —— 生成前检查所需工具链（Go ≥ 1.24、Rust ≥ 1.88、Python ≥ 3.12）。
-- **可扩展** —— 实现 `FrameworkGenerator` trait 即可新增框架。
+- **结构化日志** —— 静默（`-q`）/ 详细（`-v`）全局开关；输出经 `tracing` 写入 stderr。
 
 ## 支持的框架
 
-| 语言       | 框架    | 状态 |
-| ---------- | ------- | ---- |
-| Go         | Gin     | ✅   |
-| Go         | Go-Zero | ✅   |
-| Rust       | CLI App | ✅   |
-| Rust       | Tauri   | ✅   |
-| TypeScript | Vue 3   | ✅   |
-| TypeScript | React   | ✅   |
-| Python     | Basic   | ✅   |
+| 语言       | 框架    | 状态      |
+| ---------- | ------- | --------- |
+| Go         | Gin     | ✅        |
+| Go         | Go-Zero | ⚠️ 未实现 |
+| Rust       | CLI App | ✅        |
+| Rust       | Tauri   | ✅        |
+| TypeScript | Vue 3   | ✅        |
+| TypeScript | React   | ✅        |
+| Python     | Basic   | ✅        |
 
 ## 安装
 
@@ -82,6 +83,10 @@ scafgen new my-gozero-app --framework go-zero
 scafgen new my-tauri-app  --framework tauri
 scafgen new my-vue-app    --framework vue3
 scafgen new my-react-app  --framework react
+
+# 全局开关（对所有子命令生效）
+scafgen -q new my-project   # 静默：仅显示错误
+scafgen -v new my-project   # 详细：显示调试输出
 ```
 
 运行 `scafgen new --help` 查看完整选项列表。
@@ -102,8 +107,10 @@ curl -fsSL https://raw.githubusercontent.com/sunerpy/scaffold-gen/main/scripts/i
 
 ## 架构设计
 
-scaffold-gen 采用三层生成器系统（Project → Language → Framework）和分层、
-内嵌于二进制的模板系统。完整设计、模板布局与变量参考见
+scaffold-gen 采用数据驱动注册表（`FrameworkSpec` + `GenKind` 枚举）进行调度。单一的
+`resolve(language, framework)` 查找返回规格；编排器的 `generate(GenerationRequest)` 管线按
+`GenKind`（GinSync / EmbeddedAsync / ExternalAsync / Unimplemented）分支执行。模板通过
+minijinja 以自定义 `<<>>` 分隔符渲染，并在编译期内嵌于二进制中。完整设计、模板布局与变量参考见
 [docs/readme/ARCHITECTURE-CN.md](ARCHITECTURE-CN.md)。
 
 ## 开发
