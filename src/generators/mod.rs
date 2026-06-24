@@ -1,6 +1,8 @@
 // 生成器模块
 pub mod core;
+pub mod external;
 pub mod framework;
+pub mod gin_options;
 pub mod language;
 pub mod orchestrator;
 pub mod project;
@@ -13,4 +15,5 @@ pub mod registry;
 // 框架生成器
 
 // 编排器
-pub use orchestrator::{GeneratorOrchestrator, GinProjectOptions};
+pub use gin_options::GinProjectOptions;
+pub use orchestrator::GeneratorOrchestrator;

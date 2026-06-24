@@ -1,4 +1,5 @@
 pub mod base_parameters;
+pub mod context;
 pub mod generator;
 pub mod parameters;
 pub mod template_processor;
