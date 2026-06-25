@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/sunerpy/scaffold-gen/compare/v0.4.0...v0.4.1) (2026-06-25)
+
+
+### Bug Fixes
+
+* 修复 FastAPI 脚手架 uvicorn reload 死循环 ([#10](https://github.com/sunerpy/scaffold-gen/issues/10)) ([1f3576b](https://github.com/sunerpy/scaffold-gen/commit/1f3576ba32589374995c0fe4b760e1216bbfbc91))
+
 ## [0.4.0](https://github.com/sunerpy/scaffold-gen/compare/v0.3.0...v0.4.0) (2026-06-25)
 
 
