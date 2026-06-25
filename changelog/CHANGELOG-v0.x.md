@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/sunerpy/scaffold-gen/compare/v0.3.0...v0.4.0) (2026-06-25)
+
+
+### Features
+
+* Python structlog 日志 + CodeGraph 接入说明 + 可选 Makefile/Dockerfile 构建 ([#8](https://github.com/sunerpy/scaffold-gen/issues/8)) ([9659a72](https://github.com/sunerpy/scaffold-gen/commit/9659a72d4b779ea45d9cb3ab54409c7a99e4d9de))
+
 ## [0.3.0](https://github.com/sunerpy/scaffold-gen/compare/v0.2.0...v0.3.0) (2026-06-25)
 
 
