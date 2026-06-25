@@ -101,6 +101,9 @@ scafgen new my-react-app  --framework react
 scafgen new my-api        --framework fastapi --language python
 scafgen new my-mcp        --framework mcp-server --language go
 
+# Add a Makefile + Dockerfile for local build / containerization
+scafgen new my-gin-app --framework gin --with-build
+
 # Global flags (work on all subcommands)
 scafgen -q new my-project   # quiet: errors only
 scafgen -v new my-project   # verbose: debug output

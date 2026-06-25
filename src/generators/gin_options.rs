@@ -4,7 +4,7 @@
 //! 由 `new.rs` 填充、`GeneratorOrchestrator::generate_gin_project` 消费。
 
 /// Gin项目生成选项
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct GinProjectOptions {
     // 项目级别选项
     pub description: Option<String>,

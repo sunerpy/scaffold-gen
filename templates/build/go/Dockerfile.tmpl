@@ -1,0 +1,20 @@
+# Multi-stage build for <<project_name>> — static Go binary into distroless.
+# VERSION is injected into main.version so the binary reports the real tag.
+
+FROM golang:<<go_version>>-alpine AS build
+WORKDIR /src
+
+# Cache module downloads first for faster rebuilds.
+COPY go.mod go.sum* ./
+RUN go mod download
+
+COPY . .
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${VERSION}" -o /out/<<project_name>> .
+
+# Distroless static: no shell, no libc, runs as nonroot. For apps making HTTPS
+# calls, swap to gcr.io/distroless/base:nonroot (ships ca-certificates).
+FROM gcr.io/distroless/static:nonroot
+COPY --from=build /out/<<project_name>> /usr/local/bin/<<project_name>>
+<%if port%>EXPOSE <<port>>
+<%endif%>ENTRYPOINT ["/usr/local/bin/<<project_name>>"]

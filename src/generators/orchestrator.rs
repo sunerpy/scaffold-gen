@@ -25,6 +25,7 @@ pub struct GenerationRequest<'a> {
     pub enable_precommit: bool,
     pub enable_proto_gen: bool,
     pub enable_error_gen: bool,
+    pub enable_build: bool,
     pub gin_options: GinProjectOptions,
 }
 
@@ -60,13 +61,69 @@ impl GeneratorOrchestrator {
 
         match request.spec.kind {
             GenKind::GinSync => self.generate_gin_project(
-                request.project_name,
+                request.project_name.clone(),
                 request.output_path,
-                request.gin_options,
-            ),
-            GenKind::EmbeddedAsync => self.generate_embedded(&request).await,
-            GenKind::ExternalAsync => self.generate_external(&request).await,
-            GenKind::Unimplemented => Err(anyhow::anyhow!("GoZero 项目生成尚未实现")),
+                request.gin_options.clone(),
+            )?,
+            GenKind::EmbeddedAsync => self.generate_embedded(&request).await?,
+            GenKind::ExternalAsync => self.generate_external(&request).await?,
+            GenKind::Unimplemented => return Err(anyhow::anyhow!("GoZero 项目生成尚未实现")),
+        }
+
+        if request.enable_build {
+            self.render_build_tooling(&request)?;
+        }
+
+        Ok(())
+    }
+
+    /// 项目级 `--with-build` 渲染步骤：把 `templates/build/<lang>/` 渲染进项目根目录。
+    ///
+    /// 在框架/语言生成之后执行，统一为所有项目类型生成配套 Makefile + Dockerfile。
+    /// `<lang>` 由 `request.spec.language` 映射（见 `Language::build_dir`）；模板目录
+    /// 缺失（如另一来源尚未提供 TS Dockerfile）时仅告警跳过，不阻断生成。
+    fn render_build_tooling(&mut self, request: &GenerationRequest<'_>) -> Result<()> {
+        let build_dir = request.spec.language.build_dir();
+        let template_path = format!("build/{build_dir}");
+
+        if !crate::template_engine::embedded_template_dir_exists(&template_path) {
+            tracing::warn!(
+                "构建模板目录缺失，跳过 Makefile/Dockerfile 生成: templates/{template_path}/"
+            );
+            return Ok(());
+        }
+
+        let context = self.build_tooling_context(request);
+        let mut template_processor = TemplateProcessor::new()?;
+        template_processor
+            .process_embedded_template_directory(&template_path, request.output_path, context)
+            .context("Failed to generate build tooling (Makefile + Dockerfile)")?;
+
+        tracing::info!("Build tooling generated (Makefile + Dockerfile)");
+        Ok(())
+    }
+
+    /// 为构建模板构造与各语言项目一致的上下文（project_name / module_name / 版本 / port 等）。
+    fn build_tooling_context(
+        &self,
+        request: &GenerationRequest<'_>,
+    ) -> std::collections::HashMap<String, serde_json::Value> {
+        let project_name = request.project_name.clone();
+        match request.spec.language {
+            Language::Go => {
+                let mut go_params = GoParams::from_project_name(project_name);
+                go_params.base.host = request.gin_options.host.clone();
+                go_params.base.port = request.gin_options.port;
+                go_params.to_template_context()
+            }
+            Language::Python => {
+                let mut python_params = PythonParams::new(project_name);
+                python_params.base.host = request.gin_options.host.clone();
+                python_params.base.port = request.gin_options.port;
+                python_params.to_template_context()
+            }
+            Language::Rust => RustParams::new(project_name).to_template_context(),
+            Language::TypeScript => ProjectParams::new(project_name).to_template_context(),
         }
     }
 
@@ -501,5 +558,108 @@ impl GeneratorOrchestrator {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::generators::registry;
+    use std::fs;
+    use walkdir::WalkDir;
+
+    fn request_for<'a>(
+        language: Language,
+        framework: Framework,
+        project_name: &str,
+        output_path: &'a Path,
+        enable_build: bool,
+    ) -> GenerationRequest<'a> {
+        let spec = registry::resolve(language, framework).expect("spec resolves");
+        GenerationRequest {
+            spec,
+            project_name: project_name.to_string(),
+            output_path,
+            license: "MIT".to_string(),
+            enable_precommit: false,
+            enable_proto_gen: false,
+            enable_error_gen: false,
+            enable_build,
+            gin_options: GinProjectOptions::new(),
+        }
+    }
+
+    fn relative_files(root: &Path) -> Vec<String> {
+        WalkDir::new(root)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+            .map(|e| {
+                e.path()
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect()
+    }
+
+    #[test]
+    fn render_build_tooling_emits_makefile_and_dockerfile_for_python() {
+        // Given: a Python(None) request with --with-build enabled
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mut orchestrator = GeneratorOrchestrator::new().expect("orchestrator");
+        let request = request_for(
+            Language::Python,
+            Framework::None,
+            "build-probe",
+            tmp.path(),
+            true,
+        );
+
+        // When: only the build step runs (no language/project shell-out)
+        orchestrator
+            .render_build_tooling(&request)
+            .expect("render build tooling");
+
+        // Then: Makefile + Dockerfile exist, project_name substituted, no residual delimiters
+        let files = relative_files(tmp.path());
+        assert!(
+            files.iter().any(|f| f == "Makefile"),
+            "expected Makefile, got: {files:?}"
+        );
+        assert!(
+            files.iter().any(|f| f == "Dockerfile"),
+            "expected Dockerfile, got: {files:?}"
+        );
+        let makefile = fs::read_to_string(tmp.path().join("Makefile")).expect("read Makefile");
+        assert!(
+            makefile.contains("build-probe"),
+            "project_name not substituted into Makefile:\n{makefile}"
+        );
+        for rel in &files {
+            let content =
+                fs::read_to_string(tmp.path().join(rel)).unwrap_or_else(|_| panic!("read {rel}"));
+            assert!(!content.contains("<<"), "file {rel} has unrendered `<<`");
+            assert!(!content.contains("%>"), "file {rel} has unrendered `%>`");
+        }
+    }
+
+    #[test]
+    fn render_build_tooling_emits_makefile_and_dockerfile_for_rust() {
+        // Given: a Rust(None) request with --with-build enabled
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mut orchestrator = GeneratorOrchestrator::new().expect("orchestrator");
+        let request = request_for(Language::Rust, Framework::None, "rusty", tmp.path(), true);
+
+        // When
+        orchestrator
+            .render_build_tooling(&request)
+            .expect("render build tooling");
+
+        // Then
+        let files = relative_files(tmp.path());
+        assert!(files.iter().any(|f| f == "Makefile"), "got: {files:?}");
+        assert!(files.iter().any(|f| f == "Dockerfile"), "got: {files:?}");
     }
 }

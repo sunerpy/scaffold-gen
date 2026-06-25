@@ -1,0 +1,21 @@
+# Multi-stage build for <<project_name>> — release binary into distroless.
+# VERSION is available as a build-arg; wire it into a build.rs / env! if desired.
+
+FROM rust:1-bookworm AS build
+WORKDIR /src
+
+COPY . .
+ARG VERSION=dev
+ENV APP_VERSION=${VERSION}
+RUN cargo build --release && \
+    cp target/release/<<project_name>> /out
+
+# Debian-slim final stage: small, ships glibc + ca-certificates for HTTPS.
+# For a fully static image, build with the x86_64-unknown-linux-musl target
+# and switch this stage to gcr.io/distroless/static:nonroot.
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /out /usr/local/bin/<<project_name>>
+<%if port%>EXPOSE <<port>>
+<%endif%>ENTRYPOINT ["/usr/local/bin/<<project_name>>"]

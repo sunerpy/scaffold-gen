@@ -1,0 +1,29 @@
+# Multi-stage build for <<project_name>> — uv-managed Python app.
+
+FROM python:<<python_version>>-slim AS build
+# Pull in the uv binary from its official distroless image.
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+WORKDIR /app
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0
+
+# Install dependencies first (cached layer) using only the lockfiles.
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --no-install-project --no-dev
+
+# Copy the project source and install it.
+COPY . .
+RUN uv sync --no-dev
+
+FROM python:<<python_version>>-slim
+WORKDIR /app
+# Bring over the resolved virtualenv and the application code.
+COPY --from=build /app /app
+ENV PATH="/app/.venv/bin:$PATH"
+<%if port%>EXPOSE <<port>>
+<%endif%>
+# Basic projects: `python main.py`. FastAPI users change this to, e.g.
+#   CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "<<port>>"]
+CMD ["python", "main.py"]

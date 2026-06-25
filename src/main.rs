@@ -77,6 +77,12 @@ enum Commands {
         /// Enable error-gen tool (for Rust projects)
         #[arg(long, help = "Enable error-gen tool (for Rust projects)")]
         error_gen: Option<bool>,
+        /// Generate a companion Makefile + Dockerfile (build/image automation)
+        #[arg(
+            long,
+            help = "Generate a companion Makefile + Dockerfile (build/image automation)"
+        )]
+        with_build: Option<bool>,
     },
     /// List available languages and frameworks
     List {
@@ -137,6 +143,7 @@ async fn run(command: Commands) -> anyhow::Result<()> {
             swagger,
             proto_gen,
             error_gen,
+            with_build,
         } => {
             NewCommand::new(name, path)
                 .with_framework(framework)
@@ -149,6 +156,7 @@ async fn run(command: Commands) -> anyhow::Result<()> {
                 .with_swagger(swagger)
                 .with_proto_gen(proto_gen)
                 .with_error_gen(error_gen)
+                .with_build(with_build)
                 .execute()
                 .await
         }
@@ -260,6 +268,22 @@ mod cli_tests {
         assert!(cli.quiet);
         let cli = Cli::try_parse_from(["scafgen", "-v", "version"]).expect("global -v parses");
         assert!(cli.verbose);
+    }
+
+    #[test]
+    fn new_parses_with_build_flag() {
+        let cli =
+            Cli::try_parse_from(["scafgen", "new", "x", "--with-build", "true"]).expect("parses");
+        match cli.command {
+            Commands::New { with_build, .. } => assert_eq!(with_build, Some(true)),
+            _ => panic!("expected New variant"),
+        }
+
+        let without = Cli::try_parse_from(["scafgen", "new", "x"]).expect("parses without flag");
+        match without.command {
+            Commands::New { with_build, .. } => assert_eq!(with_build, None),
+            _ => panic!("expected New variant"),
+        }
     }
 
     #[test]

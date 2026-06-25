@@ -1,0 +1,76 @@
+# <<project_name>> — build & container automation (pure Make, no CI).
+# uv-managed Python project.
+#
+#   make help          list targets
+#   make build         sync the environment (uv sync)
+#   make run           run the app (adjust APP_ENTRY for FastAPI/uvicorn)
+#   make test          pytest
+#   make fmt           format (ruff + oxfmt)
+#   make lint          ruff check
+#   make check         fmt-check + lint + test (local verification)
+#   make clean         remove caches / build artifacts
+#   make docker-build  build the container image
+#   make docker-run    run the built image
+
+PROJECT_NAME := <<project_name>>
+PROJECT_ROOT := $(abspath .)
+
+# Entry point. Basic projects run `python main.py`; FastAPI users override, e.g.
+#   make run APP_ENTRY="uv run uvicorn app.main:app --reload"
+APP_ENTRY ?= uv run python main.py
+
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+
+HAS_OXFMT := $(shell command -v oxfmt 2>/dev/null)
+
+.DEFAULT_GOAL := help
+
+.PHONY: help build run test fmt fmt-py fmt-oxfmt fmt-check lint check clean docker-build docker-run
+
+help: ## Show this help
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+
+build: ## Sync the environment (install deps into .venv)
+	@uv sync
+
+run: ## Run the application (override APP_ENTRY for uvicorn)
+	@$(APP_ENTRY)
+
+test: ## Run tests
+	@uv run pytest
+
+fmt: fmt-py fmt-oxfmt ## Format Python + non-Python files
+
+fmt-py:
+	@uv run ruff format .
+	@uv run ruff check --fix .
+
+fmt-oxfmt:
+ifdef HAS_OXFMT
+	@oxfmt --write --no-error-on-unmatched-pattern "$(PROJECT_ROOT)"
+else
+	@echo "oxfmt not found, skipping non-Python formatting (cargo install oxfmt)"
+endif
+
+fmt-check: ## Verify formatting without writing
+	@uv run ruff format --check .
+ifdef HAS_OXFMT
+	@oxfmt --check --no-error-on-unmatched-pattern "$(PROJECT_ROOT)"
+endif
+
+lint: ## Run ruff lint
+	@uv run ruff check .
+
+check: fmt-check lint test ## Full local verification
+	@echo "All checks passed."
+
+clean: ## Remove caches / build artifacts
+	@rm -rf .pytest_cache .ruff_cache dist build *.egg-info
+	@find . -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
+
+docker-build: ## Build the container image
+	@docker build --build-arg VERSION=$(VERSION) -t $(PROJECT_NAME):latest .
+
+docker-run: docker-build ## Run the built image
+	@docker run --rm<%if port%> -p <<port>>:<<port>><%endif%> $(PROJECT_NAME):latest

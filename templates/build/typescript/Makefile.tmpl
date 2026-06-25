@@ -1,0 +1,75 @@
+# <<project_name>> — build & container automation (pure Make, no CI).
+# pnpm-managed Vite frontend project.
+#
+#   make help          list targets
+#   make build         pnpm build (production bundle → dist/)
+#   make run           pnpm dev (dev server)
+#   make test          pnpm test
+#   make fmt           format (pnpm format + oxfmt)
+#   make lint          pnpm lint
+#   make check         fmt-check + lint + test (local verification)
+#   make clean         remove build artifacts / node_modules
+#   make docker-build  build the container image
+#   make docker-run    run the built image
+
+PROJECT_NAME := <<project_name>>
+PROJECT_ROOT := $(abspath .)
+
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+
+HAS_OXFMT := $(shell command -v oxfmt 2>/dev/null)
+
+.DEFAULT_GOAL := help
+
+.PHONY: help install build run test fmt fmt-web fmt-oxfmt fmt-check lint check clean docker-build docker-run
+
+help: ## Show this help
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+
+install: ## Install dependencies
+	@pnpm install
+
+build: ## Build the production bundle (→ dist/)
+	@pnpm install --frozen-lockfile || pnpm install
+	@pnpm build
+
+run: ## Start the dev server
+	@pnpm dev
+
+test: ## Run tests (no-op if no test script)
+	@pnpm test 2>/dev/null || echo "no test script defined"
+
+fmt: fmt-web fmt-oxfmt ## Format sources + non-code files
+
+fmt-web:
+	@pnpm format 2>/dev/null || echo "no format script defined"
+
+fmt-oxfmt:
+ifdef HAS_OXFMT
+	@oxfmt --write --no-error-on-unmatched-pattern "$(PROJECT_ROOT)"
+else
+	@echo "oxfmt not found, skipping config-file formatting (cargo install oxfmt)"
+endif
+
+fmt-check: ## Verify formatting without writing
+ifdef HAS_OXFMT
+	@oxfmt --check --no-error-on-unmatched-pattern "$(PROJECT_ROOT)"
+else
+	@echo "oxfmt not found, skipping format check"
+endif
+
+lint: ## Run the linter
+	@pnpm lint
+
+check: fmt-check lint test ## Full local verification
+	@echo "All checks passed."
+
+clean: ## Remove build artifacts and dependencies
+	@rm -rf dist node_modules
+
+docker-build: ## Build the container image
+	@docker build --build-arg VERSION=$(VERSION) -t $(PROJECT_NAME):latest .
+
+docker-run: docker-build ## Run the built image (nginx serves dist/ on container :80)
+	@docker run --rm -p 8080:80 $(PROJECT_NAME):latest

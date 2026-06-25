@@ -1,0 +1,69 @@
+# <<project_name>> — build & container automation (pure Make, no CI).
+#
+#   make help          list targets
+#   make build         cargo build --release
+#   make run           cargo run --release
+#   make test          cargo test
+#   make fmt           format (cargo fmt + oxfmt)
+#   make lint          clippy (warnings as errors)
+#   make check         fmt-check + lint + test (local verification)
+#   make clean         remove build artifacts
+#   make docker-build  build the container image
+#   make docker-run    run the built image
+
+PROJECT_NAME := <<project_name>>
+PROJECT_ROOT := $(abspath .)
+
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+
+HAS_OXFMT := $(shell command -v oxfmt 2>/dev/null)
+
+.DEFAULT_GOAL := help
+
+.PHONY: help build run test fmt fmt-rust fmt-oxfmt fmt-check lint check clean docker-build docker-run
+
+help: ## Show this help
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+
+build: ## Build the release binary
+	@cargo build --release
+
+run: ## Run the release binary
+	@cargo run --release
+
+test: ## Run tests
+	@cargo test
+
+fmt: fmt-rust fmt-oxfmt ## Format Rust + non-Rust files
+
+fmt-rust:
+	@cargo fmt --all
+
+fmt-oxfmt:
+ifdef HAS_OXFMT
+	@oxfmt --write --no-error-on-unmatched-pattern "$(PROJECT_ROOT)"
+else
+	@echo "oxfmt not found, skipping non-Rust formatting (cargo install oxfmt)"
+endif
+
+fmt-check: ## Verify formatting without writing
+	@cargo fmt --all --check
+ifdef HAS_OXFMT
+	@oxfmt --check --no-error-on-unmatched-pattern "$(PROJECT_ROOT)"
+endif
+
+lint: ## Run clippy (warnings as errors)
+	@cargo clippy --all-targets -- -D warnings
+
+check: fmt-check lint test ## Full local verification
+	@echo "All checks passed."
+
+clean: ## Remove build artifacts
+	@cargo clean
+
+docker-build: ## Build the container image
+	@docker build --build-arg VERSION=$(VERSION) -t $(PROJECT_NAME):latest .
+
+docker-run: docker-build ## Run the built image
+	@docker run --rm<%if port%> -p <<port>>:<<port>><%endif%> $(PROJECT_NAME):latest
