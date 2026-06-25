@@ -159,6 +159,23 @@ def add(
 > **提示**：用扁平参数（每个入参单独列出），不要把所有参数打包成一个 Pydantic 模型类再传入。
 > 这样 `call_tool("add", {"a": 1, "b": 2})` 就能直接调用，更直观。
 
+> **关于参数校验错误（这是预期行为，不是 bug）**：如果客户端传错参数（比如漏传必填的
+> `text`），校验会在框架层（FastMCP / official SDK）发生，**发生在你的工具函数被调用之前**——
+> 框架会捕获该错误、把一条合规的错误响应**返回给客户端**，并在服务端以 **INFO** 级别记录
+> （形如 `... 1 validation error ... Missing required argument`）。因此你**不会**在服务端看到
+> "失败/ERROR"级别的日志，你的函数体也不会执行（所以也不会有你自己写的成功日志）。这是有意
+> 设计：错误已正确返回给调用方、未被吞掉。若你想在工具内部记录**业务逻辑**的失败，在你自己的
+> 函数里 `try/except` 后用 `get_logger(__name__).error(...)` 记录即可。
+> **About argument-validation errors (expected behavior, not a bug)**: if a client sends bad
+> arguments (e.g. omits the required `text`), validation happens in the framework layer
+> (FastMCP / official SDK) **before your tool function is called**. The framework catches it,
+> returns a proper error response **to the client**, and logs it server-side at **INFO** level
+> (e.g. `... 1 validation error ... Missing required argument`). So you will NOT see a
+> failure/ERROR-level server log, and your function body never runs (hence no success log
+> either). This is intentional — the error is correctly returned to the caller, not swallowed.
+> To log **business-logic** failures inside a tool, `try/except` in your own function and call
+> `get_logger(__name__).error(...)`.
+
 ### 第 3 步：写 `register(mcp)` 函数注册工具
 
 在同一个文件末尾加（**本脚手架推荐的显式调用形式，两种后端通用**）：
