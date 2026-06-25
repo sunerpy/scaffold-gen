@@ -52,7 +52,7 @@ scaffold-gen/
 ├── templates/               # Embedded .tmpl files (include_dir!)
 │   ├── build/               # --with-build templates: go/ rust/ python/ typescript/
 │   │                        #   each has Makefile.tmpl + Dockerfile.tmpl
-│   ├── frameworks/          # go/{gin,go-zero,mcp-server}/ rust/{tauri}/ python/{fastapi}/
+│   ├── frameworks/          # go/{gin,go-zero,mcp-server}/ rust/{tauri}/ python/{fastapi,mcp-python}/
 │   │                        #   typescript/{vue3,react}/
 │   ├── languages/           # go/, rust/, python/ (pure-language paths)
 │   └── licenses/            # MIT, Apache-2.0, GPL-3.0, etc.
@@ -68,28 +68,29 @@ scaffold-gen/
 
 ## FRAMEWORK REGISTRY
 
-8 frameworks total. `frameworks_for_language` in `constants.rs`:
+9 frameworks total. `frameworks_for_language` in `constants.rs`:
 
-| Language   | Frameworks             |
-| ---------- | ---------------------- |
-| Go         | Gin, GoZero, McpServer |
-| Python     | None, FastApi          |
-| Rust       | None, Tauri            |
-| TypeScript | Vue3, React            |
+| Language   | Frameworks                     |
+| ---------- | ------------------------------ |
+| Go         | Gin, GoZero, McpServer         |
+| Python     | None, FastApi, McpServerPython |
+| Rust       | None, Tauri                    |
+| TypeScript | Vue3, React                    |
 
 GenKind dispatch (`registry.rs` REGISTRY):
 
-| Framework | Language   | GenKind       | Notes                                           |
-| --------- | ---------- | ------------- | ----------------------------------------------- |
-| Gin       | Go         | GinSync       | Reads GinProjectOptions (host/port/swagger/...) |
-| GoZero    | Go         | Unimplemented | Returns clear error; no generator struct        |
-| McpServer | Go         | EmbeddedAsync | Gin + go-sdk, streamable-HTTP + SSE, buf/proto  |
-| FastApi   | Python     | EmbeddedAsync | config.toml-driven; uvicorn reload-loop fix     |
-| None      | Python     | EmbeddedAsync | uv init + structlog                             |
-| None      | Rust       | EmbeddedAsync | cargo init + proto/error-gen opts               |
-| Tauri     | Rust       | ExternalAsync | pnpm create-tauri-app shell-out                 |
-| Vue3      | TypeScript | EmbeddedAsync | Full Vite+Vue3+TS+Tailwind, .env-driven         |
-| React     | TypeScript | ExternalAsync | pnpm create vite shell-out                      |
+| Framework       | Language   | GenKind       | Notes                                                                          |
+| --------------- | ---------- | ------------- | ------------------------------------------------------------------------------ |
+| Gin             | Go         | GinSync       | Reads GinProjectOptions (host/port/swagger/...)                                |
+| GoZero          | Go         | Unimplemented | Returns clear error; no generator struct                                       |
+| McpServer       | Go         | EmbeddedAsync | Gin + go-sdk, streamable-HTTP + SSE, buf/proto                                 |
+| FastApi         | Python     | EmbeddedAsync | config.toml-driven; uvicorn reload-loop fix                                    |
+| McpServerPython | Python     | EmbeddedAsync | FastMCP/official backend, streamable `/mcp` + SSE `/sse`, Pydantic auto-schema |
+| None            | Python     | EmbeddedAsync | uv init + structlog                                                            |
+| None            | Rust       | EmbeddedAsync | cargo init + proto/error-gen opts                                              |
+| Tauri           | Rust       | ExternalAsync | pnpm create-tauri-app shell-out                                                |
+| Vue3            | TypeScript | EmbeddedAsync | Full Vite+Vue3+TS+Tailwind, .env-driven                                        |
+| React           | TypeScript | ExternalAsync | pnpm create vite shell-out                                                     |
 
 Go/TypeScript + `Framework::None` → no pure-language path (error: "language requires a framework").
 
@@ -129,7 +130,7 @@ scafgen skill <install|update|uninstall|status>  # install embedded SKILL.md int
 Global flags (all subcommands): `-q/--quiet` (errors only), `-v/--verbose` (debug).
 
 `new` flags: `--framework`, `--language`, `--host`, `--port`, `--license`, `--precommit`,
-`--swagger`, `--proto-gen`, `--error-gen`, `--with-build`.
+`--swagger`, `--proto-gen`, `--error-gen`, `--with-build`, `--mcp-backend <fastmcp|official>`.
 
 `skill` flags: `--target <agent>` (opencode/claude/cursor/kiro; repeatable; default all detected),
 `--global` (default) / `--local`, `-y/--yes` (install/uninstall), `--force` (update).
@@ -183,7 +184,7 @@ All tracing/diagnostics → **stderr**.
    confirmation
 4. **Go-Zero unimplemented**: `Framework::GoZero` resolves to `GenKind::Unimplemented` — returns a
    clear error; no generator struct exists; enum variant kept for CLI discoverability
-5. **Tests: 148 total**: 42 lib + 98 bin inline + 8 integration in `tests/generation.rs`; `make
+5. **Tests: 165 total**: 50 lib + 107 bin inline + 8 integration in `tests/generation.rs`; `make
 test` covers all
 6. **Vue3 is EmbeddedAsync**: moved from ExternalAsync — full offline scaffold, optional `pnpm
 install` post-step; `external.rs` no longer contains Vue3 logic
@@ -196,6 +197,14 @@ install` post-step; `external.rs` no longer contains Vue3 logic
    but not yet split (splitting the tightly-coupled dispatch would fragment logic)
 10. **AGENTS.md is now tracked**: removed from `.gitignore`; oxfmt formats it — `make fmt-check`
     enforces correct Markdown formatting on these files
+11. **mcp-python backend selection**: `McpServerPython` supports `--mcp-backend fastmcp|official`
+    (default `fastmcp`). Dual transport is always-on: `/mcp` (streamable-HTTP) + `/sse` (SSE);
+    `sse_enabled` in config.toml toggles the SSE mount at runtime. `make test` runs pytest with an
+    in-memory client (no live server needed) — backend switch changes only `app/server.py`.
+12. **include_dir! stale cache**: templates embed via `include_dir!` at compile time. Adding NEW
+    template files does not always trigger re-embed on incremental `cargo build` — the rendered
+    project silently misses new files. Fix: `touch build.rs` (or `cargo clean`) to bust the cache
+    before rendering/testing newly-added templates.
 
 ## COMMANDS
 
@@ -209,7 +218,7 @@ make release-upx    # Release + UPX compression
 make fmt            # Format code (rustfmt + oxfmt for YAML/JSON/Markdown)
 make fmt-check      # Check formatting (CI gate — also checks AGENTS.md now)
 make lint           # Clippy with -D warnings
-make test           # cargo test (42 lib + 62 bin + 8 integration)
+make test           # cargo test (50 lib + 107 bin + 8 integration)
 make ci             # fmt-check + lint + test
 
 # Cross-compile

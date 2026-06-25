@@ -48,13 +48,13 @@ new.rs::generate_project()
 
 ## GENKIND → FRAMEWORK MAPPING
 
-| GenKind       | Frameworks                             | Notes                                                |
-| ------------- | -------------------------------------- | ---------------------------------------------------- |
-| GinSync       | Gin                                    | Sync; reads `GinProjectOptions` for all options      |
-| EmbeddedAsync | McpServer, FastApi, None(Python/Rust), | Fully offline; templates embedded in binary          |
-|               | Vue3                                   | Vue3: optional `pnpm install` post-step              |
-| ExternalAsync | Tauri, React                           | Shell-out to pnpm/create-tauri-app; in `external.rs` |
-| Unimplemented | GoZero                                 | Returns error; enum variant kept for discoverability |
+| GenKind       | Frameworks                                          | Notes                                                |
+| ------------- | --------------------------------------------------- | ---------------------------------------------------- |
+| GinSync       | Gin                                                 | Sync; reads `GinProjectOptions` for all options      |
+| EmbeddedAsync | McpServer, FastApi, McpServerPython, None(Py/Rust), | Fully offline; templates embedded in binary          |
+|               | Vue3                                                | Vue3: optional `pnpm install` post-step              |
+| ExternalAsync | Tauri, React                                        | Shell-out to pnpm/create-tauri-app; in `external.rs` |
+| Unimplemented | GoZero                                              | Returns error; enum variant kept for discoverability |
 
 ## EXECUTION ORDER (EmbeddedAsync)
 
@@ -222,3 +222,31 @@ if pnpm is on PATH (non-fatal warn on failure). Generated project is `.env`-driv
 - `proto/echo.proto` → `make generate` (buf) → `GetJSONSchemaBytes()` wired as `InputSchema`.
 - Layout: `cmd/server/` + `internal/{config,log,mcpserver,tools,transport}/` + buf configs.
 - Committed placeholder `proto/gen/` files so a fresh clone compiles before `make generate`.
+
+## MCP SERVER SCAFFOLD (PYTHON)
+
+`Framework::McpServerPython` (Python, EmbeddedAsync). User selects backend via `--mcp-backend
+fastmcp|official` (default `fastmcp`). Generates:
+
+- **Dual transport always-on**: `/mcp` (streamable-HTTP) + `/sse` (SSE). `sse_enabled` in
+  `config.toml [mcp]` toggles the SSE mount at runtime without a rebuild.
+- **Backend abstraction in `app/server.py`**: the ONLY file with `<%if mcp_backend_is_official%>`
+  branching. Everything else (tools, logging, config, main.py) is backend-agnostic.
+  - `fastmcp` (default, `fastmcp>=2,<3`): `FastMCP` from `fastmcp`; streamable app via
+    `mcp.http_app(path="/")`, SSE app via `mcp.http_app(path="/", transport="sse")`; lifespan
+    composes both sub-app lifespans via `AsyncExitStack`.
+  - `official` (`mcp[cli]>=1.2,<2`): `FastMCP` from `mcp.server.fastmcp`; streamable app via
+    `mcp.streamable_http_app()`, SSE app via `mcp.sse_app()`; lifespan via
+    `mcp.session_manager.run()`.
+- **Tools auto-discovered** from `app/tools/*.py` via `register_tools(mcp)` in
+  `app/tools/__init__.py`: iterates `pkgutil` entries and calls each module's `register(mcp)`.
+  `register(mcp)` calls `mcp.tool(name=...)(fn)` — backend-agnostic, flat `Annotated` params,
+  no `@mcp.tool` decorator in tool files.
+- **`make test`** runs pytest with an in-memory client (no live server): fastmcp uses
+  `fastmcp.Client(mcp)`; official uses
+  `mcp.shared.memory.create_connected_server_and_client_session(mcp._mcp_server)`. A conftest
+  `_extract` helper normalises the different result shapes.
+- **Config**: `config.toml`-driven via `[server]`/`[mcp]`/`[log]` sections (mirrors FastAPI).
+  `McpConfig` fields: `backend`, `mcp_path` (`/mcp`), `sse_path` (`/sse`), `stateless` (`True`),
+  `sse_enabled` (`True`). `main.py` runs `app.server:asgi_app` via uvicorn.
+- **Template path**: `templates/frameworks/python/mcp-python/`.
