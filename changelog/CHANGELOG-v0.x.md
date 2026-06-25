@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/sunerpy/scaffold-gen/compare/v0.5.0...v0.6.0) (2026-06-25)
+
+
+### Features
+
+* 交互式 new 结束后打印等价的非交互命令 ([#15](https://github.com/sunerpy/scaffold-gen/issues/15)) ([294179e](https://github.com/sunerpy/scaffold-gen/commit/294179e5638ae59a1a1c675f6e107542a6a7e7d9))
+
 ## [0.5.0](https://github.com/sunerpy/scaffold-gen/compare/v0.4.1...v0.5.0) (2026-06-25)
 
 
