@@ -36,12 +36,36 @@
    pnpm preview
    ```
 
+## 配置 (Configuration)
+
+开发服务器与 API 地址全部由 `.env` 驱动，**改配置不用改代码**。脚手架已自带一份可直接运行的 `.env`（安全的 localhost 默认值），另有带注释的 `.env.example` 作为参考：
+
+```bash
+# 直接编辑 .env，或从示例复制一份
+cp .env.example .env
+```
+
+`vite.config.ts` 通过 Vite 的 `loadEnv` 读取以下键来配置开发服务器：
+
+| 键 (Key)                 | 作用 (Purpose)                                                       | 默认值 (Default)         |
+| ------------------------ | -------------------------------------------------------------------- | ------------------------ |
+| `VITE_DEV_HOST`          | 开发服务器监听地址（`0.0.0.0` 对外暴露 / `127.0.0.1` 仅本机）        | `0.0.0.0`                |
+| `VITE_DEV_PORT`          | 开发服务器端口                                                       | `5173`                   |
+| `VITE_DEV_ALLOWED_HOSTS` | 允许访问的 Host 列表（逗号分隔；填 `all` 放行任意 Host）             | `localhost,127.0.0.1`    |
+| `VITE_API_BASE_URL`      | 应用调用的后端 API 地址，注入客户端 `import.meta.env.VITE_API_BASE_URL` | `http://localhost:8000`  |
+| `VITE_DEV_PROXY_TARGET`  | 可选：非空时把 `/api` 反向代理到该地址（绕过 CORS），留空禁用         | （空 / empty）           |
+
+- `pnpm dev` 会绑定到 `VITE_DEV_HOST:VITE_DEV_PORT`，并按 `VITE_DEV_ALLOWED_HOSTS` 放行。
+- `VITE_API_BASE_URL` 已在 `src/lib/api.ts` 中读取并由 `apiFetch()` 使用，在 `HomeView` 中展示当前值；客户端可见的 `VITE_` 变量类型定义在 `env.d.ts`。
+- `.env.local` / `.env.*.local` 已被 `.gitignore` 忽略（个人覆盖），而 `.env` / `.env.example` 默认跟踪，保证克隆即可运行。
+
 ## 项目结构 (Project Structure)
 - `src/views/` - 页面组件。路由的顶层入口。
 - `src/components/` - 可复用的 UI 组件。
 - `src/stores/` - Pinia 状态管理模块。
 - `src/router/` - Vue Router 配置。
 - `src/composables/` - Vue 组合式函数 (如 `useDarkMode`)。
+- `src/lib/` - 通用库代码 (如读取 `VITE_API_BASE_URL` 的 `api.ts`)。
 - `src/styles/` - 全局样式文件。
 
 ## 构建与容器化 (Makefile + Docker)
