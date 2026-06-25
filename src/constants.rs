@@ -23,6 +23,19 @@ impl Language {
             Language::TypeScript => "TypeScript",
         }
     }
+
+    /// 该语言在 `templates/build/<dir>/` 下对应的小写目录名。
+    ///
+    /// 供 `--with-build` 的项目级渲染步骤把 `Language` 映射到统一的
+    /// 构建模板目录（Makefile/Dockerfile）。
+    pub fn build_dir(&self) -> &'static str {
+        match self {
+            Language::Go => "go",
+            Language::Python => "python",
+            Language::Rust => "rust",
+            Language::TypeScript => "typescript",
+        }
+    }
 }
 
 impl std::fmt::Display for Language {

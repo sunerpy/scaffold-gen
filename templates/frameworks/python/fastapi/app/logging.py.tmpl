@@ -1,21 +1,22 @@
-"""基于 structlog 的统一日志初始化 (structlog-based logging) for <<project_name>>.
+"""<<project_name>> 日志初始化 (structlog-based logging).
 
 设计 / Design:
-  - format="console" → 彩色控制台 + rich 异常回溯 (人类可读，适合本地开发)
+  - format="console" → 彩色控制台 + rich 异常回溯 (适合本地开发)
   - format="json"    → 结构化 JSON (适合生产采集)
   - 文件输出始终为 JSON；按大小轮转 (max_size MB × max_backups)
-  - compress=true 时，轮转后的文件用 gzip 压缩 (.gz)
-  - 超过 max_age 天的旧日志文件自动清理
+  - compress=true 时，轮转文件用 gzip 压缩 (.gz)
+  - 超过 max_age 天的旧日志自动清理
   - show_line=true 时附带 filename/func/lineno
-  - 抑制噪声库 (httpx/httpcore/uvicorn.access ...) 到 WARNING
-  - captureWarnings(True) 把 warnings 也纳入日志
+  - 抑制噪声库 (httpx/uvicorn.access ...) 到 WARNING
+  - captureWarnings(True) 把 warnings 纳入日志
 
-用法 / Usage:
-    from loggers import init_logging, get_logger
+★ 普通用户无需修改本文件 ★ —— 调日志级别/格式请改 config.toml 的 [log] 段。
+You normally never edit this file — tune logging in config.toml's [log] section.
 
-    init_logging(settings.log)        # 启动时调用一次 (call once at startup)
+用法 / Usage (已在 app/main.py 启动时自动调用):
+    from app.logging import get_logger
     logger = get_logger(__name__)
-    logger.info("started", port=8080)
+    logger.info("hello", user_id=42)
 """
 
 import gzip
@@ -28,7 +29,7 @@ from pathlib import Path
 import structlog
 from structlog.processors import CallsiteParameter, CallsiteParameterAdder
 
-from core.settings import LogConfig
+from app.settings import LogConfig
 
 # 默认日志文件名 (default log filename)
 _DEFAULT_LOG_FILE = "<<package_name>>.log"
@@ -102,7 +103,7 @@ def init_logging(
     *,
     default_file_name: str = _DEFAULT_LOG_FILE,
 ) -> structlog.stdlib.BoundLogger:
-    """初始化日志系统，应在程序启动时调用一次.
+    """初始化日志系统，应在应用启动时调用一次.
 
     Args:
         config: 日志配置 (来自 settings.log)；为 None 时使用默认值。

@@ -1,18 +1,23 @@
 """Main entry point for <<project_name>>."""
 
-from loggers.logger import get_logger
+from core.settings import settings
+from loggers import get_logger, init_logging
 
-# Initialize logger
+# 启动时初始化日志系统一次 (initialize logging once at startup)
+init_logging(settings.log)
 logger = get_logger(__name__)
 
 
 def main() -> None:
     """Main function."""
-    logger.info("Starting <<project_name>>...")
-    logger.info("Project version: <<project_version>>")
-    
+    logger.info(
+        "starting application",
+        project=settings.project_name,
+        version=settings.version,
+    )
+
     # Your application logic here
-    logger.info("Application running successfully")
+    logger.info("application running successfully")
 
 
 if __name__ == "__main__":

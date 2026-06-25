@@ -102,6 +102,28 @@ pnpm lint             # 前端 Lint
 
 ---
 
+## 构建与容器化 (Makefile + Docker)
+
+> 本节内容仅在项目生成时选择了 `--with-build`（或在交互提示"生成配套 Makefile + Dockerfile？"中选择了是）时才会生成。
+> 若当前项目没有 `Makefile` / `Dockerfile`，用 `scafgen new <name> --framework tauri --with-build` 重新生成即可。
+
+Makefile + 多阶段 Dockerfile 由 `scafgen` 自动生成，覆盖从本地构建到容器化的完整流程，
+**全部通过 `make` 完成，不依赖 GitHub Actions / CI 平台**。
+
+```bash
+make help          # 列出所有可用目标
+make build         # 构建桌面应用（cargo tauri build）
+make run           # 开发模式运行（cargo tauri dev）
+make test          # 运行测试
+make fmt           # 格式化代码（Rust + 前端）
+make lint          # lint 检查
+make check         # fmt + lint + test（一键本地校验）
+make docker-build  # 构建容器镜像（docker build -t <<project_name>>:latest .）
+make docker-run    # 运行容器
+```
+
+---
+
 ## 推荐工具：CodeGraph (Recommended)
 
 当项目变大、或你用 AI 编程助手时，推荐集成
@@ -110,11 +132,15 @@ pnpm lint             # 前端 Lint
 - 基于 **tree-sitter + SQLite/FTS5** 的确定性代码知识图谱，**不含任何 AI/LLM**，输出字节级稳定。
 - 提供符号 / 调用 / 依赖关系图，支持 **CLI 与 MCP server** 两种用法，可直接喂给 AI 编程 Agent。
 - **单一二进制、易用、极高性能**：显著提升开发效率，同时大幅降低 token 消耗。
+- 接入后 Agent **自动**通过 MCP 探索符号/调用关系，并**自动检测文件变更增量同步**，无需手动维护索引。
+
+在 opencode、Claude、Kiro、Cursor 等支持 MCP 的 AI 编程工具中，只需：
 
 ```bash
-codegraph sync                 # 建立/更新索引
-codegraph explore "your code"  # 探索符号与调用关系
+codegraph install   # 安装并自动接入 opencode / Claude / Kiro / Cursor 等工具的 MCP
 ```
+
+重启编辑器 / Agent 工具后即自动接入 MCP，Agent 会自动调用 CodeGraph 检索，并在文件变更时自动增量同步（无需手动 sync/explore）。
 
 ---
 

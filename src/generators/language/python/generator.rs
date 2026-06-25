@@ -42,7 +42,7 @@ impl PythonGenerator {
     fn add_dependencies(&self, output_path: &Path) -> Result<()> {
         tracing::debug!("Adding Python dependencies...");
 
-        let dependencies = vec!["pydantic", "python-dotenv", "rich"];
+        let dependencies = vec!["pydantic", "python-dotenv", "structlog", "rich"];
 
         for dep in dependencies {
             let status = Command::new("uv")

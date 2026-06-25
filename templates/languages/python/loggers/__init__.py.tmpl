@@ -1,1 +1,8 @@
-"""Logging config for <<project_name>>"""
+"""Logging package for <<project_name>> — structlog-based.
+
+    from loggers import init_logging, get_logger
+"""
+
+from loggers.logger import get_logger, init_logging
+
+__all__ = ["get_logger", "init_logging"]

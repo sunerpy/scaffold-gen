@@ -24,6 +24,7 @@ pub(super) struct ProjectParams {
     pub(super) enable_swagger: bool,
     pub(super) enable_proto_gen: bool,
     pub(super) enable_error_gen: bool,
+    pub(super) enable_build: bool,
 }
 
 pub struct NewCommand {
@@ -39,6 +40,7 @@ pub struct NewCommand {
     pub(super) enable_swagger: Option<bool>,
     pub(super) enable_proto_gen: Option<bool>,
     pub(super) enable_error_gen: Option<bool>,
+    pub(super) enable_build: Option<bool>,
 }
 
 impl NewCommand {
@@ -56,6 +58,7 @@ impl NewCommand {
             enable_swagger: None,
             enable_proto_gen: None,
             enable_error_gen: None,
+            enable_build: None,
         }
     }
 
@@ -109,6 +112,11 @@ impl NewCommand {
         self
     }
 
+    pub fn with_build(mut self, enable_build: Option<bool>) -> Self {
+        self.enable_build = enable_build;
+        self
+    }
+
     pub async fn execute(&self) -> Result<()> {
         tracing::info!("Welcome to Scaffold-Gen Project Generator!");
 
@@ -130,6 +138,9 @@ impl NewCommand {
         let (enable_proto_gen, enable_error_gen) =
             self.configure_rust_tools(&language, &framework)?;
 
+        // 配置构建工具链 (Makefile + Dockerfile)
+        let enable_build = self.configure_build()?;
+
         // 确定项目路径
         let project_path = self.determine_project_path()?;
 
@@ -145,6 +156,7 @@ impl NewCommand {
             enable_swagger,
             enable_proto_gen,
             enable_error_gen,
+            enable_build,
         };
 
         self.generate_project(params).await?;
@@ -216,6 +228,7 @@ impl NewCommand {
                 enable_precommit: params.enable_precommit,
                 enable_proto_gen: params.enable_proto_gen,
                 enable_error_gen: params.enable_error_gen,
+                enable_build: params.enable_build,
                 gin_options,
             })
             .await

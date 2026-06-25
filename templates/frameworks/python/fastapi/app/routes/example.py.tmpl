@@ -18,6 +18,12 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.logging import get_logger
+
+# 结构化日志：在业务里直接 logger.info("event", key=value)
+# Structured logging: use logger.info("event", key=value) in your handlers.
+logger = get_logger(__name__)
+
 # `router` 是被自动发现的关键变量。prefix 决定 URL 前缀，tags 用于接口文档分组。
 # `router` is the variable the app looks for. prefix = URL prefix, tags = docs group.
 router = APIRouter(prefix="/api", tags=["example"])
@@ -59,4 +65,5 @@ async def get_item(item_id: int) -> Item:
 async def create_item(item_id: int, item: Item) -> Item:
     """新建一个资源 —— FastAPI 会按 Item 模型自动校验请求体."""
     _ITEMS[item_id] = item
+    logger.info("item created", item_id=item_id, name=item.name)
     return item

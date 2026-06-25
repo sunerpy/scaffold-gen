@@ -1,7 +1,7 @@
 """<<project_name>> 配置加载 (config loader).
 
 读取顺序 / Load order (later overrides earlier):
-  1. config.toml  ([server], [app] 段)
+  1. config.toml  ([server], [app], [log] 段)
   2. .env / 系统环境变量 (SERVER__HOST, SERVER__PORT, APP__LOG_LEVEL ...)
 
 ★ 普通用户无需修改本文件 ★ —— 改 host/port 请改 config.toml 或 .env。
@@ -33,6 +33,40 @@ class AppConfig(BaseModel):
     log_level: str = "info"
 
 
+class LogConfig(BaseModel):
+    """日志配置 (logging configuration)，对应 config.toml 的 [log] 段."""
+
+    # 日志级别 / log level: debug / info / warning / error / critical
+    level: str = "info"
+
+    # 输出格式 / output format: "console" (彩色人类可读) 或 "json" (结构化)
+    format: str = "json"
+
+    # 日志目录 / log directory (留空 = 不写文件)
+    directory: str = "logs"
+
+    # 显式文件路径 / explicit file path (优先于 directory；留空 = directory + 默认名)
+    file: str = ""
+
+    # 是否同时输出到控制台 / also log to console
+    log_in_console: bool = True
+
+    # 是否附带 文件名/函数/行号 / include filename/func/lineno
+    show_line: bool = False
+
+    # 单文件最大体积 (MB) / max size per file before rotation
+    max_size: int = 10
+
+    # 保留的轮转文件数量 / number of rotated backups to keep
+    max_backups: int = 10
+
+    # 旧日志保留天数 / days to keep old log files (0 = 永久)
+    max_age: int = 30
+
+    # 轮转后是否 gzip 压缩 / gzip-compress rotated files
+    compress: bool = True
+
+
 def _load_toml() -> dict:
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE, "rb") as f:
@@ -51,6 +85,7 @@ class Settings(BaseSettings):
 
     server: ServerConfig = ServerConfig()
     app: AppConfig = AppConfig()
+    log: LogConfig = LogConfig()
 
 
 def load_settings() -> Settings:

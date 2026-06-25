@@ -1,0 +1,21 @@
+# Multi-stage build for <<project_name>> — Vite SPA served by nginx.
+
+FROM node:lts-alpine AS build
+WORKDIR /app
+RUN corepack enable
+
+# Install dependencies first (cached) using the lockfile when present.
+COPY package.json pnpm-lock.yaml* ./
+RUN pnpm install --frozen-lockfile || pnpm install
+
+COPY . .
+ARG VERSION=dev
+RUN pnpm build
+
+# Serve the static bundle with nginx. For an SPA you typically want a
+# try_files fallback to index.html — add an nginx.conf and COPY it in if your
+# app uses client-side routing.
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

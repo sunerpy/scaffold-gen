@@ -100,6 +100,9 @@ scafgen new my-react-app  --framework react
 scafgen new my-api        --framework fastapi --language python
 scafgen new my-mcp        --framework mcp-server --language go
 
+# 同时生成 Makefile + Dockerfile（本地构建 / 容器化）
+scafgen new my-gin-app --framework gin --with-build
+
 # 全局开关（对所有子命令生效）
 scafgen -q new my-project   # 静默：仅显示错误
 scafgen -v new my-project   # 详细：显示调试输出

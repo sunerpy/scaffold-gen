@@ -1,8 +1,40 @@
-[logger]
-level = "INFO"
-log_file = "app.log"
-max_bytes = 10485760  # 10 MB
-backup_count = 10
-enable_rich = true
-enable_json = false   # 该选项控制控制台输出,日志文件无论何时都为json格式
-enable_console = true
+# ============================================================================
+#  <<project_name>> — 配置示例 (Configuration Example)
+# ----------------------------------------------------------------------------
+#  复制为 config.<env>.toml (dev / test / prod) 并按环境调整。
+#  Copy to config.<env>.toml and tune per environment.
+# ============================================================================
+
+[log]
+# 日志级别 / log level: debug / info / warning / error / critical
+level = "info"
+
+# 输出格式 / output format:
+#   "console" → 彩色人类可读 (本地开发友好)
+#   "json"    → 结构化 JSON (生产采集友好)
+format = "json"
+
+# 日志目录 / log directory (留空字符串则不写文件，仅控制台)
+directory = "logs"
+
+# 显式文件路径 / explicit file path
+#   留空则使用 directory + 默认文件名；非空时优先生效
+file = ""
+
+# 是否同时输出到控制台 / also emit to console
+log_in_console = true
+
+# 是否在每条日志附带 文件名/函数/行号 / include filename, func, lineno
+show_line = false
+
+# 单个日志文件最大体积 (MB)，超过即按大小轮转 / max size per file (MB)
+max_size = 10
+
+# 保留的轮转文件数量 / number of rotated backups to keep
+max_backups = 10
+
+# 旧日志保留天数，超过自动清理 (0 = 永久) / days to keep old logs (0 = forever)
+max_age = 30
+
+# 轮转后是否 gzip 压缩 / gzip-compress rotated files
+compress = true

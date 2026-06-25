@@ -176,6 +176,21 @@ impl NewCommand {
         }
     }
 
+    pub(super) fn configure_build(&self) -> Result<bool> {
+        tracing::debug!("Configuring build tooling (Makefile + Dockerfile)...");
+
+        if let Some(enable) = self.enable_build {
+            tracing::debug!("Using provided build tooling setting: {enable}");
+            Ok(enable)
+        } else {
+            tracing::debug!("Prompting for build tooling...");
+            Confirm::new("生成配套 Makefile + Dockerfile (自动化构建/镜像)?")
+                .with_default(false)
+                .prompt()
+                .context("Failed to get build tooling preference")
+        }
+    }
+
     pub(super) fn configure_license(&self) -> Result<String> {
         tracing::debug!("Configuring license...");
 

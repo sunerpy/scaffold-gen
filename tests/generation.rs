@@ -71,6 +71,39 @@ fn python_embedded_generation_renders_without_external_tools() {
         readme.contains("integration-demo"),
         "project_name not substituted into README.md:\n{readme}"
     );
+
+    // Then(4): logger 模板采用 structlog；不再残留旧 logger_state 模块
+    let logger = fs::read_to_string(tmp.path().join("loggers/logger.py"))
+        .expect("read generated loggers/logger.py");
+    assert!(
+        logger.contains("structlog"),
+        "logger.py should use structlog:\n{logger}"
+    );
+    assert!(
+        logger.contains("def init_logging"),
+        "logger.py should expose init_logging:\n{logger}"
+    );
+    assert!(
+        !files.iter().any(|f| f == "loggers/logger_state.py"),
+        "logger_state.py should be removed, got: {files:?}"
+    );
+
+    // Then(5): dev 配置含 [log] 段且为 console 格式 (debug 友好)
+    let dev_cfg = fs::read_to_string(tmp.path().join("config/config.dev.toml"))
+        .expect("read generated config/config.dev.toml");
+    assert!(
+        dev_cfg.contains("[log]") && dev_cfg.contains("format = \"console\""),
+        "dev config should have a [log] section in console format:\n{dev_cfg}"
+    );
+    // prod 配置为 json + 压缩
+    let prod_cfg = fs::read_to_string(tmp.path().join("config/config.prod.toml"))
+        .expect("read generated config/config.prod.toml");
+    assert!(
+        prod_cfg.contains("[log]")
+            && prod_cfg.contains("format = \"json\"")
+            && prod_cfg.contains("compress = true"),
+        "prod config should have a [log] section in json format with compression:\n{prod_cfg}"
+    );
 }
 
 #[test]
@@ -98,6 +131,7 @@ fn fastapi_embedded_generation_renders_without_external_tools() {
         "README.md",
         "app/main.py",
         "app/settings.py",
+        "app/logging.py",
         "app/routes/example.py",
         "app/routes/health.py",
     ] {
@@ -136,6 +170,24 @@ fn fastapi_embedded_generation_renders_without_external_tools() {
     assert!(
         config.contains("0.0.0.0") && config.contains("8000"),
         "host/port not driven into config.toml:\n{config}"
+    );
+
+    // Then(4): FastAPI 也使用 structlog；config.toml 含 [log] 段；启动时初始化日志
+    let app_logging = fs::read_to_string(tmp.path().join("app/logging.py"))
+        .expect("read generated app/logging.py");
+    assert!(
+        app_logging.contains("structlog") && app_logging.contains("def init_logging"),
+        "app/logging.py should use structlog and expose init_logging:\n{app_logging}"
+    );
+    assert!(
+        config.contains("[log]"),
+        "fastapi config.toml should have a [log] section:\n{config}"
+    );
+    let app_main =
+        fs::read_to_string(tmp.path().join("app/main.py")).expect("read generated app/main.py");
+    assert!(
+        app_main.contains("init_logging(settings.log)"),
+        "app/main.py should initialize logging at startup:\n{app_main}"
     );
 }
 
@@ -294,5 +346,153 @@ fn mcp_server_embedded_generation_renders_without_external_tools() {
     assert!(
         readme.contains("mcp-demo") && readme.contains("streamable") && readme.contains("/sse"),
         "README missing project name / transport sections:\n{readme}"
+    );
+}
+
+#[test]
+fn with_build_renders_makefile_and_dockerfile_for_python() {
+    // Given: a Python project context + the build template dir (mirrors --with-build)
+    let params = PythonParams::new("build-on".to_string());
+    let context = params.to_template_context();
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+
+    // When: render templates/build/python (the exact path render_build_tooling uses)
+    processor
+        .process_embedded_template_directory("build/python", tmp.path(), context)
+        .expect("render build templates");
+
+    // Then(1): Makefile AND Dockerfile exist in the project root
+    let files = collect_relative_files(tmp.path());
+    assert!(
+        files.iter().any(|f| f == "Makefile"),
+        "expected Makefile, got: {files:?}"
+    );
+    assert!(
+        files.iter().any(|f| f == "Dockerfile"),
+        "expected Dockerfile, got: {files:?}"
+    );
+
+    // Then(2): project_name substituted, no residual delimiters
+    let makefile = fs::read_to_string(tmp.path().join("Makefile")).expect("read Makefile");
+    assert!(
+        makefile.contains("build-on"),
+        "project_name not substituted into Makefile:\n{makefile}"
+    );
+    for rel in &files {
+        let content =
+            fs::read_to_string(tmp.path().join(rel)).unwrap_or_else(|_| panic!("read {rel}"));
+        assert!(
+            !content.contains("<<"),
+            "file {rel} still contains unrendered `<<`"
+        );
+        assert!(
+            !content.contains("%>"),
+            "file {rel} still contains unrendered `%>`"
+        );
+    }
+}
+
+#[test]
+fn without_build_leaves_no_makefile_or_dockerfile() {
+    // Given: a Python language render WITHOUT the build step
+    let params = PythonParams::new("build-off".to_string());
+    let context = params.to_template_context();
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+
+    // When: only the language templates are rendered (no --with-build → no build dir)
+    processor
+        .process_embedded_template_directory("languages/python", tmp.path(), context)
+        .expect("render python templates");
+
+    // Then: build tooling is absent
+    let files = collect_relative_files(tmp.path());
+    assert!(
+        !files.iter().any(|f| f == "Makefile"),
+        "Makefile should be absent without --with-build, got: {files:?}"
+    );
+    assert!(
+        !files.iter().any(|f| f == "Dockerfile"),
+        "Dockerfile should be absent without --with-build, got: {files:?}"
+    );
+}
+
+#[test]
+fn with_build_renders_makefile_and_dockerfile() {
+    // Given: a Python project's template context (--with-build renders build/python)
+    let mut params = PythonParams::new("build-demo".to_string());
+    params.base.host = Some("0.0.0.0".to_string());
+    params.base.port = Some(8000);
+    let context = params.to_template_context();
+
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+
+    // When: rendering the unified build tooling tree into the project root
+    processor
+        .process_embedded_template_directory("build/python", tmp.path(), context)
+        .expect("render embedded build templates");
+
+    // Then(1): Makefile + Dockerfile exist in the output root, .tmpl stripped
+    let files = collect_relative_files(tmp.path());
+    assert!(
+        files.iter().any(|f| f == "Makefile"),
+        "expected Makefile, got: {files:?}"
+    );
+    assert!(
+        files.iter().any(|f| f == "Dockerfile"),
+        "expected Dockerfile, got: {files:?}"
+    );
+    assert!(
+        !files.iter().any(|f| f.ends_with(".tmpl")),
+        "no .tmpl files should remain, got: {files:?}"
+    );
+
+    // Then(2): no residual custom delimiters `<<` / `%>`
+    for rel in &files {
+        let content = fs::read_to_string(tmp.path().join(rel))
+            .unwrap_or_else(|_| panic!("read generated file {rel}"));
+        assert!(
+            !content.contains("<<"),
+            "file {rel} still contains unrendered `<<`"
+        );
+        assert!(
+            !content.contains("%>"),
+            "file {rel} still contains unrendered `%>`"
+        );
+    }
+
+    // Then(3): project_name substituted into the rendered build tooling
+    let makefile = fs::read_to_string(tmp.path().join("Makefile")).expect("read Makefile");
+    assert!(
+        makefile.contains("build-demo"),
+        "project_name not substituted into Makefile:\n{makefile}"
+    );
+}
+
+#[test]
+fn without_build_flag_no_makefile_or_dockerfile() {
+    // Given: a plain Python project rendered WITHOUT the build tooling tree
+    let params = PythonParams::new("nobuild-demo".to_string());
+    let context = params.to_template_context();
+
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+
+    // When: rendering only the language templates (no build/<lang>), i.e. --with-build absent
+    processor
+        .process_embedded_template_directory("languages/python", tmp.path(), context)
+        .expect("render embedded python templates");
+
+    // Then: build tooling is opt-in — neither Makefile nor Dockerfile is generated
+    let files = collect_relative_files(tmp.path());
+    assert!(
+        !files.iter().any(|f| f == "Makefile"),
+        "Makefile must be absent without --with-build, got: {files:?}"
+    );
+    assert!(
+        !files.iter().any(|f| f == "Dockerfile"),
+        "Dockerfile must be absent without --with-build, got: {files:?}"
     );
 }
