@@ -1,0 +1,60 @@
+"""<<project_name>> 启动入口 (entrypoint).
+
+读取 config.toml / .env 中的 host、port，按其启动 uvicorn。
+改监听地址/端口请改 config.toml，不要改这里。
+Reads host/port from config.toml / .env and starts uvicorn accordingly.
+To change the listen address/port, edit config.toml — not this file.
+
+启动 / Run:
+    uv run python main.py
+"""
+
+from pathlib import Path
+
+import uvicorn
+
+from app.logging import init_logging
+from app.settings import settings
+
+BASE_DIR = Path(__file__).resolve().parent
+
+# 热重载只监听源码目录 app/，并把入口/配置文件显式纳入。
+# 关键：日志写入 logs/ 在项目根目录内，若监听整个根目录会被日志写入反复触发
+# reload，形成死循环。这里把 logs/、虚拟环境、缓存、git 等会变动但非源码的路径排除。
+# Only watch the app/ source dir for reload, and explicitly include the entry /
+# config files. The logger writes into logs/ inside the project root; watching the
+# whole root makes each log write re-trigger reload, an infinite loop. Exclude
+# logs/, the venv, caches and git so they never re-trigger the reloader.
+_RELOAD_DIRS = [str(BASE_DIR / "app")]
+_RELOAD_INCLUDES = ["main.py", "config.toml", ".env"]
+_RELOAD_EXCLUDES = [
+    "logs",
+    "logs/*",
+    "*.log",
+    "*.log.*",
+    ".venv",
+    ".venv/*",
+    "__pycache__",
+    "__pycache__/*",
+    "*.pyc",
+    ".git",
+    ".git/*",
+]
+
+
+def main() -> None:
+    """按配置启动 MCP HTTP 服务."""
+    init_logging(settings.log)
+    uvicorn.run(
+        "app.server:asgi_app",
+        host=settings.server.host,
+        port=settings.server.port,
+        reload=settings.server.reload,
+        reload_dirs=_RELOAD_DIRS,
+        reload_includes=_RELOAD_INCLUDES,
+        reload_excludes=_RELOAD_EXCLUDES,
+    )
+
+
+if __name__ == "__main__":
+    main()
