@@ -237,6 +237,62 @@ fn vue3_embedded_generation_renders_without_external_tools() {
 
     let vite_config = temp_dir.path().join("vite.config.ts");
     assert!(vite_config.exists(), "vite.config.ts was not generated");
+    let vite_config_content = std::fs::read_to_string(&vite_config).unwrap();
+    assert!(
+        vite_config_content.contains("loadEnv"),
+        "vite.config.ts must read env via loadEnv:\n{vite_config_content}"
+    );
+    assert!(
+        vite_config_content.contains("allowedHosts"),
+        "vite.config.ts must configure server.allowedHosts:\n{vite_config_content}"
+    );
+    assert!(
+        vite_config_content.contains("VITE_DEV_HOST")
+            && vite_config_content.contains("VITE_DEV_PORT"),
+        "vite.config.ts must read VITE_DEV_HOST / VITE_DEV_PORT:\n{vite_config_content}"
+    );
+
+    // .env (ready-to-run) + .env.example (documented reference) must be generated.
+    let dotenv = temp_dir.path().join(".env");
+    assert!(dotenv.exists(), ".env was not generated");
+    let dotenv_content = std::fs::read_to_string(&dotenv).unwrap();
+    for key in [
+        "VITE_DEV_HOST",
+        "VITE_DEV_PORT",
+        "VITE_DEV_ALLOWED_HOSTS",
+        "VITE_API_BASE_URL",
+    ] {
+        assert!(
+            dotenv_content.contains(key),
+            ".env must contain {key}:\n{dotenv_content}"
+        );
+    }
+
+    let dotenv_example = temp_dir.path().join(".env.example");
+    assert!(dotenv_example.exists(), ".env.example was not generated");
+    let dotenv_example_content = std::fs::read_to_string(&dotenv_example).unwrap();
+    assert!(
+        dotenv_example_content.contains("VITE_API_BASE_URL"),
+        ".env.example must document VITE_API_BASE_URL:\n{dotenv_example_content}"
+    );
+
+    // env.d.ts must type the client-visible API base URL.
+    let env_d_ts = temp_dir.path().join("env.d.ts");
+    assert!(env_d_ts.exists(), "env.d.ts was not generated");
+    let env_d_ts_content = std::fs::read_to_string(&env_d_ts).unwrap();
+    assert!(
+        env_d_ts_content.contains("VITE_API_BASE_URL"),
+        "env.d.ts must type VITE_API_BASE_URL:\n{env_d_ts_content}"
+    );
+
+    // The API base URL must actually be used somewhere (not dead config).
+    let api_lib = temp_dir.path().join("src/lib/api.ts");
+    assert!(api_lib.exists(), "src/lib/api.ts was not generated");
+    let api_lib_content = std::fs::read_to_string(&api_lib).unwrap();
+    assert!(
+        api_lib_content.contains("import.meta.env.VITE_API_BASE_URL"),
+        "src/lib/api.ts must reference import.meta.env.VITE_API_BASE_URL:\n{api_lib_content}"
+    );
 
     let main_ts = temp_dir.path().join("src/main.ts");
     assert!(main_ts.exists(), "src/main.ts was not generated");
