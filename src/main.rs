@@ -14,7 +14,7 @@ use commands::new::NewCommand;
 use logging::Verbosity;
 
 const FRAMEWORK_HELP: &str =
-    "Framework type (gin, go-zero, mcp-server, tauri, vue3, react, fastapi, none)";
+    "Framework type (gin, go-zero, mcp-server, tauri, vue3, react, fastapi, mcp-python, none)";
 const LANGUAGE_HELP: &str = "Project language (go, rust, python, typescript)";
 
 #[derive(Parser)]
