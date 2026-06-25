@@ -184,7 +184,7 @@ All tracing/diagnostics → **stderr**.
    confirmation
 4. **Go-Zero unimplemented**: `Framework::GoZero` resolves to `GenKind::Unimplemented` — returns a
    clear error; no generator struct exists; enum variant kept for CLI discoverability
-5. **Tests: 165 total**: 50 lib + 107 bin inline + 8 integration in `tests/generation.rs`; `make
+5. **Tests: 169 total**: 50 lib + 110 bin inline + 9 integration in `tests/generation.rs`; `make
 test` covers all
 6. **Vue3 is EmbeddedAsync**: moved from ExternalAsync — full offline scaffold, optional `pnpm
 install` post-step; `external.rs` no longer contains Vue3 logic
@@ -218,7 +218,7 @@ make release-upx    # Release + UPX compression
 make fmt            # Format code (rustfmt + oxfmt for YAML/JSON/Markdown)
 make fmt-check      # Check formatting (CI gate — also checks AGENTS.md now)
 make lint           # Clippy with -D warnings
-make test           # cargo test (50 lib + 107 bin + 8 integration)
+make test           # cargo test (50 lib + 110 bin + 9 integration)
 make ci             # fmt-check + lint + test
 
 # Cross-compile
