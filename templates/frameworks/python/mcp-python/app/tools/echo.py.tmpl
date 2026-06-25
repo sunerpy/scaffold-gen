@@ -1,0 +1,49 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  ★★★  你的业务代码写在这里 (WRITE YOUR TOOL HERE)  ★★★
+# ───────────────────────────────────────────────────────────────────────────
+#  这是一个"可直接照抄"的范例工具。新增一个 MCP 工具只需 3 步：
+#  Adding an MCP tool takes 3 steps — just copy this file and edit:
+#
+#    1) 在 app/tools/ 下新建一个 .py 文件（例如 weather.py）。
+#       Create a new .py file under app/tools/ (e.g. weather.py).
+#    2) 写一个带类型注解的函数，用 `Annotated[..., Field(...)]` 描述每个入参。
+#       Write a type-annotated function; describe each input with
+#       `Annotated[..., Field(...)]`.
+#    3) 写 `def register(mcp): mcp.tool(name=..., description=...)(你的函数)`。
+#       Add `def register(mcp): mcp.tool(name=..., description=...)(your_fn)`.
+#       —— 不要写 `@mcp.tool` 装饰器：两种后端的括号写法不同，这里的"显式调用"
+#          形式两边通用。保存即被自动发现，无需改任何其它文件。
+#       Do NOT use the `@mcp.tool` decorator — the two backends differ on its
+#       call shape; this explicit call form is portable. Saving auto-discovers it.
+#
+#  本文件刻意不 import 任何 MCP 后端 —— 工具对 fastmcp / official 完全无感。
+#  This file intentionally imports NO MCP backend — tools are backend-agnostic.
+# ═══════════════════════════════════════════════════════════════════════════
+
+from typing import Annotated
+
+from pydantic import Field
+
+from app.logging import get_logger
+
+
+# ── 1. 写你的工具函数 (write your tool function) ─────────────────────────────
+#    用"扁平参数 + Annotated/Field"描述入参（不要包成一个 Pydantic 模型），
+#    这样调用方式就是 call_tool("echo", {"text": "hi", "repeat": 2})。
+#    Use FLAT params with Annotated/Field (not a single Pydantic model arg),
+#    so the call is call_tool("echo", {"text": "hi", "repeat": 2}).
+def echo(
+    text: Annotated[str, Field(min_length=1, description="Text to echo back")],
+    repeat: Annotated[int, Field(ge=1, le=10)] = 1,
+) -> dict:
+    """Echo text back, optionally repeated 1-10 times."""
+    logger = get_logger(__name__)
+    echoed = " ".join([text] * repeat)
+    logger.info("echo_called", repeat=repeat)
+    return {"echoed": echoed, "repeat": repeat}
+
+
+# ── 2. 注册工具 (register the tool) —— 显式调用形式，两种后端通用 ──────────────
+def register(mcp) -> None:
+    """把本模块的工具注册到 MCP 实例上 (由 app/tools/__init__.py 自动调用)."""
+    mcp.tool(name="echo", description="Echo text back, optionally repeated.")(echo)

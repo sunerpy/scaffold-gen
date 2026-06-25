@@ -1,0 +1,105 @@
+"""<<project_name>> MCP 服务装配 (transport wiring).
+
+═══════════════════════════════════════════════════════════════════════════
+  这个文件负责把 MCP 工具暴露成两种 HTTP 传输：
+    - streamable-HTTP  挂载在 settings.mcp.mcp_path (默认 /mcp)
+    - SSE              挂载在 settings.mcp.sse_path  (默认 /sse，可关闭)
+  所有"后端差异"(fastmcp vs official) 都被收敛在本文件，工具代码完全无感。
+  This file wires the MCP tools onto two HTTP transports (streamable-HTTP + SSE)
+  and is the ONLY place that knows which backend is in use. Tool files never do.
+
+★ 普通用户无需修改本文件 ★ —— 写工具请去 app/tools/ 下新建 .py 文件。
+You normally never edit this file — add tools under app/tools/ instead.
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+import contextlib
+
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Mount, Route
+
+from app.logging import get_logger
+from app.settings import settings
+from app.tools import register_tools
+
+logger = get_logger(__name__)
+
+<%if mcp_backend_is_official%>
+# ── 后端：official (modelcontextprotocol/python-sdk v1) ──────────────────────
+#    json_response / stateless_http 在构造器上传入 (v1 在 ctor 接收)。
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP(
+    "<<project_name>>",
+    json_response=True,
+    stateless_http=settings.mcp.stateless,
+)
+
+# 工具必须在构建 ASGI app 之前注册到实例上。
+# Register tools on the instance BEFORE building the transport apps.
+register_tools(mcp)
+
+# 路径只在 Mount 前缀上拥有一次：让工厂内部路径为 "/"，前缀由 Mount 提供。
+# Path is owned ONCE — set the internal factory path to "/" so the prefix
+# comes solely from the Mount below (never double-applied).
+mcp.settings.streamable_http_path = "/"
+mcp.settings.sse_path = "/"
+
+streamable_app = mcp.streamable_http_app()
+sse_app = mcp.sse_app()
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app: Starlette):
+    """进入 streamable 会话管理器的生命周期 (official v1)."""
+    async with contextlib.AsyncExitStack() as stack:
+        await stack.enter_async_context(mcp.session_manager.run())
+        yield
+<%else%>
+# ── 后端：fastmcp (默认 / default) ───────────────────────────────────────────
+#    fastmcp 的构造器不接收 json_response/stateless_http (已移除)；
+#    stateless_http 在 http_app() 工厂上传入。
+from fastmcp import FastMCP
+
+mcp = FastMCP("<<project_name>>")
+
+# 工具必须在构建 ASGI app 之前注册到实例上。
+# Register tools on the instance BEFORE building the transport apps.
+register_tools(mcp)
+
+# 路径只在 Mount 前缀上拥有一次：工厂内部路径为 "/"，前缀由 Mount 提供。
+# Path is owned ONCE — factory path is "/", the prefix comes from the Mount.
+streamable_app = mcp.http_app(path="/", stateless_http=settings.mcp.stateless)
+sse_app = mcp.http_app(path="/", transport="sse")
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app: Starlette):
+    """组合两个子应用的生命周期 (fastmcp)."""
+    async with contextlib.AsyncExitStack() as stack:
+        await stack.enter_async_context(streamable_app.lifespan(app))
+        if settings.mcp.sse_enabled:
+            await stack.enter_async_context(sse_app.lifespan(app))
+        yield
+<%endif%>
+
+
+async def healthz(request: Request) -> JSONResponse:
+    """健康检查端点 (liveness probe) —— GET /healthz."""
+    return JSONResponse({"status": "ok"})
+
+
+def _build_routes() -> list:
+    """组装父应用路由：streamable + (可选) SSE + 健康检查."""
+    routes: list = [Mount(settings.mcp.mcp_path, app=streamable_app)]
+    if settings.mcp.sse_enabled:
+        routes.append(Mount(settings.mcp.sse_path, app=sse_app))
+    routes.append(Route("/healthz", healthz))
+    return routes
+
+
+# 父 Starlette 应用：main.py 以 "app.server:asgi_app" 运行它。
+# Parent Starlette app — main.py serves it as "app.server:asgi_app".
+asgi_app = Starlette(routes=_build_routes(), lifespan=lifespan)
