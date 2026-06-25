@@ -204,6 +204,200 @@ fn fastapi_embedded_generation_renders_without_external_tools() {
     );
 }
 
+/// 渲染 mcp-python 框架模板到临时目录（离线，仅渲染，不触发 uv/网络/pytest）。
+///
+/// 复刻 orchestrator 在 `to_template_context()` 之后注入的两个后端键：
+/// `mcp_backend` / `mcp_backend_is_official`（其它现有 python/fastapi 测试无此步骤，
+/// mcp-python 必须有——它驱动 `app/server.py` 里唯一的 `<%if%>` 后端分支）。
+/// 直接以 `serde_json::Value::String/Bool` 注入，避免宏/导入问题
+/// （`to_template_context` 返回的就是 `HashMap<String, serde_json::Value>`）。
+fn render_mcp_python(backend: &str) -> tempfile::TempDir {
+    let mut params = PythonParams::new("mcp-py-demo".to_string());
+    params.base.host = Some("0.0.0.0".to_string());
+    params.base.port = Some(8000);
+    let mut context = params.to_template_context();
+    context.insert(
+        "mcp_backend".to_string(),
+        serde_json::Value::String(backend.to_string()),
+    );
+    context.insert(
+        "mcp_backend_is_official".to_string(),
+        serde_json::Value::Bool(backend == "official"),
+    );
+
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    processor
+        .process_embedded_template_directory("frameworks/python/mcp-python", tmp.path(), context)
+        .expect("render embedded mcp-python templates");
+    tmp
+}
+
+#[test]
+fn mcp_python_embedded_generation_renders_without_external_tools() {
+    // Given/When/Then × 两个后端（fastmcp 默认 + official）：离线 render-assert。
+    // 该测试不触发 uv/网络/pytest；live boot 证据在 F3，不在这里。
+    for backend in ["fastmcp", "official"] {
+        let tmp = render_mcp_python(backend);
+
+        // Then(1): 预期文件存在且 .tmpl 后缀已剥离
+        let files = collect_relative_files(tmp.path());
+        for expected in [
+            "config.toml",
+            "main.py",
+            "pyproject.toml",
+            "app/__init__.py",
+            "app/server.py",
+            "app/settings.py",
+            "app/logging.py",
+            "app/tools/__init__.py",
+            "app/tools/echo.py",
+            "tests/conftest.py",
+            "tests/test_echo.py",
+            "tests/__init__.py",
+            "Makefile",
+            "README.md",
+            ".gitignore",
+            ".pre-commit-config.yaml",
+            ".env.example",
+        ] {
+            assert!(
+                files.iter().any(|f| f == expected),
+                "[{backend}] expected {expected}, got: {files:?}"
+            );
+        }
+        assert!(
+            !files.iter().any(|f| f.ends_with(".tmpl")),
+            "[{backend}] no .tmpl files should remain, got: {files:?}"
+        );
+
+        // Then(2): 任何渲染文件都不得残留自定义分隔符 `<<` / `%>` / `<%`
+        for rel in &files {
+            let content = fs::read_to_string(tmp.path().join(rel))
+                .unwrap_or_else(|_| panic!("[{backend}] read generated file {rel}"));
+            assert!(
+                !content.contains("<<"),
+                "[{backend}] file {rel} still contains unrendered `<<`"
+            );
+            assert!(
+                !content.contains("%>"),
+                "[{backend}] file {rel} still contains unrendered `%>`"
+            );
+            assert!(
+                !content.contains("<%"),
+                "[{backend}] file {rel} still contains unrendered `<%`"
+            );
+        }
+
+        // Then(3): project_name 被替换进 config.toml
+        let config = fs::read_to_string(tmp.path().join("config.toml"))
+            .unwrap_or_else(|_| panic!("[{backend}] read config.toml"));
+        assert!(
+            config.contains("mcp-py-demo"),
+            "[{backend}] project_name not substituted into config.toml:\n{config}"
+        );
+
+        // Then(4): config.toml 含三段 + 端口 8000 + sse_enabled + 正确 backend
+        assert!(
+            config.contains("[server]") && config.contains("[mcp]") && config.contains("[log]"),
+            "[{backend}] config.toml missing [server]/[mcp]/[log]:\n{config}"
+        );
+        assert!(
+            config.contains("port = 8000"),
+            "[{backend}] config.toml missing port = 8000:\n{config}"
+        );
+        assert!(
+            config.contains("sse_enabled = true"),
+            "[{backend}] config.toml missing sse_enabled = true:\n{config}"
+        );
+        assert!(
+            config.contains(&format!("backend = \"{backend}\"")),
+            "[{backend}] config.toml backend not set to {backend}:\n{config}"
+        );
+
+        // Then(5): server.py —— path-once 模式 + 后端 import 分歧（证明 `<%if%>` 命中）
+        let server = fs::read_to_string(tmp.path().join("app/server.py"))
+            .unwrap_or_else(|_| panic!("[{backend}] read app/server.py"));
+        assert!(
+            server.contains("Mount("),
+            "[{backend}] server.py must mount transports via Mount(:\n{server}"
+        );
+        if backend == "official" {
+            assert!(
+                server.contains("from mcp.server.fastmcp import"),
+                "[official] server.py must import FastMCP from mcp.server.fastmcp:\n{server}"
+            );
+            assert!(
+                server.contains("streamable_http_app()") && server.contains("sse_app()"),
+                "[official] server.py must build streamable_http_app() + sse_app():\n{server}"
+            );
+            // path-once：v1 在实例 settings 上把内部路径设成 "/"，前缀由 Mount 提供。
+            assert!(
+                server.contains("streamable_http_path = \"/\""),
+                "[official] server.py must own the path once via streamable_http_path = \"/\":\n{server}"
+            );
+        } else {
+            assert!(
+                server.contains("from fastmcp import"),
+                "[fastmcp] server.py must import from fastmcp:\n{server}"
+            );
+            assert!(
+                !server.contains("from mcp.server.fastmcp"),
+                "[fastmcp] server.py must NOT import the official mcp.server.fastmcp:\n{server}"
+            );
+            // path-once：工厂 path="/"，前缀由 Mount 提供；SSE 走 transport="sse"。
+            assert!(
+                server.contains("transport=\"sse\"") && server.contains("http_app(path=\"/\""),
+                "[fastmcp] server.py must build SSE (transport=\"sse\") + streamable (http_app(path=\"/\")):\n{server}"
+            );
+        }
+
+        // Then(6): pyproject.toml —— 依赖分歧（证明另一条 `<%if%>` 命中）+ 共有 pytest 配置
+        let pyproject = fs::read_to_string(tmp.path().join("pyproject.toml"))
+            .unwrap_or_else(|_| panic!("[{backend}] read pyproject.toml"));
+        if backend == "official" {
+            assert!(
+                pyproject.contains("mcp[cli]>=1.2,<2"),
+                "[official] pyproject.toml must pin mcp[cli]>=1.2,<2:\n{pyproject}"
+            );
+        } else {
+            assert!(
+                pyproject.contains("fastmcp>=2,<3"),
+                "[fastmcp] pyproject.toml must pin fastmcp>=2,<3:\n{pyproject}"
+            );
+        }
+        assert!(
+            pyproject.contains("asyncio_mode = \"auto\"")
+                && pyproject.contains("pythonpath = [\".\"]"),
+            "[{backend}] pyproject.toml missing pytest asyncio_mode/pythonpath config:\n{pyproject}"
+        );
+
+        // Then(7): echo.py 后端无感 —— 用 mcp.tool( 显式调用，绝不 import 任何后端
+        let echo = fs::read_to_string(tmp.path().join("app/tools/echo.py"))
+            .unwrap_or_else(|_| panic!("[{backend}] read app/tools/echo.py"));
+        assert!(
+            echo.contains("mcp.tool("),
+            "[{backend}] echo.py must register via explicit mcp.tool( call:\n{echo}"
+        );
+        // `@mcp.tool` 仅作为反例出现在文档注释里（教用户别用装饰器），不计入；
+        // 真正要禁的是任何后端 import —— 工具文件必须对 fastmcp / official 无感。
+        for forbidden in ["import fastmcp", "from fastmcp", "from mcp"] {
+            assert!(
+                !echo.contains(forbidden),
+                "[{backend}] echo.py must be backend-agnostic (found `{forbidden}`):\n{echo}"
+            );
+        }
+
+        // Then(8): README 提及双传输端点与测试入口
+        let readme = fs::read_to_string(tmp.path().join("README.md"))
+            .unwrap_or_else(|_| panic!("[{backend}] read README.md"));
+        assert!(
+            readme.contains("/mcp") && readme.contains("/sse") && readme.contains("make test"),
+            "[{backend}] README missing /mcp, /sse or `make test`:\n{readme}"
+        );
+    }
+}
+
 #[test]
 fn vue3_embedded_generation_renders_without_external_tools() {
     // 1. Arrange: setup temp dir and parameters
