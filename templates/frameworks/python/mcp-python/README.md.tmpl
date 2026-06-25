@@ -1,0 +1,314 @@
+# <<project_name>>
+
+<<project_description>>
+
+> 一个**配置驱动**的 Python MCP 服务器：监听地址、端口、传输参数写在 `config.toml`，
+> 你**只需在 `app/tools/` 里写工具函数**，其余交给框架自动装配。
+> A config-driven MCP server — set host/port/transport in `config.toml`,
+> and just write your tool functions under `app/tools/`.
+
+---
+
+## 必要说明 / 术语表 (Glossary for beginners)
+
+不熟悉 MCP 的同学，先花 2 分钟读这里：
+
+| 术语 | 白话解释 |
+| --- | --- |
+| **MCP（Model Context Protocol）** | 让 AI 客户端（Claude、Cursor、opencode 等）调用你服务器上"工具"的协议。客户端发一个 JSON-RPC 请求，服务器执行你的 Python 函数，返回结果。 |
+| **工具（tool）** | 一个普通的 Python 函数，加上类型注解。MCP 框架会把它的参数类型自动转成 JSON Schema，AI 客户端据此知道该传什么。 |
+| **streamable-HTTP** | 一种 HTTP 通道，走 `POST /mcp`。无状态、现代，主流客户端首选。**默认开启。** |
+| **SSE（Server-Sent Events）** | 另一种 HTTP 通道，走 `GET /sse`，服务器可持续向客户端推送事件。**默认也开启**（与 Go 版对齐）。 |
+| **客户端** | 调用你工具的那端 —— Claude Desktop、Cursor、opencode，或你自己写的脚本。 |
+| **fastmcp / official** | 两种 MCP 后端库，选哪个由生成时的 `--mcp-backend` 决定（或改 `config.toml`）。工具代码对两者完全无感，写法一样。 |
+
+---
+
+## 目录结构 (Project layout)
+
+```
+<<project_name>>/
+├── config.toml              # ★ 改监听地址/端口/传输路径 —— 改这里
+├── main.py                  # 启动入口：读配置 → 跑 uvicorn（一般不动）
+├── pyproject.toml           # 依赖声明 (uv 管理)
+├── Makefile                 # 常用任务快捷方式
+├── tests/                   # pytest 测试（内存客户端，不起真实服务）
+│   ├── conftest.py          # 测试夹具（client 工厂）
+│   └── test_echo.py         # echo 工具测试范例
+└── app/
+    ├── server.py            # 传输装配：挂载 /mcp + /sse（一般不动）
+    ├── settings.py          # 读取 config.toml / .env（不用动）
+    ├── logging.py           # structlog 初始化（不用动）
+    └── tools/               # ★★★ 你的工具写在这里 ★★★
+        ├── __init__.py      # 自动发现 register(mcp)（不用动）
+        └── echo.py          # ★ 范例工具：照着它加新工具 ★
+```
+
+---
+
+## 必要工具 (Requirements)
+
+- **Python <<python_version>>+**
+- **[uv](https://docs.astral.sh/uv/)** —— 极快的 Python 包管理器（安装：`curl -LsSf https://astral.sh/uv/install.sh | sh`）
+
+---
+
+## 使用方法 (Usage)
+
+```bash
+# 1. 安装依赖（uv 会自动建虚拟环境）
+uv sync
+
+# 2. 先跑测试，确认环境正常
+make test
+
+# 3. 启动服务（读取 config.toml 里的 host/port）
+uv run python main.py
+# 或者用快捷方式
+make run
+```
+
+服务启动后：
+
+- **streamable-HTTP**：`http://<<default_host>>:<<default_port>>/mcp`（POST，AI 客户端首选）
+- **SSE**：`http://<<default_host>>:<<default_port>>/sse`（GET，事件流）
+- **健康检查**：`http://<<default_host>>:<<default_port>>/healthz`
+
+开发时想要**热重载**（改代码自动重启），用：
+
+```bash
+make dev
+```
+
+---
+
+## 改监听地址 / 端口 / 传输（只改 config.toml）
+
+编辑 `config.toml`，**不要改代码**：
+
+```toml
+[server]
+host = "0.0.0.0"   # 改监听地址（本机调试用 127.0.0.1）
+port = 8000        # 改端口
+
+[mcp]
+mcp_path = "/mcp"      # streamable-HTTP 路径
+sse_path  = "/sse"     # SSE 路径
+sse_enabled = true     # 设为 false 可关闭 SSE，只保留 streamable-HTTP
+```
+
+---
+
+## 选择后端 (Backend comparison)
+
+`--mcp-backend` 在生成项目时选定，也可以事后修改 `config.toml` 的 `[mcp] backend` 再重新生成。
+
+| 维度 | 官方 SDK (`mcp[cli]`) | fastmcp（默认） |
+| --- | --- | --- |
+| **定位** | 协议源头，精细控制，贴近 spec | 高层封装，最省事，装饰器优先 |
+| **适合场景** | 需要控制会话/传输细节、追踪最新协议变更 | 快速上手、工具逻辑为主、减少样板 |
+| **写工具** | 同样用 `mcp.tool(name=...)(fn)` 注册 | 同样用 `mcp.tool(name=...)(fn)` 注册 |
+| **协议完整性** | 直接跟随 MCP spec 迭代 | 封装层可能滞后，但覆盖日常用例 |
+| **生产可控性** | 会话管理、错误细节更透明 | 开箱即用，隐藏了部分底层细节 |
+
+生成时选择：
+
+```bash
+scafgen new my-mcp --framework mcp-python --language python --mcp-backend fastmcp
+scafgen new my-mcp --framework mcp-python --language python --mcp-backend official
+```
+
+两种后端都由 `uv sync` 根据 `pyproject.toml` 自动安装，**无需手动 pip install**。
+
+---
+
+## 三步加一个工具 (Add a tool in 3 steps)
+
+这是最重要的一节。加一个新 MCP 工具，**只动 `app/tools/`，不改任何其它文件**。
+
+### 第 1 步：在 `app/tools/` 下新建一个 `.py` 文件
+
+例如，新建 `app/tools/math.py`。
+
+### 第 2 步：写带类型注解的函数，用 `Annotated[..., Field(...)]` 描述每个入参
+
+```python
+# app/tools/math.py
+from typing import Annotated
+
+from pydantic import Field
+
+
+def add(
+    a: Annotated[int, Field(description="第一个加数 / First number")],
+    b: Annotated[int, Field(description="第二个加数 / Second number")],
+) -> dict:
+    """把两个整数相加。Add two integers."""
+    return {"result": a + b}
+```
+
+`Field(description=...)` 的内容会成为 AI 客户端看到的参数说明，写清楚一点更好。
+参数类型（`int`、`str`、`float` 等）会自动生成 JSON Schema，客户端据此校验入参。
+
+> **提示**：用扁平参数（每个入参单独列出），不要把所有参数打包成一个 Pydantic 模型类再传入。
+> 这样 `call_tool("add", {"a": 1, "b": 2})` 就能直接调用，更直观。
+
+### 第 3 步：写 `register(mcp)` 函数注册工具
+
+在同一个文件末尾加：
+
+```python
+def register(mcp) -> None:
+    mcp.tool(name="add", description="把两个整数相加。")(add)
+```
+
+**不要用 `@mcp.tool` 装饰器**。两种后端（fastmcp / official）的装饰器括号写法不同，
+这里的"显式调用"形式两端通用，出了问题也更容易排查。
+
+保存文件后，`app/tools/__init__.py` 会**自动发现并注册**这个工具——你不用改任何其它文件，
+不用改 `server.py`，不用改 `main.py`。
+
+---
+
+## 端点 (Endpoints)
+
+| 端点 | 方法 | 说明 |
+| --- | --- | --- |
+| `/mcp` | POST | streamable-HTTP，**始终开启**，现代客户端首选 |
+| `/sse` | GET | SSE 事件流，**默认开启**（`sse_enabled=true`）。关闭：`config.toml` 设 `sse_enabled=false` |
+| `/healthz` | GET | 健康检查，返回 `{"status":"ok"}` |
+
+---
+
+## curl 冒烟测试 (Smoke test with curl)
+
+先启动服务（`make run`），再在另一个终端：
+
+```bash
+# 列出所有已注册的工具
+curl -s http://<<default_host>>:<<default_port>>/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+# 调用 echo 工具（text="hi"，重复 2 次）
+curl -s http://<<default_host>>:<<default_port>>/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"text":"hi","repeat":2}}}'
+
+# 打开 SSE 事件流（Ctrl+C 退出）
+curl -N http://<<default_host>>:<<default_port>>/sse
+```
+
+---
+
+## 最小 Python 客户端 (Minimal Python client)
+
+```python
+import asyncio
+
+from fastmcp import Client
+
+
+async def main() -> None:
+    async with Client("http://<<default_host>>:<<default_port>>/mcp") as c:
+        result = await c.call_tool("echo", {"text": "hi", "repeat": 2})
+        print(result)
+
+
+asyncio.run(main())
+```
+
+把 URL 换成 `/sse` 可以改用 SSE 传输。
+
+---
+
+## 在 Claude / Cursor / opencode 中接入
+
+把客户端的 MCP 服务器地址指向 streamable-HTTP 端点即可：
+
+**URL**：`http://<<default_host>>:<<default_port>>/mcp`
+
+- **Claude Desktop**（`claude_desktop_config.json`）：
+
+  ```json
+  {
+    "mcpServers": {
+      "<<project_name>>": {
+        "url": "http://<<default_host>>:<<default_port>>/mcp"
+      }
+    }
+  }
+  ```
+
+- **Cursor / opencode**：在 MCP 服务器设置里填入上方 URL，保存后重启编辑器即可。
+
+> 若客户端只支持 SSE，把 URL 改为 `http://<<default_host>>:<<default_port>>/sse`。
+
+---
+
+## 测试 (Testing)
+
+```bash
+uv sync      # 必须先安装依赖，否则 pytest 找不到包
+make test    # 运行 pytest（内存客户端，不起真实服务，不走网络）
+```
+
+测试用内存 MCP 客户端直接连接工具实例，**不需要启动服务器，也不占用端口**。
+提交代码前必须保证 `make test` 全绿，这是本项目的强制门槛。
+
+<% if enable_precommit %>
+### Pre-commit 钩子
+
+```bash
+uv run pre-commit install            # 安装
+uv run pre-commit run --all-files    # 全量运行
+```
+<% endif %>
+
+---
+
+## 构建与容器化 (Makefile + Docker)
+
+> 本节内容仅在项目生成时选择了 `--with-build`（或在交互提示"生成配套 Makefile + Dockerfile？"中选择了是）时才会生成。
+> 若当前项目没有 `Makefile` / `Dockerfile`，用 `scafgen new <name> --framework mcp-python --with-build` 重新生成即可。
+
+Makefile + 多阶段 Dockerfile 由 `scafgen` 自动生成，覆盖从本地构建到容器化的完整流程，
+**全部通过 `make` 完成，不依赖 GitHub Actions / CI 平台**。
+
+```bash
+make help          # 列出所有可用目标
+make build         # 打包 / 预编译
+make run           # 本地启动 MCP 服务（uv run python main.py）
+make test          # 运行测试
+make fmt           # 格式化代码（Ruff）
+make lint          # lint 检查（Ruff check）
+make check         # fmt + lint + test（一键本地校验）
+make docker-build  # 构建容器镜像（docker build -t <<project_name>>:latest .）
+make docker-run    # 运行容器（服务监听 <<default_port>>）
+```
+
+---
+
+## 推荐工具：CodeGraph (Recommended)
+
+当项目变大、或你用 AI 编程助手时，推荐集成
+**[codegraph-rust](https://github.com/sunerpy/codegraph-rust)** 作为代码分析工具：
+
+- 基于 **tree-sitter + SQLite/FTS5** 的确定性代码知识图谱，**不含任何 AI/LLM**，输出字节级稳定。
+- 提供符号 / 调用 / 依赖关系图，支持 **CLI 与 MCP server** 两种用法，可直接喂给 AI 编程 Agent。
+- **单一二进制、易用、极高性能**：显著提升开发效率，同时大幅降低 token 消耗。
+- 接入后 Agent **自动**通过 MCP 探索符号/调用关系，并**自动检测文件变更增量同步**，无需手动维护索引。
+
+在 opencode、Claude、Kiro、Cursor 等支持 MCP 的 AI 编程工具中，只需：
+
+```bash
+codegraph install   # 安装并自动接入 opencode / Claude / Kiro / Cursor 等工具的 MCP
+```
+
+重启编辑器 / Agent 工具后即自动接入 MCP，Agent 会自动调用 CodeGraph 检索，并在文件变更时自动增量同步（无需手动 sync/explore）。
+
+---
+
+## License
+
+<<license>>
