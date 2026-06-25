@@ -110,18 +110,21 @@ Run `scafgen new --help` for the full option list.
 
 ## Using with an LLM
 
-Install in one line, then point your agent at these commands:
+Install first via the [Install](#install) section, then drive the tool with these commands:
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/sunerpy/scaffold-gen/main/scripts/install.sh | sh
-```
+<details>
+<summary>Commands an agent can drive (non-interactive)</summary>
 
-- `scafgen new <name> --framework <fw>` — non-interactive generation; pass every choice as a flag to avoid prompts.
+- `scafgen new <name> --framework <fw> --language <lang>` — non-interactive generation; pass every
+  choice as a flag to avoid prompts.
 - `scafgen new --help` — discover available flags and frameworks.
 - `scafgen --version` — print the version.
 
-Frameworks: `gin`, `go-zero`, `mcp-server`, `tauri`, `vue3`, `react`, `fastapi`. Errors go to stderr with
-a non-zero exit code.
+Supported frameworks: `gin`, `go-zero`, `mcp-server`, `tauri`, `vue3`, `react`, `fastapi`.
+
+Diagnostics and errors go to stderr; the process exits non-zero on failure.
+
+</details>
 
 ## Architecture
 
