@@ -159,6 +159,8 @@ impl NewCommand {
             enable_build,
         };
 
+        let equivalent_command = self.equivalent_command(&params);
+
         self.generate_project(params).await?;
 
         tracing::info!("Project created successfully!");
@@ -167,7 +169,80 @@ impl NewCommand {
         tracing::info!("  cd {}", self.project_name);
         tracing::info!("  # Follow the README.md for further instructions");
 
+        tracing::info!("");
+        tracing::info!("💡 Equivalent non-interactive command (等价的非交互命令):");
+        tracing::info!("  {equivalent_command}");
+
         Ok(())
+    }
+
+    /// 根据交互式流程解析出的 `ProjectParams` 构造等价的非交互命令行。
+    ///
+    /// 仅输出对所选语言/框架有意义的 flag（镜像 `configure_*` 的同款条件）：
+    /// - `--framework` 在 `None`（纯语言路径）时省略；
+    /// - `--host`/`--port` 仅在需要网络的组合（Go，或 FastApi/McpServer）时输出；
+    /// - `--swagger` 仅 Gin；`--proto-gen`/`--error-gen` 仅 Rust(Tauri|None)。
+    ///
+    /// flag 顺序稳定（便于测试与阅读），输出可直接重新运行。
+    pub(super) fn equivalent_command(&self, params: &ProjectParams) -> String {
+        let mut parts: Vec<String> = vec![
+            "scafgen".to_string(),
+            "new".to_string(),
+            quote_if_needed(&self.project_name),
+        ];
+
+        // -p 是「父目录」（project_path = base.join(name)），仅在非默认父目录时输出
+        if let Some(parent) = params.project_path.parent() {
+            let parent_str = parent.display().to_string();
+            if !parent_str.is_empty() && parent_str != "." {
+                parts.push("-p".to_string());
+                parts.push(quote_if_needed(&parent_str));
+            }
+        }
+
+        parts.push("--language".to_string());
+        parts.push(params.language.build_dir().to_string());
+
+        if params.framework != Framework::None {
+            parts.push("--framework".to_string());
+            // parser 接受小写；Gin 的 as_str() 是 "Gin"，统一小写后仍可解析
+            parts.push(params.framework.as_str().to_lowercase());
+        }
+
+        // host/port 仅对需要网络的组合有意义（镜像 configure_network_settings）
+        let needs_network = matches!(params.language, Language::Go)
+            || matches!(params.framework, Framework::FastApi | Framework::McpServer);
+        if needs_network {
+            parts.push("--host".to_string());
+            parts.push(quote_if_needed(&params.host));
+            parts.push("--port".to_string());
+            parts.push(params.port.to_string());
+        }
+
+        parts.push("--precommit".to_string());
+        parts.push(params.enable_precommit.to_string());
+        parts.push("--license".to_string());
+        parts.push(quote_if_needed(&params.license));
+
+        if params.framework == Framework::Gin {
+            parts.push("--swagger".to_string());
+            parts.push(params.enable_swagger.to_string());
+        }
+
+        // proto-gen / error-gen 仅 Rust 的 Tauri/None 路径有意义（镜像 configure_rust_tools）
+        if matches!(params.language, Language::Rust)
+            && matches!(params.framework, Framework::Tauri | Framework::None)
+        {
+            parts.push("--proto-gen".to_string());
+            parts.push(params.enable_proto_gen.to_string());
+            parts.push("--error-gen".to_string());
+            parts.push(params.enable_error_gen.to_string());
+        }
+
+        parts.push("--with-build".to_string());
+        parts.push(params.enable_build.to_string());
+
+        parts.join(" ")
     }
 
     async fn generate_project(&self, params: ProjectParams) -> Result<()> {
@@ -232,5 +307,145 @@ impl NewCommand {
                 gin_options,
             })
             .await
+    }
+}
+
+/// 仅在值含空格或 shell 元字符时加单引号，否则原样返回，保证输出可直接重跑。
+fn quote_if_needed(value: &str) -> String {
+    let needs_quote = value.is_empty()
+        || value
+            .chars()
+            .any(|c| c.is_whitespace() || matches!(c, '"' | '\'' | '$' | '`' | '\\'));
+    if needs_quote {
+        format!("'{}'", value.replace('\'', r"'\''"))
+    } else {
+        value.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn command_for(params: &ProjectParams) -> String {
+        let cmd = NewCommand::new(params.project_path_file_name(), None);
+        cmd.equivalent_command(params)
+    }
+
+    impl ProjectParams {
+        fn project_path_file_name(&self) -> String {
+            self.project_path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default()
+        }
+    }
+
+    #[test]
+    fn python_fastapi_emits_network_and_no_rust_flags() {
+        let params = ProjectParams {
+            language: Language::Python,
+            framework: Framework::FastApi,
+            project_path: PathBuf::from("/tmp/work/testapi"),
+            host: "0.0.0.0".to_string(),
+            port: 8001,
+            enable_precommit: true,
+            license: "MIT".to_string(),
+            enable_swagger: false,
+            enable_proto_gen: false,
+            enable_error_gen: false,
+            enable_build: true,
+        };
+
+        assert_eq!(
+            command_for(&params),
+            "scafgen new testapi -p /tmp/work --language python --framework fastapi \
+             --host 0.0.0.0 --port 8001 --precommit true --license MIT --with-build true"
+        );
+    }
+
+    #[test]
+    fn rust_none_omits_framework_network_and_includes_rust_tool_flags() {
+        let params = ProjectParams {
+            language: Language::Rust,
+            framework: Framework::None,
+            project_path: PathBuf::from("/tmp/work/mylib"),
+            host: "0.0.0.0".to_string(),
+            port: 8080,
+            enable_precommit: false,
+            license: "MIT".to_string(),
+            enable_swagger: false,
+            enable_proto_gen: false,
+            enable_error_gen: false,
+            enable_build: false,
+        };
+
+        let cmd = command_for(&params);
+        assert_eq!(
+            cmd,
+            "scafgen new mylib -p /tmp/work --language rust --precommit false \
+             --license MIT --proto-gen false --error-gen false --with-build false"
+        );
+        assert!(!cmd.contains("--framework"));
+        assert!(!cmd.contains("--host"));
+        assert!(!cmd.contains("--port"));
+    }
+
+    #[test]
+    fn go_gin_includes_swagger_and_network() {
+        let params = ProjectParams {
+            language: Language::Go,
+            framework: Framework::Gin,
+            project_path: PathBuf::from("/tmp/work/mygin"),
+            host: "127.0.0.1".to_string(),
+            port: 8080,
+            enable_precommit: true,
+            license: "Apache-2.0".to_string(),
+            enable_swagger: true,
+            enable_proto_gen: false,
+            enable_error_gen: false,
+            enable_build: false,
+        };
+
+        let cmd = command_for(&params);
+        assert_eq!(
+            cmd,
+            "scafgen new mygin -p /tmp/work --language go --framework gin \
+             --host 127.0.0.1 --port 8080 --precommit true --license Apache-2.0 \
+             --swagger true --with-build false"
+        );
+        assert!(!cmd.contains("--proto-gen"));
+    }
+
+    #[test]
+    fn default_current_dir_path_omits_p_flag() {
+        let params = ProjectParams {
+            language: Language::Python,
+            framework: Framework::None,
+            project_path: PathBuf::from("./plain"),
+            host: "0.0.0.0".to_string(),
+            port: 8080,
+            enable_precommit: true,
+            license: "MIT".to_string(),
+            enable_swagger: false,
+            enable_proto_gen: false,
+            enable_error_gen: false,
+            enable_build: false,
+        };
+
+        let cmd = command_for(&params);
+        assert_eq!(
+            cmd,
+            "scafgen new plain --language python --precommit true \
+             --license MIT --with-build false"
+        );
+        assert!(!cmd.contains("-p "));
+    }
+
+    #[test]
+    fn quote_if_needed_wraps_paths_with_spaces() {
+        assert_eq!(quote_if_needed("MIT"), "MIT");
+        assert_eq!(quote_if_needed("./my app"), "'./my app'");
+        assert_eq!(quote_if_needed("plain/path"), "plain/path");
     }
 }
