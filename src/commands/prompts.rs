@@ -96,12 +96,12 @@ impl NewCommand {
 
     pub(super) fn select_mcp_backend(&self) -> Result<McpBackend> {
         let options = vec![
-            "fastmcp (recommended — high-level, least boilerplate)",
-            "official mcp SDK (closer to the protocol spec)",
+            "fastmcp（推荐 / recommended）—— 高层封装、最省事 / high-level, least boilerplate",
+            "official mcp SDK —— 贴近协议规范 / closer to the protocol spec",
         ];
 
-        let selected = Select::new("Choose the Python MCP backend:", options)
-            .with_help_message("fastmcp is the default; pick official to track the protocol spec")
+        let selected = Select::new("选择 Python MCP 后端 / Choose the Python MCP backend:", options)
+            .with_help_message("默认 fastmcp；想紧跟协议规范选 official / fastmcp is the default; pick official to track the protocol spec")
             .prompt()
             .context("Failed to select MCP backend")?;
 
