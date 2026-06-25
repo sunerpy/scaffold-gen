@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/sunerpy/scaffold-gen/compare/v0.2.0...v0.3.0) (2026-06-25)
+
+
+### Features
+
+* 新增 self-update / completions / version / list 子命令 ([#6](https://github.com/sunerpy/scaffold-gen/issues/6)) ([b9b38c9](https://github.com/sunerpy/scaffold-gen/commit/b9b38c987b2663e5d27c51a753e539bbfbabe005))
+
 ## [0.2.0](https://github.com/sunerpy/scaffold-gen/compare/v0.1.1...v0.2.0) (2026-06-24)
 
 
