@@ -18,7 +18,7 @@ import contextlib
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.routing import Mount, Route
+from starlette.routing import Route
 
 from app.logging import get_logger
 from app.settings import settings
@@ -41,11 +41,13 @@ mcp = FastMCP(
 # Register tools on the instance BEFORE building the transport apps.
 register_tools(mcp)
 
-# 路径只在 Mount 前缀上拥有一次：让工厂内部路径为 "/"，前缀由 Mount 提供。
-# Path is owned ONCE — set the internal factory path to "/" so the prefix
-# comes solely from the Mount below (never double-applied).
-mcp.settings.streamable_http_path = "/"
-mcp.settings.sse_path = "/"
+# 路径拥有一次：让每个传输子应用在其工厂里就拥有完整路径 (/mcp、/sse)，
+# 随后把子应用的子路由"上提"到父应用，而不是用 Mount 前缀包一层。
+# Path is owned ONCE — each transport sub-app owns its FULL path (/mcp, /sse) in
+# its own factory; we then SPLICE the sub-app routes up into the parent rather
+# than wrapping them under a Mount prefix.
+mcp.settings.streamable_http_path = settings.mcp.mcp_path
+mcp.settings.sse_path = settings.mcp.sse_path
 
 streamable_app = mcp.streamable_http_app()
 sse_app = mcp.sse_app()
@@ -69,10 +71,13 @@ mcp = FastMCP("<<project_name>>")
 # Register tools on the instance BEFORE building the transport apps.
 register_tools(mcp)
 
-# 路径只在 Mount 前缀上拥有一次：工厂内部路径为 "/"，前缀由 Mount 提供。
-# Path is owned ONCE — factory path is "/", the prefix comes from the Mount.
-streamable_app = mcp.http_app(path="/", stateless_http=settings.mcp.stateless)
-sse_app = mcp.http_app(path="/", transport="sse")
+# 路径拥有一次：让每个传输子应用在其工厂里就拥有完整路径 (/mcp、/sse)，
+# 随后把子应用的子路由"上提"到父应用，而不是用 Mount 前缀包一层。
+# Path is owned ONCE — each transport sub-app owns its FULL path (/mcp, /sse) in
+# its own factory; we then SPLICE the sub-app routes up into the parent rather
+# than wrapping them under a Mount prefix.
+streamable_app = mcp.http_app(path=settings.mcp.mcp_path, stateless_http=settings.mcp.stateless)
+sse_app = mcp.http_app(path=settings.mcp.sse_path, transport="sse")
 
 
 @contextlib.asynccontextmanager
@@ -92,11 +97,26 @@ async def healthz(request: Request) -> JSONResponse:
 
 
 def _build_routes() -> list:
-    """组装父应用路由：streamable + (可选) SSE + 健康检查."""
-    routes: list = [Mount(settings.mcp.mcp_path, app=streamable_app)]
+    """组装父应用路由：把各传输子应用的子路由直接上提，规避 Mount 前缀的 307 重定向.
+
+    为什么不用 Mount(prefix, app)：Starlette 的 Mount("/mcp", ...) 内部正则是
+    ``^/mcp/(?P<path>.*)$``，不匹配裸 ``/mcp``（无尾斜杠），于是对 ``POST /mcp``
+    回 307 重定向到 ``/mcp/``——噪声大且部分客户端不喜欢 POST 重定向。改为把子应用
+    的路由（它们本就以完整路径 /mcp、/sse 注册）直接拼进父应用的 routes，路径仍只
+    被拥有一次，且裸 ``/mcp`` / ``/sse`` 直接命中处理器（200），不再产生 307。
+
+    Why not Mount(prefix, app): Starlette's Mount("/mcp", ...) compiles to
+    ``^/mcp/(?P<path>.*)$``, which does NOT match the bare ``/mcp`` (no trailing
+    slash), so it 307-redirects ``POST /mcp`` to ``/mcp/`` — noisy, and some clients
+    dislike POST redirects. Instead we splice the sub-apps' OWN routes (already
+    registered at the full paths /mcp, /sse) straight into the parent's route list:
+    the path is still owned exactly once, and bare ``/mcp`` / ``/sse`` reach the
+    handler directly (200) with no 307.
+    """
+    routes: list = [Route("/healthz", healthz)]
+    routes.extend(streamable_app.routes)
     if settings.mcp.sse_enabled:
-        routes.append(Mount(settings.mcp.sse_path, app=sse_app))
-    routes.append(Route("/healthz", healthz))
+        routes.extend(sse_app.routes)
     return routes
 
 

@@ -318,23 +318,24 @@ fn mcp_python_embedded_generation_renders_without_external_tools() {
         // Then(5): server.py —— path-once 模式 + 后端 import 分歧（证明 `<%if%>` 命中）
         let server = fs::read_to_string(tmp.path().join("app/server.py"))
             .unwrap_or_else(|_| panic!("[{backend}] read app/server.py"));
+        // 新的 path-once：不再用 Mount，而是把子应用的路由 extend 进父应用的 routes。
         assert!(
-            server.contains("Mount("),
-            "[{backend}] server.py must mount transports via Mount(:\n{server}"
+            server.contains("streamable_app.routes") && server.contains("Route(\"/healthz\""),
+            "[{backend}] server.py must splice transports via routes.extend() and healthz:\n{server}"
         );
         if backend == "official" {
             assert!(
                 server.contains("from mcp.server.fastmcp import"),
-                "[official] server.py must import FastMCP from mcp.server.fastmcp:\n{server}"
+                "[official] server.py must import from mcp.server.fastmcp:\n{server}"
             );
             assert!(
                 server.contains("streamable_http_app()") && server.contains("sse_app()"),
                 "[official] server.py must build streamable_http_app() + sse_app():\n{server}"
             );
-            // path-once：v1 在实例 settings 上把内部路径设成 "/"，前缀由 Mount 提供。
+            // path-once：官方后端在实例的 mcp.settings 上设置路径，而不是工厂参数。
             assert!(
-                server.contains("streamable_http_path = \"/\""),
-                "[official] server.py must own the path once via streamable_http_path = \"/\":\n{server}"
+                server.contains("mcp.settings.streamable_http_path = settings.mcp.mcp_path"),
+                "[official] server.py must own the path once via mcp.settings.streamable_http_path = settings.mcp.mcp_path:\n{server}"
             );
         } else {
             assert!(
@@ -345,10 +346,11 @@ fn mcp_python_embedded_generation_renders_without_external_tools() {
                 !server.contains("from mcp.server.fastmcp"),
                 "[fastmcp] server.py must NOT import the official mcp.server.fastmcp:\n{server}"
             );
-            // path-once：工厂 path="/"，前缀由 Mount 提供；SSE 走 transport="sse"。
+            // path-once：http_app 工厂在 path 参数上拥有完整路径（settings.mcp.mcp_path）；SSE 走 transport="sse"。
             assert!(
-                server.contains("transport=\"sse\"") && server.contains("http_app(path=\"/\""),
-                "[fastmcp] server.py must build SSE (transport=\"sse\") + streamable (http_app(path=\"/\")):\n{server}"
+                server.contains("http_app(path=settings.mcp.mcp_path")
+                    && server.contains("transport=\"sse\""),
+                "[fastmcp] server.py must build SSE (transport=\"sse\") + streamable (http_app(path=settings.mcp.mcp_path)):\n{server}"
             );
         }
 
