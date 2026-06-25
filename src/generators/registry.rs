@@ -144,6 +144,30 @@ const fn pure_language_spec(language: Language) -> Option<FrameworkSpec> {
     }
 }
 
+/// 枚举所有 (语言, 框架) 组合对应的生成规格 —— 供 `scafgen list` 自省使用。
+///
+/// 数据来源完全由 `Framework::frameworks_for_language` + [`resolve`] 驱动，
+/// 因此与调度逻辑共享唯一真相来源：注册表新增/删除一行，`list` 输出自动跟随。
+/// 遍历顺序按 Go → Python → Rust → TypeScript，组内按 `frameworks_for_language`
+/// 的声明顺序，保证输出稳定可读。
+pub fn all_specs() -> Vec<FrameworkSpec> {
+    let langs = [
+        Language::Go,
+        Language::Python,
+        Language::Rust,
+        Language::TypeScript,
+    ];
+    let mut specs = Vec::new();
+    for lang in langs {
+        for fw in Framework::frameworks_for_language(lang) {
+            if let Some(spec) = resolve(lang, fw) {
+                specs.push(spec);
+            }
+        }
+    }
+    specs
+}
+
 /// 单一调度入口：把 `(language, framework)` 解析为唯一的生成规格。
 ///
 /// 返回 `None` 表示该组合没有对应的纯语言路径（Go/TS + None），
@@ -283,5 +307,43 @@ mod tests {
         assert_eq!(spec.kind, GenKind::EmbeddedAsync);
         assert!(!spec.accepts_proto_error_gen);
         assert!(!spec.next_steps.is_empty());
+    }
+
+    /// `all_specs` 必须覆盖每一个 framework（含 None 的纯语言路径），且 GoZero 标记未实现。
+    #[test]
+    fn all_specs_covers_every_framework_and_flags_gozero() {
+        let specs = all_specs();
+
+        for fw in [
+            Framework::Gin,
+            Framework::GoZero,
+            Framework::McpServer,
+            Framework::FastApi,
+            Framework::Tauri,
+            Framework::Vue3,
+            Framework::React,
+        ] {
+            assert!(
+                specs.iter().any(|s| s.framework == fw),
+                "all_specs missing framework {fw:?}"
+            );
+        }
+
+        let gozero = specs
+            .iter()
+            .find(|s| s.framework == Framework::GoZero)
+            .expect("gozero present in all_specs");
+        assert_eq!(gozero.kind, GenKind::Unimplemented);
+
+        assert!(
+            specs
+                .iter()
+                .any(|s| s.framework == Framework::None && s.language == Language::Rust)
+        );
+        assert!(
+            specs
+                .iter()
+                .any(|s| s.framework == Framework::None && s.language == Language::Python)
+        );
     }
 }
