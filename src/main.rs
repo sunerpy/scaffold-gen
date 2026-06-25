@@ -84,6 +84,12 @@ enum Commands {
             help = "Generate a companion Makefile + Dockerfile (build/image automation)"
         )]
         with_build: Option<bool>,
+        /// MCP Python backend (for mcp-python framework)
+        #[arg(
+            long,
+            help = "MCP Python backend (fastmcp, official) — for mcp-python framework"
+        )]
+        mcp_backend: Option<String>,
     },
     /// List available languages and frameworks
     List {
@@ -213,6 +219,7 @@ async fn run(command: Commands) -> anyhow::Result<()> {
             proto_gen,
             error_gen,
             with_build,
+            mcp_backend,
         } => {
             NewCommand::new(name, path)
                 .with_framework(framework)
@@ -226,6 +233,7 @@ async fn run(command: Commands) -> anyhow::Result<()> {
                 .with_proto_gen(proto_gen)
                 .with_error_gen(error_gen)
                 .with_build(with_build)
+                .with_mcp_backend(mcp_backend)
                 .execute()
                 .await
         }

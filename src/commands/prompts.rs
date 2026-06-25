@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use super::new::NewCommand;
 use crate::constants::{Framework, Language};
+use crate::generators::McpBackend;
 use crate::utils::env_checker::EnvironmentChecker;
 
 impl NewCommand {
@@ -59,7 +60,7 @@ impl NewCommand {
         if let Some(framework_str) = &self.framework {
             let framework = Framework::parse_from_str(framework_str).ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Unsupported framework: {framework_str}. Supported frameworks: gin, go-zero, tauri, vue3, react, none"
+                    "Unsupported framework: {framework_str}. Supported frameworks: gin, go-zero, mcp-server, fastapi, mcp-python, tauri, vue3, react, none"
                 )
             })?;
 
@@ -93,6 +94,24 @@ impl NewCommand {
         Ok(selected)
     }
 
+    pub(super) fn select_mcp_backend(&self) -> Result<McpBackend> {
+        let options = vec![
+            "fastmcp (recommended — high-level, least boilerplate)",
+            "official mcp SDK (closer to the protocol spec)",
+        ];
+
+        let selected = Select::new("Choose the Python MCP backend:", options)
+            .with_help_message("fastmcp is the default; pick official to track the protocol spec")
+            .prompt()
+            .context("Failed to select MCP backend")?;
+
+        if selected.starts_with("official") {
+            Ok(McpBackend::Official)
+        } else {
+            Ok(McpBackend::Fastmcp)
+        }
+    }
+
     pub(super) fn configure_network_settings(
         &self,
         framework: &Framework,
@@ -101,7 +120,10 @@ impl NewCommand {
         // Python FastAPI 是配置驱动的 API 服务，需要 host/port；其余 Python/Rust/TS
         // 纯项目不需要网络配置。
         let needs_network = matches!(language, Language::Go)
-            || matches!(framework, Framework::FastApi | Framework::McpServer);
+            || matches!(
+                framework,
+                Framework::FastApi | Framework::McpServer | Framework::McpServerPython
+            );
         if !needs_network {
             return Ok(("0.0.0.0".to_string(), 8080, 9000));
         }
@@ -129,6 +151,7 @@ impl NewCommand {
                 Framework::GoZero => 8888,
                 Framework::McpServer => 8080,
                 Framework::FastApi => 8000,
+                Framework::McpServerPython => 8000,
                 Framework::Tauri => 1420,
                 Framework::Vue3 => 5173,
                 Framework::React => 5173,

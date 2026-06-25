@@ -3,6 +3,7 @@ use std::path::Path;
 
 use crate::constants::{Framework, Language};
 use crate::generators::gin_options::GinProjectOptions;
+use crate::generators::mcp_options::McpBackend;
 use crate::generators::registry::{FrameworkSpec, GenKind};
 use crate::generators::{
     core::{Generator, Parameters, TemplateProcessor},
@@ -27,6 +28,7 @@ pub struct GenerationRequest<'a> {
     pub enable_error_gen: bool,
     pub enable_build: bool,
     pub gin_options: GinProjectOptions,
+    pub mcp_backend: McpBackend,
 }
 
 /// 生成器编排器，负责协调三层架构的生成器
@@ -586,6 +588,7 @@ mod tests {
             enable_error_gen: false,
             enable_build,
             gin_options: GinProjectOptions::new(),
+            mcp_backend: McpBackend::Fastmcp,
         }
     }
 
