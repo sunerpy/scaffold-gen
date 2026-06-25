@@ -177,6 +177,17 @@ impl GeneratorOrchestrator {
                 )
                 .await?;
             }
+            Language::Python if request.spec.framework == Framework::McpServerPython => {
+                self.generate_mcp_python_language(
+                    project_name.clone(),
+                    output_path,
+                    request.gin_options.host.clone(),
+                    request.gin_options.port,
+                    request.enable_precommit,
+                    request.mcp_backend,
+                )
+                .await?;
+            }
             Language::Python => {
                 self.generate_python_language(
                     project_name.clone(),
@@ -420,6 +431,60 @@ impl GeneratorOrchestrator {
             .context("Failed to generate FastAPI files")?;
 
         tracing::info!("FastAPI structure generated");
+        Ok(())
+    }
+
+    /// 框架级别生成 (Python MCP Server) - 纯内嵌模板渲染（可离线、可测试）。
+    ///
+    /// 与 FastAPI 同形：配置驱动的完整项目，全部由模板渲染，无需 `uv init`/`uv sync`。
+    /// host/port 写入上下文（端口规范为 8000，区别于 FastAPI 的 8080）；`mcp_backend` /
+    /// `mcp_backend_is_official` 在 `to_template_context()` 之后注入，驱动模板按后端分支渲染。
+    async fn generate_mcp_python_language(
+        &mut self,
+        project_name: String,
+        output_path: &Path,
+        host: Option<String>,
+        port: Option<u16>,
+        enable_precommit: bool,
+        backend: McpBackend,
+    ) -> Result<()> {
+        tracing::info!("Starting Python MCP server generation: {project_name}");
+
+        let env_checker = EnvironmentChecker::new();
+        let python_version = env_checker
+            .get_python_version()
+            .await
+            .unwrap_or_else(|_| "3.12".to_string());
+
+        let mut python_params = PythonParams::new(project_name.clone())
+            .with_version(python_version)
+            .with_precommit(enable_precommit);
+        python_params.base.host = Some(host.unwrap_or_else(|| "0.0.0.0".to_string()));
+        python_params.base.port = Some(port.unwrap_or(8000));
+
+        let template_path = "frameworks/python/mcp-python";
+        if !crate::template_engine::embedded_template_dir_exists(template_path) {
+            return Err(anyhow::anyhow!(
+                "mcp-python embedded templates not found at: {template_path}"
+            ));
+        }
+
+        let mut context = python_params.to_template_context();
+        context.insert(
+            "mcp_backend".to_string(),
+            serde_json::json!(backend.as_str()),
+        );
+        context.insert(
+            "mcp_backend_is_official".to_string(),
+            serde_json::json!(backend.is_official()),
+        );
+
+        let mut template_processor = TemplateProcessor::new()?;
+        template_processor
+            .process_embedded_template_directory(template_path, output_path, context)
+            .context("Failed to generate mcp-python files")?;
+
+        tracing::info!("mcp-python structure generated");
         Ok(())
     }
 
