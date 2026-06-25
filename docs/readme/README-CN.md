@@ -109,17 +109,20 @@ scafgen -v new my-project   # 详细：显示调试输出
 
 ## 配合 LLM 使用
 
-一键安装后，让你的 agent 使用以下命令：
+先按 [安装](#安装) 章节完成安装，然后用以下命令驱动工具：
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/sunerpy/scaffold-gen/main/scripts/install.sh | sh
-```
+<details>
+<summary>供 agent 调用的命令（非交互式）</summary>
 
-- `scafgen new <name> --framework <fw>` —— 非交互式生成；通过 flag 传入所有选择以避免提示。
+- `scafgen new <name> --framework <fw> --language <lang>` —— 非交互式生成；通过 flag 传入所有选择以避免提示。
 - `scafgen new --help` —— 查看可用 flag 和框架。
 - `scafgen --version` —— 打印版本。
 
-框架：`gin`、`go-zero`、`mcp-server`、`tauri`、`vue3`、`react`、`fastapi`。错误输出到 stderr 并返回非零退出码。
+支持的框架：`gin`、`go-zero`、`mcp-server`、`tauri`、`vue3`、`react`、`fastapi`。
+
+诊断信息和错误输出到 stderr；失败时以非零退出码退出。
+
+</details>
 
 ## 架构设计
 
