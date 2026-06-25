@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/sunerpy/scaffold-gen/compare/v0.4.1...v0.5.0) (2026-06-25)
+
+
+### Features
+
+* Vue3 脚手架支持 .env 配置驱动 (host/port/allowedHosts/API) ([#12](https://github.com/sunerpy/scaffold-gen/issues/12)) ([a128ede](https://github.com/sunerpy/scaffold-gen/commit/a128ede56abbf53b60b81de1c9054400c5d7dcb9))
+
 ## [0.4.1](https://github.com/sunerpy/scaffold-gen/compare/v0.4.0...v0.4.1) (2026-06-25)
 
 
