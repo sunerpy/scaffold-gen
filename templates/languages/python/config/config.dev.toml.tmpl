@@ -1,8 +1,12 @@
-[logger]
-level = "INFO"
-log_file = "app.log"
-max_bytes = 10485760  # 10 MB
-backup_count = 10
-enable_rich = true
-enable_json = false   # 该选项控制控制台输出,日志文件无论何时都为json格式
-enable_console = true
+# 开发环境配置 (development) —— 详细日志、彩色控制台、便于本地调试
+[log]
+level = "debug"             # 最详细，便于排查
+format = "console"          # 彩色人类可读 (console / json)
+directory = "logs"          # 日志目录 (留空则不写文件)
+file = ""                   # 显式文件路径 (留空则用 directory + 默认名)
+log_in_console = true       # 同时输出到控制台
+show_line = true            # 附带 文件名/函数/行号
+max_size = 10               # 单文件最大 MB
+max_backups = 5             # 保留轮转文件数
+max_age = 7                 # 旧日志保留天数
+compress = false            # 本地不压缩，方便直接查看

@@ -23,5 +23,41 @@ reload = true
 # 接口文档标题 / API docs title
 title = "<<project_name>>"
 
-# 日志级别：critical / error / warning / info / debug
+# uvicorn 自身的日志级别 / uvicorn's own log level
 log_level = "info"
+
+# ----------------------------------------------------------------------------
+#  日志 (structlog) 配置 / logging configuration
+#  本地开发推荐 format="console" + show_line=true；
+#  生产推荐 format="json" + compress=true。
+# ----------------------------------------------------------------------------
+[log]
+# 日志级别 / log level: debug / info / warning / error / critical
+level = "info"
+
+# 输出格式 / output format: "console" (彩色人类可读) 或 "json" (结构化)
+format = "console"
+
+# 日志目录 / log directory (留空则不写文件，仅控制台)
+directory = "logs"
+
+# 显式文件路径 / explicit file path (留空则用 directory + 默认名)
+file = ""
+
+# 是否同时输出到控制台 / also emit to console
+log_in_console = true
+
+# 是否附带 文件名/函数/行号 / include filename, func, lineno
+show_line = false
+
+# 单文件最大体积 (MB)，超过即按大小轮转 / max size per file (MB)
+max_size = 10
+
+# 保留的轮转文件数量 / number of rotated backups to keep
+max_backups = 10
+
+# 旧日志保留天数，超过自动清理 (0 = 永久) / days to keep old logs
+max_age = 30
+
+# 轮转后是否 gzip 压缩 / gzip-compress rotated files
+compress = true

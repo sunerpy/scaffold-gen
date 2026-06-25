@@ -1,8 +1,12 @@
-[logger]
-level = "INFO"
-log_file = "app.log"
-max_bytes = 10485760  # 10 MB
-backup_count = 10
-enable_rich = true
-enable_json = false   # 该选项控制控制台输出,日志文件无论何时都为json格式
-enable_console = true
+# 生产环境配置 (production) —— JSON 结构化、压缩归档、合理保留
+[log]
+level = "info"              # 生产默认 info
+format = "json"             # 结构化，便于日志采集系统消费
+directory = "logs"
+file = ""
+log_in_console = false      # 生产由文件/采集器接管，不刷控制台
+show_line = false
+max_size = 10               # 单文件最大 MB
+max_backups = 10            # 保留轮转文件数
+max_age = 30                # 旧日志保留天数
+compress = true             # 轮转后 gzip 压缩归档

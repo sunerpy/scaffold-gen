@@ -71,6 +71,39 @@ fn python_embedded_generation_renders_without_external_tools() {
         readme.contains("integration-demo"),
         "project_name not substituted into README.md:\n{readme}"
     );
+
+    // Then(4): logger 模板采用 structlog；不再残留旧 logger_state 模块
+    let logger = fs::read_to_string(tmp.path().join("loggers/logger.py"))
+        .expect("read generated loggers/logger.py");
+    assert!(
+        logger.contains("structlog"),
+        "logger.py should use structlog:\n{logger}"
+    );
+    assert!(
+        logger.contains("def init_logging"),
+        "logger.py should expose init_logging:\n{logger}"
+    );
+    assert!(
+        !files.iter().any(|f| f == "loggers/logger_state.py"),
+        "logger_state.py should be removed, got: {files:?}"
+    );
+
+    // Then(5): dev 配置含 [log] 段且为 console 格式 (debug 友好)
+    let dev_cfg = fs::read_to_string(tmp.path().join("config/config.dev.toml"))
+        .expect("read generated config/config.dev.toml");
+    assert!(
+        dev_cfg.contains("[log]") && dev_cfg.contains("format = \"console\""),
+        "dev config should have a [log] section in console format:\n{dev_cfg}"
+    );
+    // prod 配置为 json + 压缩
+    let prod_cfg = fs::read_to_string(tmp.path().join("config/config.prod.toml"))
+        .expect("read generated config/config.prod.toml");
+    assert!(
+        prod_cfg.contains("[log]")
+            && prod_cfg.contains("format = \"json\"")
+            && prod_cfg.contains("compress = true"),
+        "prod config should have a [log] section in json format with compression:\n{prod_cfg}"
+    );
 }
 
 #[test]
@@ -98,6 +131,7 @@ fn fastapi_embedded_generation_renders_without_external_tools() {
         "README.md",
         "app/main.py",
         "app/settings.py",
+        "app/logging.py",
         "app/routes/example.py",
         "app/routes/health.py",
     ] {
@@ -136,6 +170,24 @@ fn fastapi_embedded_generation_renders_without_external_tools() {
     assert!(
         config.contains("0.0.0.0") && config.contains("8000"),
         "host/port not driven into config.toml:\n{config}"
+    );
+
+    // Then(4): FastAPI 也使用 structlog；config.toml 含 [log] 段；启动时初始化日志
+    let app_logging = fs::read_to_string(tmp.path().join("app/logging.py"))
+        .expect("read generated app/logging.py");
+    assert!(
+        app_logging.contains("structlog") && app_logging.contains("def init_logging"),
+        "app/logging.py should use structlog and expose init_logging:\n{app_logging}"
+    );
+    assert!(
+        config.contains("[log]"),
+        "fastapi config.toml should have a [log] section:\n{config}"
+    );
+    let app_main =
+        fs::read_to_string(tmp.path().join("app/main.py")).expect("read generated app/main.py");
+    assert!(
+        app_main.contains("init_logging(settings.log)"),
+        "app/main.py should initialize logging at startup:\n{app_main}"
     );
 }
 

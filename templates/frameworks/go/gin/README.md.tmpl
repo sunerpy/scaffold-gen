@@ -108,11 +108,15 @@ gofmt -w .      # 格式化代码
 - 基于 **tree-sitter + SQLite/FTS5** 的确定性代码知识图谱，**不含任何 AI/LLM**，输出字节级稳定。
 - 提供符号 / 调用 / 依赖关系图，支持 **CLI 与 MCP server** 两种用法，可直接喂给 AI 编程 Agent。
 - **单一二进制、易用、极高性能**：显著提升开发效率，同时大幅降低 token 消耗。
+- 接入后 Agent **自动**通过 MCP 探索符号/调用关系，并**自动检测文件变更增量同步**，无需手动维护索引。
+
+在 opencode、Claude、Kiro、Cursor 等支持 MCP 的 AI 编程工具中，只需：
 
 ```bash
-codegraph sync                 # 建立/更新索引
-codegraph explore "your code"  # 探索符号与调用关系
+codegraph install   # 安装并自动接入 opencode / Claude / Kiro / Cursor 等工具的 MCP
 ```
+
+重启编辑器 / Agent 工具后即自动接入 MCP，Agent 会自动调用 CodeGraph 检索，并在文件变更时自动增量同步（无需手动 sync/explore）。
 
 ---
 
