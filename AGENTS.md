@@ -1,20 +1,20 @@
 # SCAFFOLD-GEN KNOWLEDGE BASE
 
-**Version:** v0.5.0 **Updated:** 2026-06-25 **Branch:** main
+**Version:** v0.7.0 **Updated:** 2026-06-25 **Branch:** main
 
 ## OVERVIEW
 
 Rust CLI scaffolding tool (`scafgen`) generating project templates for Go/Rust/Python/TypeScript
 via a data-driven registry dispatch. A `FrameworkSpec` registry + `GenKind` enum replace the old
 78-line match tree; the orchestrator's `generate(GenerationRequest)` pipeline branches on `GenKind`.
-5 subcommands: `new`, `list`, `version`, `completions`, `self-update`.
+6 subcommands: `new`, `list`, `version`, `completions`, `self-update`, `skill`.
 
 ## STRUCTURE
 
 ```
 scaffold-gen/
 ├── src/
-│   ├── main.rs              # CLI entry (clap) — Commands enum (5 variants), async fn run()
+│   ├── main.rs              # CLI entry (clap) — Commands enum (6 variants), SkillAction, async fn run()
 │   ├── lib.rs               # Library exports
 │   ├── logging.rs           # tracing init, Verbosity enum, RUST_LOG override
 │   ├── commands/
@@ -24,7 +24,13 @@ scaffold-gen/
 │   │   ├── list.rs          # scafgen list [--json] — driven by registry::all_specs()
 │   │   ├── version.rs       # scafgen version — prints name/version/repo to stdout
 │   │   ├── completions.rs   # scafgen completions <shell> [--install] (clap_complete)
-│   │   └── self_update.rs   # scafgen self-update [--check] [--force] [--tag] (self_update+rustls)
+│   │   ├── self_update.rs   # scafgen self-update [--check] [--force] [--tag] (self_update+rustls)
+│   │   └── skill.rs         # scafgen skill <install|update|uninstall|status> handler
+│   ├── skill/               # Skill installer engine (embed/engine/targets)
+│   │   ├── mod.rs           # AgentId, Location, InstallContext, public API re-exports
+│   │   ├── embed.rs         # include_str! SKILL.md + git-blob-sha1 hash + sidecar marker
+│   │   ├── engine.rs        # write/update/uninstall/status to a skill dir
+│   │   └── targets.rs       # per-agent (opencode/claude/cursor/kiro) global+local dirs
 │   ├── generators/
 │   │   ├── registry.rs      # FrameworkSpec, GenKind enum, resolve(), all_specs()
 │   │   ├── orchestrator.rs  # GeneratorOrchestrator, GenerationRequest, generate() pipeline,
@@ -50,10 +56,14 @@ scaffold-gen/
 │   │                        #   typescript/{vue3,react}/
 │   ├── languages/           # go/, rust/, python/ (pure-language paths)
 │   └── licenses/            # MIT, Apache-2.0, GPL-3.0, etc.
+├── skills/
+│   └── scaffold-gen/
+│       ├── SKILL.md         # Embedded agent skill (include_str! into src/skill/embed.rs)
+│       └── evals/evals.json # Eval test prompts (skill-creator loop artifact)
 ├── tests/
 │   └── generation.rs        # Integration tests (public API, 8 tests)
 ├── Makefile                 # Primary task runner
-└── Cargo.toml               # Edition 2024, binary: scafgen, version: 0.5.0
+└── Cargo.toml               # Edition 2024, binary: scafgen, version: 0.7.0
 ```
 
 ## FRAMEWORK REGISTRY
@@ -101,6 +111,7 @@ Go/TypeScript + `Framework::None` → no pure-language path (error: "language re
 | `--with-build` step        | `orchestrator.rs::render_build_tooling`       | Runs after framework/language; `Language::build_dir()` |
 | Build template content     | `templates/build/<lang>/`                     | Makefile.tmpl + Dockerfile.tmpl per language           |
 | External shell-out logic   | `src/generators/external.rs`                  | Tauri / React only (Vue3 is now embedded)              |
+| Manage agent skill install | `src/skill/` + `src/commands/skill.rs`        | Embedded `skills/scaffold-gen/SKILL.md`; hash update   |
 | Output verbosity / logging | `src/logging.rs`                              | Verbosity enum, tracing init                           |
 | Framework-language mapping | `constants.rs::frameworks_for_language()`     | Single source of truth for the `list` command          |
 
@@ -112,12 +123,16 @@ scafgen list [--json]      # Show all frameworks + availability status
 scafgen version            # Print name, version, repository URL (stdout)
 scafgen completions <shell> [--install]  # bash/zsh/fish/powershell/elvish
 scafgen self-update [--check] [--force] [--tag <tag>]
+scafgen skill <install|update|uninstall|status>  # install embedded SKILL.md into agent dirs
 ```
 
 Global flags (all subcommands): `-q/--quiet` (errors only), `-v/--verbose` (debug).
 
 `new` flags: `--framework`, `--language`, `--host`, `--port`, `--license`, `--precommit`,
 `--swagger`, `--proto-gen`, `--error-gen`, `--with-build`.
+
+`skill` flags: `--target <agent>` (opencode/claude/cursor/kiro; repeatable; default all detected),
+`--global` (default) / `--local`, `-y/--yes` (install/uninstall), `--force` (update).
 
 Machine-consumable output (completions script, version string, list table/JSON) → **stdout**.
 All tracing/diagnostics → **stderr**.
@@ -168,7 +183,7 @@ All tracing/diagnostics → **stderr**.
    confirmation
 4. **Go-Zero unimplemented**: `Framework::GoZero` resolves to `GenKind::Unimplemented` — returns a
    clear error; no generator struct exists; enum variant kept for CLI discoverability
-5. **Tests: 112 total**: 42 lib + 62 bin inline + 8 integration in `tests/generation.rs`; `make
+5. **Tests: 148 total**: 42 lib + 98 bin inline + 8 integration in `tests/generation.rs`; `make
 test` covers all
 6. **Vue3 is EmbeddedAsync**: moved from ExternalAsync — full offline scaffold, optional `pnpm
 install` post-step; `external.rs` no longer contains Vue3 logic

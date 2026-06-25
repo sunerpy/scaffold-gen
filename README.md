@@ -104,6 +104,13 @@ scafgen new my-mcp        --framework mcp-server --language go
 # Add a Makefile + Dockerfile for local build / containerization
 scafgen new my-gin-app --framework gin --with-build
 
+# Install the agent skill, then restart your AI agent to auto-bootstrap projects
+scafgen skill install              # install into all detected agents (global)
+scafgen skill status               # report per-agent install state
+scafgen skill update --force       # refresh to the embedded version
+scafgen skill uninstall            # remove it
+#   --target <opencode|claude|cursor|kiro> (repeatable)  --global (default) / --local
+
 # Global flags (work on all subcommands)
 scafgen -q new my-project   # quiet: errors only
 scafgen -v new my-project   # verbose: debug output
@@ -128,6 +135,21 @@ Supported frameworks: `gin`, `go-zero`, `mcp-server`, `tauri`, `vue3`, `react`, 
 Diagnostics and errors go to stderr; the process exits non-zero on failure.
 
 </details>
+
+### Agent integration (skill)
+
+Install the embedded skill once and your AI agent (opencode / Claude / Cursor / Kiro)
+auto-bootstraps new projects via `scafgen` — it confirms your requirements, then runs
+`scafgen new` non-interactively to scaffold a skeleton, then builds on it.
+
+```sh
+scafgen skill install   # then restart your agent — it auto-uses the scaffold-gen skill
+```
+
+`scafgen skill <install|update|uninstall|status>` installs into every detected agent
+(global) by default. Use `--target <agent>` to limit, `--local` for project-level, and
+`--force` on `update` to overwrite local edits. Hash-based update detection keeps it in
+sync with the binary.
 
 ## Architecture
 
