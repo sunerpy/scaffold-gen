@@ -189,6 +189,19 @@ fn fastapi_embedded_generation_renders_without_external_tools() {
         app_main.contains("init_logging(settings.log)"),
         "app/main.py should initialize logging at startup:\n{app_main}"
     );
+
+    // Then(5): 入口 main.py 必须把 uvicorn 热重载限定到 app/ 并排除 logs/，
+    // 否则日志写入会反复触发 reload 形成死循环 (fix/fastapi-reload-loop)。
+    let entry_main =
+        fs::read_to_string(tmp.path().join("main.py")).expect("read generated main.py");
+    assert!(
+        entry_main.contains("reload_dirs=") && entry_main.contains("reload_excludes="),
+        "main.py must pass reload_dirs/reload_excludes to uvicorn.run to avoid the reload loop:\n{entry_main}"
+    );
+    assert!(
+        entry_main.contains("\"*.log\"") && entry_main.contains("\"logs\""),
+        "main.py reload_excludes must exclude the log directory/files (logs, *.log):\n{entry_main}"
+    );
 }
 
 #[test]
