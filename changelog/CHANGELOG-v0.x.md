@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/sunerpy/scaffold-gen/compare/v0.6.0...v0.7.0) (2026-06-25)
+
+
+### Features
+
+* 新增 skill 子命令,安装引导式项目脚手架 agent skill ([#17](https://github.com/sunerpy/scaffold-gen/issues/17)) ([73d7e57](https://github.com/sunerpy/scaffold-gen/commit/73d7e573426e9c061641e27e27b34ffd6bba6cf1))
+
 ## [0.6.0](https://github.com/sunerpy/scaffold-gen/compare/v0.5.0...v0.6.0) (2026-06-25)
 
 
