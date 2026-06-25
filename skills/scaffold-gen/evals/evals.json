@@ -1,0 +1,64 @@
+{
+  "skill_name": "scaffold-gen",
+  "description": "Validate that an agent given the scaffold-gen SKILL.md correctly bootstraps a new project via the real `scafgen new` CLI (non-interactively, correct framework token, no hang), versus a baseline agent without the skill.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "fastapi-cn",
+      "prompt": "帮我起一个 fastapi 项目，叫 orderapi，监听 8080",
+      "expected_output": "Agent runs `scafgen new orderapi --language python --framework fastapi --port 8080 ...` with all flags non-interactively; generated project has config.toml + app/routes/ + main.py.",
+      "assertions": [
+        "Used the scafgen tool (did not hand-roll the project from scratch)",
+        "Ran `scafgen new` non-interactively with --language and --framework flags (no hang)",
+        "Chose the correct framework token `fastapi`",
+        "Passed port 8080 through to config",
+        "Generated FastAPI key files: config.toml + app/routes/ + main.py",
+        "Project named orderapi"
+      ],
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "vue3-vague",
+      "prompt": "I want to start a new Vue3 frontend for our admin dashboard",
+      "expected_output": "Agent confirms a name + sensible defaults, then runs `scafgen new <name> --language typescript --framework vue3 ...` non-interactively; generated project has .env + vite.config.ts + src/.",
+      "assertions": [
+        "Used the scafgen tool (did not hand-roll the project from scratch)",
+        "Ran `scafgen new` non-interactively with --language and --framework flags (no hang)",
+        "Chose the correct framework token `vue3`",
+        "Picked/confirmed a sensible project name despite the vague prompt",
+        "Generated Vue3 key files: .env (or .env.example) + vite.config.ts + src/"
+      ],
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "mcp-go",
+      "prompt": "set up a new Go MCP server project called toolhub",
+      "expected_output": "Agent runs `scafgen new toolhub --language go --framework mcp-server ...` non-interactively; generated project has config.toml + proto/ + internal/ + cmd/server.",
+      "assertions": [
+        "Used the scafgen tool (did not hand-roll the project from scratch)",
+        "Ran `scafgen new` non-interactively with --language and --framework flags (no hang)",
+        "Chose the correct framework token `mcp-server` (not gin / not a guessed token)",
+        "Generated MCP key files: config.toml + proto/ + internal/ + cmd/server",
+        "Project named toolhub"
+      ],
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "rust-cli",
+      "prompt": "create a new rust CLI tool named logparse",
+      "expected_output": "Agent runs `scafgen new logparse --language rust ...` non-interactively (pure-language; MUST also pass --proto-gen/--error-gen or it hangs); generated project has Cargo.toml + src/main.rs.",
+      "assertions": [
+        "Used the scafgen tool (did not fall back to plain `cargo new`)",
+        "Ran `scafgen new` for Rust pure-language and ultimately succeeded (no terminal hang)",
+        "Passed the Rust-specific flags --proto-gen and --error-gen (required non-interactively)",
+        "First scafgen invocation did NOT hang on a missing flag",
+        "Generated Rust key files: Cargo.toml + src/main.rs",
+        "Project named logparse"
+      ],
+      "files": []
+    }
+  ]
+}

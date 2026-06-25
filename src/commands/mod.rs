@@ -4,4 +4,5 @@ pub mod list;
 pub mod new;
 pub mod prompts;
 pub mod self_update;
+pub mod skill;
 pub mod version;

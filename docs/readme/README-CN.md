@@ -103,6 +103,13 @@ scafgen new my-mcp        --framework mcp-server --language go
 # 同时生成 Makefile + Dockerfile（本地构建 / 容器化）
 scafgen new my-gin-app --framework gin --with-build
 
+# 安装 agent skill，然后重启 AI agent 即可自动通过 scafgen 引导新项目
+scafgen skill install              # 安装到所有检测到的 agent（全局）
+scafgen skill status               # 查看各 agent 安装状态
+scafgen skill update --force       # 刷新为内嵌版本
+scafgen skill uninstall            # 卸载
+#   --target <opencode|claude|cursor|kiro>（可重复）  --global（默认）/ --local
+
 # 全局开关（对所有子命令生效）
 scafgen -q new my-project   # 静默：仅显示错误
 scafgen -v new my-project   # 详细：显示调试输出
@@ -126,6 +133,19 @@ scafgen -v new my-project   # 详细：显示调试输出
 诊断信息和错误输出到 stderr；失败时以非零退出码退出。
 
 </details>
+
+### Agent 集成（skill）
+
+安装内嵌的 skill 后，你的 AI agent（opencode / Claude / Cursor / Kiro）即可通过 `scafgen`
+自动引导新项目 —— 它先确认需求，再非交互式运行 `scafgen new` 生成项目骨架，然后在其上继续开发。
+
+```sh
+scafgen skill install   # 然后重启 agent —— 它会自动使用 scaffold-gen skill
+```
+
+`scafgen skill <install|update|uninstall|status>` 默认安装到所有检测到的 agent（全局）。
+用 `--target <agent>` 限定范围，`--local` 装到项目级，`update` 时加 `--force` 覆盖本地修改。
+基于哈希的更新检测让 skill 与二进制保持同步。
 
 ## 架构设计
 

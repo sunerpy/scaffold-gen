@@ -6,6 +6,7 @@ mod commands;
 mod constants;
 mod generators;
 mod logging;
+mod skill;
 mod template_engine;
 mod utils;
 
@@ -112,6 +113,74 @@ enum Commands {
         #[arg(long)]
         tag: Option<String>,
     },
+    /// Install the embedded scaffold-gen skill into AI agent skill directories
+    Skill {
+        #[command(subcommand)]
+        action: SkillAction,
+    },
+}
+
+const SKILL_TARGET_HELP: &str = "Restrict to specific agents (opencode, claude, cursor, kiro); repeatable. Empty = all detected";
+
+#[derive(Subcommand)]
+enum SkillAction {
+    /// Install the embedded skill into the selected agents' skill directories
+    Install {
+        /// Restrict to specific agents (repeatable)
+        #[arg(long, help = SKILL_TARGET_HELP)]
+        target: Vec<String>,
+        /// Install into the global (user-level) skill directory (default)
+        #[arg(long)]
+        global: bool,
+        /// Install into the local (project-level) skill directory
+        #[arg(long, conflicts_with = "global")]
+        local: bool,
+        /// Proceed without confirmation (non-interactive; default behavior)
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
+    /// Refresh installed skills to the embedded version
+    Update {
+        /// Restrict to specific agents (repeatable)
+        #[arg(long, help = SKILL_TARGET_HELP)]
+        target: Vec<String>,
+        /// Operate on the global (user-level) skill directory (default)
+        #[arg(long)]
+        global: bool,
+        /// Operate on the local (project-level) skill directory
+        #[arg(long, conflicts_with = "global")]
+        local: bool,
+        /// Overwrite locally modified skill files
+        #[arg(long)]
+        force: bool,
+    },
+    /// Remove the installed skill from the selected agents
+    Uninstall {
+        /// Restrict to specific agents (repeatable)
+        #[arg(long, help = SKILL_TARGET_HELP)]
+        target: Vec<String>,
+        /// Operate on the global (user-level) skill directory (default)
+        #[arg(long)]
+        global: bool,
+        /// Operate on the local (project-level) skill directory
+        #[arg(long, conflicts_with = "global")]
+        local: bool,
+        /// Proceed without confirmation (non-interactive; default behavior)
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
+    /// Report per-agent skill installation status
+    Status {
+        /// Restrict to specific agents (repeatable)
+        #[arg(long, help = SKILL_TARGET_HELP)]
+        target: Vec<String>,
+        /// Query the global (user-level) skill directory (default)
+        #[arg(long)]
+        global: bool,
+        /// Query the local (project-level) skill directory
+        #[arg(long, conflicts_with = "global")]
+        local: bool,
+    },
 }
 
 #[tokio::main]
@@ -172,6 +241,56 @@ async fn run(command: Commands) -> anyhow::Result<()> {
         Commands::SelfUpdate { check, force, tag } => {
             commands::self_update::execute(check, force, tag)
         }
+        Commands::Skill { action } => commands::skill::execute(skill_request_from(action)),
+    }
+}
+
+fn skill_request_from(action: SkillAction) -> commands::skill::SkillRequest {
+    use commands::skill::{Action, SkillRequest};
+    match action {
+        SkillAction::Install {
+            target,
+            global: _,
+            local,
+            yes: _,
+        } => SkillRequest {
+            action: Action::Install,
+            targets: target,
+            local,
+            force: false,
+        },
+        SkillAction::Update {
+            target,
+            global: _,
+            local,
+            force,
+        } => SkillRequest {
+            action: Action::Update,
+            targets: target,
+            local,
+            force,
+        },
+        SkillAction::Uninstall {
+            target,
+            global: _,
+            local,
+            yes: _,
+        } => SkillRequest {
+            action: Action::Uninstall,
+            targets: target,
+            local,
+            force: false,
+        },
+        SkillAction::Status {
+            target,
+            global: _,
+            local,
+        } => SkillRequest {
+            action: Action::Status,
+            targets: target,
+            local,
+            force: false,
+        },
     }
 }
 
@@ -303,5 +422,95 @@ mod cli_tests {
                 "framework help missing {fw}: {FRAMEWORK_HELP}"
             );
         }
+    }
+
+    #[test]
+    fn skill_install_parses_defaults() {
+        let cli =
+            Cli::try_parse_from(["scafgen", "skill", "install"]).expect("skill install parses");
+        match cli.command {
+            Commands::Skill {
+                action:
+                    SkillAction::Install {
+                        target,
+                        global,
+                        local,
+                        yes,
+                    },
+            } => {
+                assert!(target.is_empty());
+                assert!(!global);
+                assert!(!local);
+                assert!(!yes);
+            }
+            _ => panic!("expected Skill::Install variant"),
+        }
+    }
+
+    #[test]
+    fn skill_install_parses_target_and_local() {
+        let cli = Cli::try_parse_from([
+            "scafgen", "skill", "install", "--target", "opencode", "--target", "claude", "--local",
+            "-y",
+        ])
+        .expect("skill install --target --local parses");
+        match cli.command {
+            Commands::Skill {
+                action:
+                    SkillAction::Install {
+                        target, local, yes, ..
+                    },
+            } => {
+                assert_eq!(target, vec!["opencode".to_string(), "claude".to_string()]);
+                assert!(local);
+                assert!(yes);
+            }
+            _ => panic!("expected Skill::Install variant"),
+        }
+    }
+
+    #[test]
+    fn skill_update_parses_force() {
+        let cli = Cli::try_parse_from(["scafgen", "skill", "update", "--force"])
+            .expect("skill update --force parses");
+        match cli.command {
+            Commands::Skill {
+                action: SkillAction::Update { force, .. },
+            } => assert!(force),
+            _ => panic!("expected Skill::Update variant"),
+        }
+    }
+
+    #[test]
+    fn skill_uninstall_parses_yes() {
+        let cli = Cli::try_parse_from(["scafgen", "skill", "uninstall", "-y"])
+            .expect("skill uninstall -y parses");
+        match cli.command {
+            Commands::Skill {
+                action: SkillAction::Uninstall { yes, .. },
+            } => assert!(yes),
+            _ => panic!("expected Skill::Uninstall variant"),
+        }
+    }
+
+    #[test]
+    fn skill_status_parses_global() {
+        let cli = Cli::try_parse_from(["scafgen", "skill", "status", "--global"])
+            .expect("skill status --global parses");
+        match cli.command {
+            Commands::Skill {
+                action: SkillAction::Status { global, local, .. },
+            } => {
+                assert!(global);
+                assert!(!local);
+            }
+            _ => panic!("expected Skill::Status variant"),
+        }
+    }
+
+    #[test]
+    fn skill_global_and_local_conflict() {
+        let err = Cli::try_parse_from(["scafgen", "skill", "status", "--global", "--local"]);
+        assert!(err.is_err(), "--global and --local must conflict");
     }
 }
