@@ -50,19 +50,31 @@
 
 ## 安装
 
+**Linux / macOS**（shell）：
+
 ```sh
-# 一键安装脚本（Linux / macOS）
 curl -fsSL https://raw.githubusercontent.com/sunerpy/scaffold-gen/main/scripts/install.sh | sh
 ```
 
+**Windows**（PowerShell）：
+
+```powershell
+irm https://raw.githubusercontent.com/sunerpy/scaffold-gen/main/scripts/install.ps1 | iex
+```
+
+**通过 cargo**（任意安装了 Rust 的平台）：
+
 ```sh
-# 从 crates.io 安装
 cargo install scaffold-gen
 ```
 
-Linux、macOS、Windows 的预编译二进制见
-[Releases](https://github.com/sunerpy/scaffold-gen/releases) 页面。从源码构建：
-`git clone … && cd scaffold-gen && make release`。
+**预编译二进制** —— Linux / macOS / Windows（x86_64 + aarch64）见
+[Releases](https://github.com/sunerpy/scaffold-gen/releases) 页面。
+
+**从源码构建**：`git clone … && cd scaffold-gen && make release`。
+
+安装脚本支持 `TOOL_VERSION`（固定某个发布版本）和 `TOOL_INSTALL_DIR`
+（自定义安装目录）环境变量覆盖。
 
 ## 快速开始
 

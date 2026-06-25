@@ -51,19 +51,31 @@ defaults, a LICENSE, and an initialized git repo.
 
 ## Install
 
+**Linux / macOS** (shell):
+
 ```sh
-# One-line install script (Linux / macOS)
 curl -fsSL https://raw.githubusercontent.com/sunerpy/scaffold-gen/main/scripts/install.sh | sh
 ```
 
+**Windows** (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/sunerpy/scaffold-gen/main/scripts/install.ps1 | iex
+```
+
+**Via cargo** (any platform with Rust):
+
 ```sh
-# From crates.io
 cargo install scaffold-gen
 ```
 
-Prebuilt binaries for Linux, macOS, and Windows are on the
-[Releases](https://github.com/sunerpy/scaffold-gen/releases) page. To build from
-source: `git clone … && cd scaffold-gen && make release`.
+**Prebuilt binaries** — Linux / macOS / Windows (x86_64 + aarch64) on the
+[Releases](https://github.com/sunerpy/scaffold-gen/releases) page.
+
+**From source**: `git clone … && cd scaffold-gen && make release`.
+
+The install scripts honor `TOOL_VERSION` (pin a release) and `TOOL_INSTALL_DIR`
+(custom destination) environment overrides.
 
 ## Quick Start
 
