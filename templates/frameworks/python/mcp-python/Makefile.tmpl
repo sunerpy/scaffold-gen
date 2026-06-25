@@ -1,0 +1,53 @@
+# <<project_name>> — MCP 服务任务入口 (project task runner, pure Make).
+#
+# 提交前必须先 `uv sync` 再 `make test`。
+# Run `uv sync` then `make test` before committing.
+#
+#   make help     list targets
+#   make install  uv sync (install deps into .venv)
+#   make run       run the server (uv run python main.py)
+#   make dev       run with hot-reload on
+#   make test      pytest (in-memory MCP client; no network)
+#   make fmt       format (ruff format + ruff check --fix)
+#   make lint      ruff check
+#   make check     fmt-check + lint + test
+#   make clean     remove caches / build artifacts
+
+.DEFAULT_GOAL := help
+
+.PHONY: help install build run dev test fmt lint check clean
+
+help: ## Show this help
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
+
+install: ## Sync the environment (install deps into .venv)
+	@uv sync
+
+build: install ## Alias for install (uv sync)
+
+run: ## Run the MCP server (uv run python main.py)
+	@uv run python main.py
+
+dev: ## Run the server with hot-reload enabled
+	@SERVER__RELOAD=true uv run python main.py
+
+test: ## Run tests (in-memory MCP client; no network, no server)
+	@uv run pytest -q
+
+fmt: ## Format code (ruff format + ruff check --fix)
+	@uv run ruff format .
+	@uv run ruff check --fix .
+
+lint: ## Run ruff lint
+	@uv run ruff check .
+
+check: ## Full local verification (fmt-check + lint + test)
+	@uv run ruff format --check .
+	@uv run ruff check .
+	@uv run pytest -q
+	@echo "All checks passed."
+
+clean: ## Remove caches / build artifacts
+	@rm -rf .pytest_cache .ruff_cache dist build *.egg-info
+	@find . -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true

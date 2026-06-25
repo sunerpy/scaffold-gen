@@ -1,0 +1,45 @@
+"""echo 工具的端到端测试 (in-memory)。
+
+pytest-asyncio auto 模式：直接写 `async def test_*` 即可，无需任何标记。
+asyncio_mode="auto" — plain `async def test_*`, no marker needed.
+
+`client` 是一个工厂，测试用 `async with client() as c:` 在自己的任务里开/关连接，
+两种后端 (fastmcp / official) 共用同一份测试代码。
+`client` is a factory; tests open it with `async with client() as c:` in their
+own task, so one test body serves both backends.
+"""
+
+from tests.conftest import _extract, _tool_names
+
+
+async def test_list_tools(client) -> None:
+    """Given a wired MCP instance / When listing tools / Then echo is present."""
+    async with client() as c:
+        listed = await c.list_tools()
+    assert "echo" in _tool_names(listed)
+
+
+async def test_echo_happy(client) -> None:
+    """Given echo / When called with text='hi', repeat=2 / Then it echoes twice."""
+    async with client() as c:
+        result = await c.call_tool("echo", {"text": "hi", "repeat": 2})
+    data = _extract(result)
+    assert data["repeat"] == 2
+    assert data["echoed"] == "hi hi"
+
+
+async def test_echo_rejects_empty(client) -> None:
+    """Given echo / When text is empty / Then the call surfaces a validation error.
+
+    两种后端表达校验失败的方式不同：fastmcp 抛 ToolError（异常），official v1 返回
+    一个带 isError=True 的结果。下面同时接受这两种形态。
+    The two backends differ: fastmcp raises (ToolError), official v1 returns a
+    result flagged `isError`. Accept either shape below.
+    """
+    try:
+        async with client() as c:
+            result = await c.call_tool("echo", {"text": "", "repeat": 1})
+    except Exception:
+        return  # fastmcp: 校验失败以异常形式抛出 —— 符合预期。
+    # official v1: 校验失败以 isError 标志返回 —— 同样符合预期。
+    assert getattr(result, "isError", False), f"empty text should error, got: {result!r}"

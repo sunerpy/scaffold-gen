@@ -1,0 +1,92 @@
+"""共享测试夹具 (shared pytest fixtures) —— 纯内存客户端，无网络、无服务进程.
+
+═══════════════════════════════════════════════════════════════════════════
+  这里提供一个 `client` 夹具：它返回一个"打开内存连接"的异步上下文管理器工厂，
+  测试用 `async with client() as c:` 在自己的任务里打开/关闭连接。
+  完全不起 HTTP 服务、不走网络 —— `make test` 因此快速、确定、可离线运行。
+  为什么是"工厂"而不是直接 yield 连接？official 后端底层用 anyio task group，
+  其取消域必须在"同一个任务"里进入与退出；若把连接跨 fixture 的 yield 暴露，
+  pytest-asyncio 会在另一个任务里做 teardown，触发
+  "Attempted to exit cancel scope in a different task"。让测试自己持有
+  `async with` 即可保证进入/退出同任务，两种后端写法统一。
+  This yields a FACTORY returning an async context manager; tests open it with
+  `async with client() as c:` in their own task. NO HTTP server, NO network.
+  The factory (vs. yielding the live client) keeps the official backend's anyio
+  task-group cancel scope entered & exited in the SAME task — yielding it across
+  the fixture boundary makes pytest-asyncio tear it down in a different task and
+  raises "Attempted to exit cancel scope in a different task". `_extract`
+  normalizes the call_tool result of either backend into a plain dict.
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+import json
+
+import pytest_asyncio
+
+from app.server import mcp
+
+<%if mcp_backend_is_official%>
+# ── 后端：official (modelcontextprotocol/python-sdk v1) ──────────────────────
+#    v1 用 create_connected_server_and_client_session 把底层 server 连进一个
+#    ClientSession（内存双向管道）。禁止用 mcp.client.Client（那是 v2-alpha）。
+from mcp.shared.memory import create_connected_server_and_client_session
+
+
+@pytest_asyncio.fixture
+async def client():
+    """返回一个工厂：调用它得到一个产出 ClientSession 的异步上下文管理器 (official v1)."""
+
+    def _connect():
+        return create_connected_server_and_client_session(mcp._mcp_server)
+
+    yield _connect
+<%else%>
+# ── 后端：fastmcp (默认 / default) ───────────────────────────────────────────
+#    fastmcp 用 Client(mcp) 直接连进内存实例。
+from fastmcp import Client
+
+
+@pytest_asyncio.fixture
+async def client():
+    """返回一个工厂：调用它得到一个产出 Client 的异步上下文管理器 (fastmcp)."""
+
+    def _connect():
+        return Client(mcp)
+
+    yield _connect
+<%endif%>
+
+
+def _extract(result) -> dict:
+    """把 call_tool 的返回结果归一化成 python dict.
+
+    两种后端的返回 shape 不同，这里防御性地按优先级尝试多个属性：
+      - 优先取"结构化"载荷：fastmcp 2.x 的 Client.call_tool 把工具返回的 dict
+        放在 .data（亦提供 .structured_content）；official v1 的 CallToolResult
+        放在 .structuredContent。
+      - 退化路径：解析 .content[0].text 里的 JSON 字符串（两种后端都提供）。
+    Assumption (documented): on the pinned fastmcp 2.x the structured payload is
+    on `.data`; we still try `.structured_content`/`.structuredContent` before
+    falling back to parsing `.content[0].text` as JSON, so this is robust to
+    either backend's exact attribute name.
+    """
+    for attr in ("data", "structured_content", "structuredContent"):
+        value = getattr(result, attr, None)
+        if isinstance(value, dict):
+            return value
+    content = getattr(result, "content", None)
+    if content:
+        text = getattr(content[0], "text", None)
+        if isinstance(text, str):
+            return json.loads(text)
+    raise AssertionError(f"could not extract a dict payload from result: {result!r}")
+
+
+def _tool_names(listed) -> list[str]:
+    """把 list_tools 的返回归一化成工具名列表.
+
+    fastmcp `Client.list_tools()` 返回 Tool 对象列表（每个有 .name）；
+    official v1 `ClientSession.list_tools()` 返回带 .tools 的结果对象。
+    """
+    tools = getattr(listed, "tools", listed)
+    return [tool.name for tool in tools]
