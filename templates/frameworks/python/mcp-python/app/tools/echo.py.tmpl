@@ -11,10 +11,14 @@
 #       `Annotated[..., Field(...)]`.
 #    3) 写 `def register(mcp): mcp.tool(name=..., description=...)(你的函数)`。
 #       Add `def register(mcp): mcp.tool(name=..., description=...)(your_fn)`.
-#       —— 不要写 `@mcp.tool` 装饰器：两种后端的括号写法不同，这里的"显式调用"
-#          形式两边通用。保存即被自动发现，无需改任何其它文件。
-#       Do NOT use the `@mcp.tool` decorator — the two backends differ on its
-#       call shape; this explicit call form is portable. Saving auto-discovers it.
+#       —— 本脚手架推荐用上面的"显式调用"形式：它对 fastmcp / official 两种后端
+#          通用，工具文件无需 import 任何后端，最易移植、最易排查。
+#          如果你确定只用一种后端，也可以改用装饰器（更简洁）——见文件末尾的
+#          注释示例（fastmcp 写 `@mcp.tool`，official 写 `@mcp.tool()`）。
+#       The explicit call form above is recommended for this scaffold: it's portable
+#       across both backends and keeps tool files import-free. If you commit to ONE
+#       backend you may use the decorator instead for brevity — see the commented
+#       example at the bottom of this file.
 #
 #  本文件刻意不 import 任何 MCP 后端 —— 工具对 fastmcp / official 完全无感。
 #  This file intentionally imports NO MCP backend — tools are backend-agnostic.
@@ -47,3 +51,27 @@ def echo(
 def register(mcp) -> None:
     """把本模块的工具注册到 MCP 实例上 (由 app/tools/__init__.py 自动调用)."""
     mcp.tool(name="echo", description="Echo text back, optionally repeated.")(echo)
+
+
+# ── 装饰器替代写法 (decorator alternative) —— 仅当你锁定单一后端时 ─────────────
+#  如果你确定只用一种后端，也可以用装饰器快速注册（更简洁）。但装饰器需要在模块里
+#  拿到 `mcp` 实例，且两种后端的括号写法不同；本脚手架的工具文件不 import 后端、
+#  由上面的 `register(mcp)` 接收实例，所以这里默认用通用的显式调用形式。
+#  If you commit to ONE backend you can use the decorator for brevity. The explicit
+#  `mcp.tool(...)(fn)` form used above is portable across both backends and keeps this
+#  file backend-agnostic (no backend import, no module-level `mcp`). The decorator's
+#  exact shape differs per backend:
+#
+#    # fastmcp（无括号即可 / parenless OK）：
+#    # @mcp.tool
+#    # def echo(text: str, repeat: int = 1) -> dict:
+#    #     ...
+#
+#    # official SDK（必须带括号 / parentheses required）：
+#    # @mcp.tool()
+#    # def echo(text: str, repeat: int = 1) -> dict:
+#    #     ...
+#
+#  注意：装饰器示例仅作说明，未启用——本文件刻意不在模块层持有 `mcp` 实例。
+#  Note: the decorator examples are illustrative only and intentionally NOT active —
+#  this file deliberately holds no module-level `mcp`.

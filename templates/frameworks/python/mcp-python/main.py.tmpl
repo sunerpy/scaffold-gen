@@ -45,6 +45,14 @@ _RELOAD_EXCLUDES = [
 def main() -> None:
     """按配置启动 MCP HTTP 服务."""
     init_logging(settings.log)
+    # reload 完全由 settings.server.reload 决定，默认 false（见 config.toml）。
+    # 生产用 `make run` / `uv run python main.py` 运行，reload 关闭。
+    # 唯一开启方式：本地开发 `make dev`（它设 SERVER__RELOAD=true 覆盖配置）。
+    # 此处没有任何强制 reload=True 的代码路径。
+    # reload is driven solely by settings.server.reload (default false; see config.toml).
+    # Production runs `make run` / `uv run python main.py` with reload OFF.
+    # The ONLY intended way to enable it is local dev via `make dev`
+    # (which sets SERVER__RELOAD=true to override the config). No code path forces it on.
     uvicorn.run(
         "app.server:asgi_app",
         host=settings.server.host,

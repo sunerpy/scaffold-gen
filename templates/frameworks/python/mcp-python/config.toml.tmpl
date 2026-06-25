@@ -16,8 +16,10 @@ host = "<<default_host>>"
 port = <<default_port>>
 
 # 是否开启热重载 (默认 false)。开发时用 `make dev` 自动开启，无需在此改。
-# 生产请保持 false。Auto-reload is OFF by default; `make dev` flips it on for
-# development. Keep it false in production.
+# ⚠️ 生产环境必须保持 false（热重载仅用于本地开发，会监视文件变化、增加开销，
+#    且可能在写日志时反复重启）。Production MUST keep this false — hot-reload is
+#    for local dev only (it watches files, adds overhead, and can restart in a loop
+#    when logs are written). Use `make dev` to flip it on locally; never in prod.
 reload = false
 
 # ----------------------------------------------------------------------------

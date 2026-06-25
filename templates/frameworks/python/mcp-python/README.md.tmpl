@@ -80,6 +80,11 @@ make run
 make dev
 ```
 
+> ⚠️ **热重载仅限本地开发**：`config.toml` 的 `reload` 生产环境必须保持 `false`，
+> `make dev`（设 `SERVER__RELOAD=true`）是唯一开启方式；生产用 `make run`。
+> Hot-reload is dev-only — keep `reload = false` in production; `make dev` is the
+> only intended way to enable it.
+
 ---
 
 ## 改监听地址 / 端口 / 传输（只改 config.toml）
@@ -107,7 +112,8 @@ sse_enabled = true     # 设为 false 可关闭 SSE，只保留 streamable-HTTP
 | --- | --- | --- |
 | **定位** | 协议源头，精细控制，贴近 spec | 高层封装，最省事，装饰器优先 |
 | **适合场景** | 需要控制会话/传输细节、追踪最新协议变更 | 快速上手、工具逻辑为主、减少样板 |
-| **写工具** | 同样用 `mcp.tool(name=...)(fn)` 注册 | 同样用 `mcp.tool(name=...)(fn)` 注册 |
+| **写工具** | 显式 `mcp.tool(name=...)(fn)`（两端通用）；装饰器写 `@mcp.tool()` | 显式 `mcp.tool(name=...)(fn)`（两端通用）；装饰器写 `@mcp.tool`（无括号也行，更简洁） |
+| **装饰器便利性** | 支持 `@mcp.tool()`（需带括号） | 支持 `@mcp.tool`（可省括号），书写最省事 |
 | **协议完整性** | 直接跟随 MCP spec 迭代 | 封装层可能滞后，但覆盖日常用例 |
 | **生产可控性** | 会话管理、错误细节更透明 | 开箱即用，隐藏了部分底层细节 |
 
@@ -155,15 +161,38 @@ def add(
 
 ### 第 3 步：写 `register(mcp)` 函数注册工具
 
-在同一个文件末尾加：
+在同一个文件末尾加（**本脚手架推荐的显式调用形式，两种后端通用**）：
 
 ```python
 def register(mcp) -> None:
     mcp.tool(name="add", description="把两个整数相加。")(add)
 ```
 
-**不要用 `@mcp.tool` 装饰器**。两种后端（fastmcp / official）的装饰器括号写法不同，
-这里的"显式调用"形式两端通用，出了问题也更容易排查。
+为什么默认用这种**显式调用**形式：它对 fastmcp / official 两种后端完全通用，
+工具文件无需 import 任何后端、保持后端无感，出了问题也更容易排查。
+
+如果你**确定只用一种后端**，也可以用**装饰器**快速注册（更简洁）——但要注意两种
+后端的装饰器写法不同，且装饰器需要在模块里能拿到 `mcp` 实例：
+
+```python
+# fastmcp：可省括号，最省事
+@mcp.tool
+def add(a: int, b: int) -> dict:
+    return {"result": a + b}
+
+# official SDK：必须带括号
+@mcp.tool()
+def add(a: int, b: int) -> dict:
+    return {"result": a + b}
+```
+
+> **怎么选**：装饰器不是"禁用"，而是它的确切写法**因后端而异**（fastmcp `@mcp.tool` /
+> official `@mcp.tool()`）。所以本脚手架默认用**可移植的显式调用形式**，让工具文件保持
+> 后端无感；当你已经锁定单一后端、更看重简洁时，用装饰器即可。
+> The decorator isn't banned — its exact form just differs per backend (fastmcp
+> `@mcp.tool`, official `@mcp.tool()`), so this scaffold defaults to the portable
+> explicit `mcp.tool(...)(fn)` form. Use the decorator once you've picked one backend
+> and prefer brevity.
 
 保存文件后，`app/tools/__init__.py` 会**自动发现并注册**这个工具——你不用改任何其它文件，
 不用改 `server.py`，不用改 `main.py`。
