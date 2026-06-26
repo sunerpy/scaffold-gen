@@ -280,7 +280,9 @@ docker run --rm --network host ghcr.io/modelcontextprotocol/inspector:latest
 `http://localhost:6274/?transport=streamable-http&serverUrl=http://<<default_host>>:<<default_port>>/mcp`
 
 > **CLI 模式**（CI 适用）：`npx @modelcontextprotocol/inspector --cli ...`，连接→执行→打印→退出，无需浏览器。
+<%if auth_enabled%>
 > **鉴权**：若本服务启用了鉴权（`[auth]`），在 Connect 面板的 **Authentication** 处填 Bearer Token，Inspector 会自动带上 `Authorization: Bearer <token>` 头。
+<%endif%>
 > **安全**：使用 Inspector **≥ 0.14.1**（更早版本有 RCE 漏洞 CVE-2025-49596），勿在公网暴露。
 
 ---
