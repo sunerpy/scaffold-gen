@@ -80,3 +80,41 @@ max_age = 30
 
 # 轮转后是否 gzip 压缩 / gzip-compress rotated files
 compress = true
+<%- if auth_enabled %>
+
+# ----------------------------------------------------------------------------
+#  OAuth2 / JWT 鉴权配置 / auth (Bearer JWT) configuration
+#  enabled=false 时不校验任何 token；启用后需填好 jwks_uri / issuer / audience。
+#  When enabled=false no token is checked. To turn on, fill jwks_uri/issuer/audience.
+# ----------------------------------------------------------------------------
+[auth]
+# 是否启用鉴权 / enable auth (默认 false)
+enabled = false
+
+# 鉴权模式 / auth mode: 目前仅 "jwt"
+mode = "jwt"
+
+# JWKS 公钥地址 / JWKS URI —— 取自 IdP 的 /.well-known/openid-configuration 的 "jwks_uri"
+# From your IdP's /.well-known/openid-configuration → "jwks_uri".
+jwks_uri = ""
+
+# 令牌签发者 / token issuer —— openid-configuration 的 "issuer" (必须是合法 http(s) URL)
+# The "issuer" from openid-configuration. MUST be a valid http(s) URL.
+issuer = ""
+
+# 令牌受众 / token audience —— 本 API 的标识 (可为 URI 或 GUID，不要求是 URL)
+# This API's identifier (a bare URI or GUID is fine; need NOT be a URL).
+audience = ""
+
+# 本服务自身的公开访问地址 / THIS server's own public base URL, e.g. http://host:port
+# 用于 resource_server_url 与 /.well-known/oauth-protected-resource；不是 audience，必须是合法 URL。
+# Used for resource_server_url + /.well-known/oauth-protected-resource. NOT the audience; MUST be a valid URL.
+resource_server_url = ""
+
+# 必需的 scope 列表 / required scopes (留空 = 不校验 scope)
+# Required scopes (empty = no scope check).
+required_scopes = []
+
+# JWT 签名算法 / JWT signing algorithm (默认 RS256)
+algorithm = "RS256"
+<%- endif %>

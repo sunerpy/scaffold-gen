@@ -11,7 +11,7 @@ You normally never edit this file — change host/port/paths in config.toml or .
 import tomllib
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel<%if auth_enabled%>, Field<%endif%>
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -79,6 +79,46 @@ class LogConfig(BaseModel):
     compress: bool = True
 
 
+<%- if auth_enabled %>
+
+class AuthConfig(BaseModel):
+    """OAuth2 / JWT 鉴权配置 (auth configuration)，对应 config.toml 的 [auth] 段."""
+
+    # 是否启用鉴权 / enable auth (默认 false：默认不校验 Bearer token)
+    enabled: bool = False
+
+    # 鉴权模式 / auth mode: 目前仅 "jwt" (Bearer JWT 校验)
+    mode: str = "jwt"
+
+    # JWKS 公钥地址 / JWKS URI —— 从 IdP 的 /.well-known/openid-configuration 取 "jwks_uri"
+    # From your IdP's /.well-known/openid-configuration → "jwks_uri".
+    jwks_uri: str = ""
+
+    # 令牌签发者 / token issuer —— openid-configuration 的 "issuer" (必须是合法 http(s) URL)
+    # The "issuer" from openid-configuration. MUST be a valid http(s) URL.
+    issuer: str = ""
+
+    # 令牌受众 / token audience —— 本 API 的标识 (可为 URI 或 GUID，不要求是 URL)
+    # This API's identifier (a bare URI or GUID is fine; need NOT be a URL).
+    audience: str = ""
+
+    # 本服务自身的公开访问地址 / THIS server's own public base URL, e.g. http://host:port
+    # 用于 AuthSettings.resource_server_url 与 /.well-known/oauth-protected-resource。
+    # 注意：这不是 audience；必须是合法 http(s) URL。
+    # Used for AuthSettings.resource_server_url + /.well-known/oauth-protected-resource.
+    # NOT the audience; MUST be a valid http(s) URL.
+    resource_server_url: str = ""
+
+    # 必需的 scope 列表 / required scopes (留空 = 不校验 scope)
+    # Required scopes (empty = no scope check).
+    required_scopes: list[str] = Field(default_factory=list)
+
+    # JWT 签名算法 / JWT signing algorithm (默认 RS256)
+    algorithm: str = "RS256"
+
+<%- endif %>
+
+
 def _load_toml() -> dict:
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE, "rb") as f:
@@ -98,6 +138,9 @@ class Settings(BaseSettings):
     server: ServerConfig = ServerConfig()
     mcp: McpConfig = McpConfig()
     log: LogConfig = LogConfig()
+<%- if auth_enabled %>
+    auth: AuthConfig = AuthConfig()
+<%- endif %>
 
 
 def load_settings() -> Settings:
