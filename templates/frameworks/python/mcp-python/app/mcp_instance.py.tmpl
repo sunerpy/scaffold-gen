@@ -26,11 +26,23 @@ from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 
 <%if auth_enabled-%>
-from app.auth import JwksTokenVerifier
+from app.auth import JwksTokenVerifier<%if auth_is_azure_ad%>, warm_up_jwks<%endif%>
 <%endif-%>
 from app.settings import settings
 <%if auth_enabled%>
 if settings.auth.enabled:
+<%- if auth_is_azure_ad %>
+    _missing = (
+        not settings.auth.tenant_id
+        or not settings.auth.resource_app_id
+        or not settings.auth.resource_server_url
+    )
+    if _missing:
+        raise RuntimeError(
+            "[auth] azure-ad 已启用但 tenant_id / resource_app_id / resource_server_url 未配置完整。"
+            " [auth] azure-ad enabled but tenant_id/resource_app_id/resource_server_url are not all set."
+        )
+<%- else %>
     _missing = (
         not settings.auth.jwks_uri
         or not settings.auth.issuer
@@ -41,13 +53,22 @@ if settings.auth.enabled:
             "[auth] enabled 但 jwks_uri / issuer / resource_server_url 未配置完整。"
             " [auth] enabled but jwks_uri/issuer/resource_server_url are not all set."
         )
+<%- endif %>
     _verifier = JwksTokenVerifier(
         jwks_uri=settings.auth.jwks_uri,
         issuer=settings.auth.issuer,
         audience=settings.auth.audience,
         algorithm=settings.auth.algorithm,
         required_scopes=settings.auth.required_scopes,
+<%- if auth_is_azure_ad %>
+        extra_issuers=settings.auth.extra_issuers,
+        identity_claims=settings.auth.identity_claims,
+<%- endif %>
     )
+<%- if auth_is_azure_ad %>
+    # 预热 JWKS 缓存：避免首个带 token 请求现拉公钥(跨境 Entra 延迟)。best-effort, never raises.
+    warm_up_jwks(settings.auth.jwks_uri)
+<%- endif %>
     _auth_settings = AuthSettings(
         issuer_url=settings.auth.issuer,
         resource_server_url=settings.auth.resource_server_url,
@@ -85,6 +106,18 @@ from app.settings import settings
 <%- endif %>
 <%if auth_enabled%>
 if settings.auth.enabled:
+<%- if auth_is_azure_ad %>
+    _missing = (
+        not settings.auth.tenant_id
+        or not settings.auth.resource_app_id
+        or not settings.auth.resource_server_url
+    )
+    if _missing:
+        raise RuntimeError(
+            "[auth] azure-ad 已启用但 tenant_id / resource_app_id / resource_server_url 未配置完整。"
+            " [auth] azure-ad enabled but tenant_id/resource_app_id/resource_server_url are not all set."
+        )
+<%- else %>
     _missing = (
         not settings.auth.jwks_uri
         or not settings.auth.issuer
@@ -95,6 +128,7 @@ if settings.auth.enabled:
             "[auth] enabled 但 jwks_uri / issuer / resource_server_url 未配置完整。"
             " [auth] enabled but jwks_uri/issuer/resource_server_url are not all set."
         )
+<%- endif %>
     _verifier = JWTVerifier(
         jwks_uri=settings.auth.jwks_uri,
         issuer=settings.auth.issuer,
@@ -102,6 +136,13 @@ if settings.auth.enabled:
         algorithm=settings.auth.algorithm,
         required_scopes=settings.auth.required_scopes or None,
     )
+<%- if auth_is_azure_ad %>
+    # 注意：fastmcp 的 JWTVerifier 不支持多 issuer，只校验上面派生的单个 v2 issuer
+    # (login.microsoftonline.com/{tenant}/v2.0)。Entra v1 (sts.windows.net) 签发的 token
+    # 需改用 official 后端 (JwksTokenVerifier 支持 extra_issuers)。JWKS 缓存由 JWTVerifier 内部处理。
+    # NOTE: fastmcp's JWTVerifier validates ONLY the single derived v2 issuer; v1-issued
+    # tokens require the official backend. JWKS caching is handled internally by JWTVerifier.
+<%- endif %>
     mcp = FastMCP("<<project_name>>", auth=_verifier)
 else:
     mcp = FastMCP("<<project_name>>")
