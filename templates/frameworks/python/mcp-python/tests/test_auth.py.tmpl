@@ -1,0 +1,200 @@
+<%- if auth_enabled -%>
+"""鉴权校验器的离线单元测试 (offline auth-verifier tests).
+
+本文件仅在 `--auth jwt` 生成的项目里出现。全程无网络：用本地 RSA 私钥签 JWT，
+把校验器拉取公钥的环节打桩成本地公钥，从而走真实的 verify_token 代码路径。
+This file ships only in `--auth jwt` projects. Fully network-free: we sign JWTs
+with a local RSA private key and stub the verifier's key-fetch step so the REAL
+verify_token code path runs against the locally generated public key.
+
+pytest-asyncio auto 模式：直接写 `async def test_*`（见 pyproject asyncio_mode="auto"）。
+"""
+
+import time
+
+import jwt
+import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+
+ISSUER = "https://issuer.example/realms/test"
+AUDIENCE = "mcp-test-api"
+KID = "test"
+ALGORITHM = "RS256"
+
+
+@pytest.fixture(scope="module")
+def keypair() -> tuple[rsa.RSAPrivateKey, str]:
+    """本地 RSA 私钥 + PEM 公钥 (a local RSA private key + its public-key PEM)."""
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
+    return private_key, public_pem
+
+
+def _sign(
+    private_key: rsa.RSAPrivateKey,
+    *,
+    audience: str = AUDIENCE,
+    issuer: str = ISSUER,
+    scope: str = "mcp.read mcp.call",
+    exp_delta: int = 3600,
+    subject: str = "user-123",
+) -> str:
+    """用本地私钥签一个 RS256 JWT（默认所有声明都合法）。"""
+    now = int(time.time())
+    claims = {
+        "iss": issuer,
+        "aud": audience,
+        "sub": subject,
+        "iat": now,
+        "exp": now + exp_delta,
+        "scope": scope,
+        "client_id": "client-abc",
+    }
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    return jwt.encode(claims, private_pem, algorithm=ALGORITHM, headers={"kid": KID})
+
+
+<%- if mcp_backend_is_official %>
+# ── 后端：official —— 直接测 app/auth.py 的 JwksTokenVerifier ─────────────────
+from app.auth import JwksTokenVerifier
+
+
+class _StubSigningKey:
+    """模拟 PyJWKClient.get_signing_key_from_jwt 的返回：暴露 `.key`."""
+
+    def __init__(self, key: str) -> None:
+        self.key = key
+
+
+@pytest.fixture
+def verifier(keypair, monkeypatch) -> JwksTokenVerifier:
+    """构造真实 JwksTokenVerifier，但把 JWKS 取键环节打桩成本地公钥（不走网络）.
+
+    打桩的是最窄的接缝 `self._jwks.get_signing_key_from_jwt`，verify_token 里的
+    jwt.decode（验签 + iss/aud/exp + scope）全部是真实执行。
+    """
+    _private_key, public_pem = keypair
+    v = JwksTokenVerifier(
+        jwks_uri="https://issuer.example/jwks",
+        issuer=ISSUER,
+        audience=AUDIENCE,
+        algorithm=ALGORITHM,
+        required_scopes=["mcp.read"],
+    )
+    monkeypatch.setattr(
+        v._jwks,
+        "get_signing_key_from_jwt",
+        lambda _token: _StubSigningKey(public_pem),
+    )
+    return v
+
+
+async def test_valid_token_accepted(verifier, keypair) -> None:
+    """Given a correctly signed token / When verified / Then an AccessToken is returned."""
+    private_key, _ = keypair
+    token = _sign(private_key)
+    access = await verifier.verify_token(token)
+    assert access is not None
+    assert access.subject == "user-123"
+    assert "mcp.read" in access.scopes
+    assert "mcp.call" in access.scopes
+
+
+async def test_wrong_audience_rejected(verifier, keypair) -> None:
+    """Given a token with the wrong aud / When verified / Then None is returned."""
+    private_key, _ = keypair
+    token = _sign(private_key, audience="some-other-api")
+    assert await verifier.verify_token(token) is None
+
+
+async def test_expired_token_rejected(verifier, keypair) -> None:
+    """Given an expired token / When verified / Then None is returned."""
+    private_key, _ = keypair
+    token = _sign(private_key, exp_delta=-60)
+    assert await verifier.verify_token(token) is None
+
+
+async def test_bad_signature_rejected(verifier) -> None:
+    """Given a token signed by a DIFFERENT key / When verified / Then None is returned."""
+    other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    token = _sign(other_key)
+    assert await verifier.verify_token(token) is None
+
+
+async def test_missing_required_scope_rejected(verifier, keypair) -> None:
+    """Given a token lacking the required scope / When verified / Then None is returned."""
+    private_key, _ = keypair
+    token = _sign(private_key, scope="other.scope")
+    assert await verifier.verify_token(token) is None
+<%- else %>
+# ── 后端：fastmcp —— 测真实 JWTVerifier 的 jwks_uri 路径 ──────────────────────
+#    校验器以 jwks_uri 构造（app 真正构建的那条路径，非 public_key 分支）。打桩最窄
+#    接缝 _get_jwks_key：它返回 JWKS 解析出的验签公钥(PEM 字符串)，我们换成本地公钥。
+#    _get_verification_key 里"取 kid → 调 _get_jwks_key"以及 load_access_token 的
+#    验签/iss/aud/exp/scope 全部真实执行，不走网络。
+from fastmcp.server.auth.providers.jwt import JWTVerifier
+
+
+@pytest.fixture
+def verifier(keypair, monkeypatch) -> JWTVerifier:
+    """构造真实 JWTVerifier(jwks_uri=...)，把 JWKS 取键打桩成本地公钥（不走网络）."""
+    _private_key, public_pem = keypair
+    v = JWTVerifier(
+        jwks_uri="https://issuer.example/jwks",
+        issuer=ISSUER,
+        audience=AUDIENCE,
+        algorithm=ALGORITHM,
+        required_scopes=["mcp.read"],
+    )
+
+    async def _fake_get_jwks_key(_kid: str | None) -> str:
+        return public_pem
+
+    monkeypatch.setattr(v, "_get_jwks_key", _fake_get_jwks_key)
+    return v
+
+
+async def test_valid_token_accepted(verifier, keypair) -> None:
+    """Given a correctly signed token / When verified / Then an AccessToken is returned."""
+    private_key, _ = keypair
+    token = _sign(private_key)
+    access = await verifier.verify_token(token)
+    assert access is not None
+    assert "mcp.read" in access.scopes
+
+
+async def test_wrong_audience_rejected(verifier, keypair) -> None:
+    """Given a token with the wrong aud / When verified / Then None is returned."""
+    private_key, _ = keypair
+    token = _sign(private_key, audience="some-other-api")
+    assert await verifier.verify_token(token) is None
+
+
+async def test_expired_token_rejected(verifier, keypair) -> None:
+    """Given an expired token / When verified / Then None is returned."""
+    private_key, _ = keypair
+    token = _sign(private_key, exp_delta=-60)
+    assert await verifier.verify_token(token) is None
+
+
+async def test_bad_signature_rejected(verifier) -> None:
+    """Given a token signed by a DIFFERENT key / When verified / Then None is returned."""
+    other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    token = _sign(other_key)
+    assert await verifier.verify_token(token) is None
+<%- endif %>
+<%- else -%>
+# 鉴权未启用：本文件无测试内容 (auth disabled — no tests here).
+<%- endif -%>
