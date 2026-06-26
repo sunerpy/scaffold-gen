@@ -502,6 +502,10 @@ impl GeneratorOrchestrator {
             "auth_enabled".to_string(),
             serde_json::json!(auth_mode.is_enabled()),
         );
+        context.insert(
+            "auth_is_azure_ad".to_string(),
+            serde_json::json!(auth_mode.is_azure_ad()),
+        );
 
         let mut template_processor = TemplateProcessor::new()?;
         template_processor

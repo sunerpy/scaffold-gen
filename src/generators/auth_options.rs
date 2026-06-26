@@ -40,7 +40,6 @@ impl AuthMode {
     }
 
     /// 是否为 Azure AD 预设 —— 模板用 `<%if auth_is_azure_ad%>` 分支。
-    #[allow(dead_code)]
     pub fn is_azure_ad(&self) -> bool {
         matches!(self, AuthMode::AzureAd)
     }
