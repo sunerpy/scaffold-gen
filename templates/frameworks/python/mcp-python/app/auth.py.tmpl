@@ -1,0 +1,104 @@
+<%- if mcp_backend_is_official -%>
+<%- if auth_enabled -%>
+"""官方 SDK 后端的 JWKS Bearer Token 校验器 / JWKS bearer-token verifier (official SDK backend).
+
+把 IdP(AD FS / Entra / Okta / 通用 OIDC)签发的 JWT 当作资源服务器校验：
+通过 JWKS 验签 + 校验 iss/aud/exp + 必需 scope。fastmcp 后端用其内置 JWTVerifier，不需要本文件。
+Validates IdP-issued JWT access tokens as a Resource Server (JWKS signature + iss/aud/exp + scopes).
+
+★ 普通用户无需修改本文件 ★ —— 鉴权参数请改 config.toml 的 [auth] 段。
+You normally never edit this file — tune auth in config.toml's [auth] section.
+"""
+
+import jwt
+from mcp.server.auth.provider import AccessToken, TokenVerifier
+
+from app.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+def _parse_scopes(claims: dict) -> list[str]:
+    """从 claims 解析 scope 列表：优先 `scope`(空格分隔字符串)，否则 `scp`(列表或字符串).
+
+    Parse scopes: prefer the space-delimited `scope` string, else fall back to
+    `scp` (a list or a space-delimited string).
+    """
+    raw_scope = claims.get("scope")
+    if isinstance(raw_scope, str) and raw_scope:
+        return raw_scope.split()
+    scp = claims.get("scp")
+    if isinstance(scp, list):
+        return [str(item) for item in scp]
+    if isinstance(scp, str) and scp:
+        return scp.split()
+    return []
+
+
+class JwksTokenVerifier(TokenVerifier):
+    """用 JWKS 校验 JWT 的 TokenVerifier。
+
+    verify_token 在校验失败时返回 None（不抛异常）→ 框架据此回 401。
+    Returns None on any verification failure so the framework responds 401.
+    """
+
+    def __init__(
+        self,
+        *,
+        jwks_uri: str,
+        issuer: str,
+        audience: str,
+        algorithm: str,
+        required_scopes: list[str],
+    ) -> None:
+        self._issuer = issuer
+        self._audience = audience
+        self._algorithm = algorithm
+        self._required_scopes = set(required_scopes or [])
+        # PyJWKClient 懒加载 + 内部缓存：import 时不发网络请求，首次校验时才拉取 JWKS。
+        # PyJWKClient fetches lazily (with its own cache) — no network at import time.
+        self._jwks = jwt.PyJWKClient(jwks_uri)
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        try:
+            signing_key = self._jwks.get_signing_key_from_jwt(token)
+            claims = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=[self._algorithm],
+                # 空 audience = 不校验受众 / empty audience = skip the aud check.
+                audience=self._audience or None,
+                # 空 issuer = 不校验签发者 / empty issuer = skip the iss check.
+                issuer=self._issuer or None,
+                # 必须带 exp：缺失或过期一律拒绝 / require exp: reject missing/expired.
+                options={"require": ["exp"]},
+            )
+        except (jwt.PyJWTError, jwt.exceptions.PyJWKClientError) as exc:
+            logger.debug("token_verify_failed", error=str(exc))
+            return None
+
+        scopes = _parse_scopes(claims)
+        if not self._required_scopes <= set(scopes):
+            logger.debug(
+                "token_missing_required_scopes",
+                required=list(self._required_scopes),
+                got=scopes,
+            )
+            return None
+
+        return AccessToken(
+            token=token,
+            client_id=(
+                claims.get("client_id") or claims.get("azp") or claims.get("sub") or ""
+            ),
+            scopes=scopes,
+            expires_at=claims.get("exp"),
+            subject=claims.get("sub"),
+            claims=claims,
+        )
+<%- else -%>
+"""鉴权未启用：本文件无内容。Auth disabled — this module is intentionally empty."""
+<%- endif -%>
+<%- else -%>
+"""fastmcp 后端使用其内置 JWTVerifier，无需本文件。fastmcp uses its built-in JWTVerifier; this module is unused."""
+<%- endif -%>
