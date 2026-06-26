@@ -257,6 +257,34 @@ asyncio.run(main())
 
 ---
 
+## 调试：MCP Inspector (Debugging)
+
+[MCP Inspector](https://github.com/modelcontextprotocol/inspector) 是官方可视化调试工具（列工具、看 schema、手动调用）。先 `make run` 启动本服务，再启动 Inspector。
+
+```bash
+# 方式一：npx（需要 Node；UI 默认 http://localhost:6274）
+npx @modelcontextprotocol/inspector
+
+# 方式二：Docker（无需本地 Node；--network host 便于访问跑在宿主机上的本服务）
+docker run --rm --network host ghcr.io/modelcontextprotocol/inspector:latest
+```
+
+浏览器打开 `http://localhost:6274`，在 **Connect** 面板：
+
+- **Transport Type** 选 `Streamable HTTP`，**URL** 填 `http://<<default_host>>:<<default_port>>/mcp`
+- SSE 调试则选 `SSE`，URL 填 `http://<<default_host>>:<<default_port>>/sse`
+- 连接后在 **Tools** 标签调用 `echo`，入参 `{"text":"hi","repeat":2}`
+
+也可直接用 auto-connect URL 一键连接：
+
+`http://localhost:6274/?transport=streamable-http&serverUrl=http://<<default_host>>:<<default_port>>/mcp`
+
+> **CLI 模式**（CI 适用）：`npx @modelcontextprotocol/inspector --cli ...`，连接→执行→打印→退出，无需浏览器。
+> **鉴权**：若本服务启用了鉴权（`[auth]`），在 Connect 面板的 **Authentication** 处填 Bearer Token，Inspector 会自动带上 `Authorization: Bearer <token>` 头。
+> **安全**：使用 Inspector **≥ 0.14.1**（更早版本有 RCE 漏洞 CVE-2025-49596），勿在公网暴露。
+
+---
+
 ## 在 Claude / Cursor / opencode 中接入
 
 把客户端的 MCP 服务器地址指向 streamable-HTTP 端点即可：
