@@ -17,6 +17,10 @@ impl TemplateEngine {
     pub fn new(_templates_dir: PathBuf) -> Result<Self> {
         let mut env = Environment::new();
 
+        // minijinja 默认剥掉模板末尾的 \n；保留它使生成文件有行尾换行，满足 ruff/gofmt 格式检查。
+        // minijinja strips the final \n by default; keep it so generated files end with a newline.
+        env.set_keep_trailing_newline(true);
+
         // 自定义分隔符: <<var>>, <%if%>, <#comment#>
         env.set_syntax(
             minijinja::syntax::SyntaxConfig::builder()

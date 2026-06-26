@@ -58,7 +58,7 @@ async def lifespan(app: Starlette):
     async with contextlib.AsyncExitStack() as stack:
         await stack.enter_async_context(mcp.session_manager.run())
         yield
-<%else%>
+<%-else%>
 # ── 后端：fastmcp (默认 / default) ───────────────────────────────────────────
 #    fastmcp 的构造器不接收 json_response/stateless_http (已移除)；
 #    stateless_http 在 http_app() 工厂上传入。
@@ -80,7 +80,7 @@ async def lifespan(app: Starlette):
         if settings.mcp.sse_enabled:
             await stack.enter_async_context(sse_app.lifespan(app))
         yield
-<%endif%>
+<%-endif%>
 
 
 async def healthz(request: Request) -> JSONResponse:

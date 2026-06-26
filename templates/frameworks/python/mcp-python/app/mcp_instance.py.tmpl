@@ -17,23 +17,23 @@ You normally never edit this file — add tools under app/tools/ instead.
 ═══════════════════════════════════════════════════════════════════════════
 """
 
-from app.settings import settings
-
-<%if mcp_backend_is_official%>
+<%if mcp_backend_is_official-%>
 # ── 后端：official (modelcontextprotocol/python-sdk v1) ──────────────────────
 #    json_response / stateless_http 在构造器上传入 (v1 在 ctor 接收)。
 from mcp.server.fastmcp import FastMCP
+
+from app.settings import settings
 
 mcp = FastMCP(
     "<<project_name>>",
     json_response=True,
     stateless_http=settings.mcp.stateless,
 )
-<%else%>
+<%-else-%>
 # ── 后端：fastmcp (默认 / default) ───────────────────────────────────────────
 #    fastmcp 的构造器不接收 json_response/stateless_http (已移除)；
 #    stateless_http 在 http_app() 工厂上传入 (见 app/server.py)。
 from fastmcp import FastMCP
 
 mcp = FastMCP("<<project_name>>")
-<%endif%>
+<%-endif%>

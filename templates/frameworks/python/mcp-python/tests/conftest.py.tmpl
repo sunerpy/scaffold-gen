@@ -23,13 +23,13 @@ import json
 
 import pytest_asyncio
 
-from app.server import mcp
-
-<%if mcp_backend_is_official%>
+<%if mcp_backend_is_official-%>
 # ── 后端：official (modelcontextprotocol/python-sdk v1) ──────────────────────
 #    v1 用 create_connected_server_and_client_session 把底层 server 连进一个
 #    ClientSession（内存双向管道）。禁止用 mcp.client.Client（那是 v2-alpha）。
 from mcp.shared.memory import create_connected_server_and_client_session
+
+from app.server import mcp
 
 
 @pytest_asyncio.fixture
@@ -40,10 +40,12 @@ async def client():
         return create_connected_server_and_client_session(mcp._mcp_server)
 
     yield _connect
-<%else%>
+<%-else-%>
 # ── 后端：fastmcp (默认 / default) ───────────────────────────────────────────
 #    fastmcp 用 Client(mcp) 直接连进内存实例。
 from fastmcp import Client
+
+from app.server import mcp
 
 
 @pytest_asyncio.fixture
@@ -54,7 +56,7 @@ async def client():
         return Client(mcp)
 
     yield _connect
-<%endif%>
+<%-endif%>
 
 
 def _extract(result) -> dict:

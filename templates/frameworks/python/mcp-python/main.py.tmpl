@@ -9,6 +9,7 @@ To change the listen address/port, edit config.toml — not this file.
     uv run python main.py
 """
 
+import contextlib
 import warnings
 from pathlib import Path
 
@@ -19,51 +20,49 @@ from pathlib import Path
 # The ORDER below is load-bearing; each library mutates the global warnings filter at import
 # time, so we must interleave our narrow filters with their imports to land in FRONT of them.
 #
-# ① authlib 先行：authlib.deprecate 导入时执行一次性 simplefilter("always", AuthlibDeprecationWarning)，
-#    会把自身告警插到过滤器最前。先导入它一次“用掉”这次 simplefilter（模块随后被缓存不再重复），
-#    再以精确类别 + message 把它静音。fastmcp 在导入时会 `from authlib.jose import ...` 触发该告警，
-#    所以必须在 import fastmcp 之前完成 authlib 静音。official backend 无 authlib，导入失败跳过即可。
+# ① authlib 先行：authlib.deprecate 导入时执行一次性 simplefilter("always",
+#    AuthlibDeprecationWarning)，会把自身告警插到过滤器最前。先导入它一次“用掉”这次
+#    simplefilter（模块随后被缓存不再重复），再以精确类别 + message 把它静音。fastmcp 在导入时会
+#    `from authlib.jose import ...` 触发该告警，所以必须在 import fastmcp 之前完成 authlib 静音。
+#    official backend 无 authlib，导入失败跳过即可。
 # ① authlib first: importing authlib.deprecate runs a one-shot simplefilter("always",
 #    AuthlibDeprecationWarning) that jams its warning to the FRONT of the filter list. Import it
 #    once to SPEND that one-shot (the module is then cached and never re-runs), then silence it by
 #    exact category + message. fastmcp triggers `from authlib.jose import ...` at import time, so
 #    authlib MUST be silenced before `import fastmcp`. The official backend has no authlib — skip.
-try:
+with contextlib.suppress(ImportError):
     from authlib.deprecate import AuthlibDeprecationWarning
 
     warnings.filterwarnings("ignore", category=AuthlibDeprecationWarning)
-except ImportError:
-    pass
 warnings.filterwarnings("ignore", message=r".*authlib\.jose.*", category=DeprecationWarning)
 
-# ② 触发 fastmcp 的导入副作用：fastmcp/__init__.py 执行 simplefilter("default", DeprecationWarning)，
-#    把一条“匹配所有 DeprecationWarning、无模块限制”的过滤器插到最前。若我们的窄过滤器在它之前设置，
-#    会被这条 catch-all 抢先命中（首个匹配生效），导致 websockets/uvicorn 告警照常打印。因此先 import
-#    fastmcp 让它“用掉”这次 simplefilter，再在 ③ 设置我们的窄过滤器，使其位于 catch-all 之前。
-#    official backend 不依赖 fastmcp，导入失败跳过即可。
+# ② 触发 fastmcp 的导入副作用：fastmcp/__init__.py 执行 simplefilter("default",
+#    DeprecationWarning)，把一条“匹配所有 DeprecationWarning、无模块限制”的过滤器插到最前。若我们的
+#    窄过滤器在它之前设置，会被这条 catch-all 抢先命中（首个匹配生效），导致 websockets/uvicorn 告警
+#    照常打印。因此先 import fastmcp 让它“用掉”这次 simplefilter，再在 ③ 设置我们的窄过滤器，
+#    使其位于 catch-all 之前。official backend 不依赖 fastmcp，导入失败跳过即可。
 # ② Trigger fastmcp's import side effect: fastmcp/__init__.py runs
 #    simplefilter("default", DeprecationWarning), inserting a catch-all (matches EVERY
 #    DeprecationWarning, no module restriction) at the FRONT of the filter list. If our narrow
 #    filters were set before it, that catch-all would win first-match and the websockets/uvicorn
 #    warnings would still print. So import fastmcp first to let it run its simplefilter, THEN set
 #    our narrow filters in ③ so they sit in front of the catch-all. Official backend lacks fastmcp.
-try:
+with contextlib.suppress(ImportError):
     import fastmcp  # noqa: F401
-except ImportError:
-    pass
 
 # ③ 现在设置窄范围（仅第三方模块）过滤器，使其位于上述 catch-all 之前；这些告警在 uvicorn 启动时
-#    懒加载 websockets 协议实现才触发，此处需先于该懒加载落位。绝不做全局屏蔽，本项目自身告警仍可见。
+#    懒加载 websockets 协议实现才触发，此处需先于该懒加载落位。绝不做全局屏蔽，
+#    本项目自身告警仍可见。
 # ③ Now set the narrow (third-party-module-only) filters so they precede the catch-all above. These
 #    warnings fire when uvicorn lazily imports the websockets protocol impl at server startup, so
 #    the filters must be in place before that. NEVER a blanket ignore — the app's own warnings show.
 warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"websockets.*")
 warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"uvicorn.*")
 
-import uvicorn
+import uvicorn  # noqa: E402
 
-from app.logging import init_logging
-from app.settings import settings
+from app.logging import init_logging  # noqa: E402
+from app.settings import settings  # noqa: E402
 
 BASE_DIR = Path(__file__).resolve().parent
 

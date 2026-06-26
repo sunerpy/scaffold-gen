@@ -36,10 +36,10 @@ from app.mcp_instance import mcp
 #    这样调用方式就是 call_tool("echo", {"text": "hi", "repeat": 2})。
 #    Use FLAT params with Annotated/Field (not a single Pydantic model arg),
 #    so the call is call_tool("echo", {"text": "hi", "repeat": 2}).
-<%if mcp_backend_is_official%>
+<%if mcp_backend_is_official-%>
 # official SDK：装饰器必须带括号 / parentheses required.
 @mcp.tool()
-<%-else%>
+<%-else-%>
 # fastmcp（默认）：装饰器可省括号 / parenless OK.
 @mcp.tool
 <%-endif%>
