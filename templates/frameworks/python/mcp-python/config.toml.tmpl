@@ -91,19 +91,28 @@ compress = true
 # 是否启用鉴权 / enable auth (默认 false)
 enabled = false
 
-# 鉴权模式 / auth mode: 目前仅 "jwt"
-mode = "jwt"
+# 鉴权模式 / auth mode: "jwt" 或 "azure-ad" (Entra 预设)
+mode = "<%if auth_is_azure_ad%>azure-ad<%else%>jwt<%endif%>"
 
 # JWKS 公钥地址 / JWKS URI —— 取自 IdP 的 /.well-known/openid-configuration 的 "jwks_uri"
 # From your IdP's /.well-known/openid-configuration → "jwks_uri".
+<%- if auth_is_azure_ad %>
+# azure-ad 模式下留空将自动从 tenant_id 推导 / left blank → auto-derived from tenant_id at runtime.
+<%- endif %>
 jwks_uri = ""
 
 # 令牌签发者 / token issuer —— openid-configuration 的 "issuer" (必须是合法 http(s) URL)
 # The "issuer" from openid-configuration. MUST be a valid http(s) URL.
+<%- if auth_is_azure_ad %>
+# azure-ad 模式下留空将自动从 tenant_id 推导 / left blank → auto-derived from tenant_id at runtime.
+<%- endif %>
 issuer = ""
 
 # 令牌受众 / token audience —— 本 API 的标识 (可为 URI 或 GUID，不要求是 URL)
 # This API's identifier (a bare URI or GUID is fine; need NOT be a URL).
+<%- if auth_is_azure_ad %>
+# azure-ad 模式下留空且填了 resource_app_id 时将自动取 resource_app_id / blank → resource_app_id.
+<%- endif %>
 audience = ""
 
 # 本服务自身的公开访问地址 / THIS server's own public base URL, e.g. http://host:port
@@ -117,4 +126,12 @@ required_scopes = []
 
 # JWT 签名算法 / JWT signing algorithm (默认 RS256)
 algorithm = "RS256"
+<%- if auth_is_azure_ad %>
+
+# ---- Entra / Azure AD 预设字段 / Entra preset fields ----
+tenant_id = ""           # Entra 租户 ID / Azure AD tenant id
+resource_app_id = ""     # 资源应用(API) App ID；token aud 应等于它或 api://<它>
+# extra_issuers 留空将自动取 Entra v1 issuer；identity_claims 留空用默认顺序
+# extra_issuers blank → auto Entra v1 issuer; identity_claims blank → default order.
+<%- endif %>
 <%- endif %>

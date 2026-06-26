@@ -124,6 +124,40 @@ class AuthConfig(BaseModel):
 
     # JWT 签名算法 / JWT signing algorithm (默认 RS256)
     algorithm: str = "RS256"
+<%- if auth_is_azure_ad %>
+
+    # Entra 租户 ID / Azure AD tenant id (GUID or domain).
+    tenant_id: str = ""
+
+    # 资源应用(API)的 App ID / the registered API's Application (client) ID;
+    # token `aud` 应等于它或 `api://<它>` / token `aud` should equal it or `api://<it>`.
+    resource_app_id: str = ""
+
+    # 额外接受的 issuer（用于 Entra v1 `sts.windows.net/{tenant}/` 与 v2 并存）
+    # Additional accepted issuers (Entra v1 alongside v2).
+    extra_issuers: list[str] = Field(default_factory=list)
+
+    # 从已验签 token 提取用户标识时按序尝试的 claim
+    # Claims tried in order to extract the user identity.
+    identity_claims: list[str] = Field(
+        default_factory=lambda: ["preferred_username", "upn", "email", "unique_name"]
+    )
+
+    def model_post_init(self, __context) -> None:
+        """azure-ad 模式下从 tenant_id 自动推导留空项 (only fills blanks)."""
+        if self.mode != "azure-ad" or not self.tenant_id:
+            return
+        if not self.jwks_uri:
+            self.jwks_uri = (
+                f"https://login.microsoftonline.com/{self.tenant_id}/discovery/v2.0/keys"
+            )
+        if not self.issuer:
+            self.issuer = f"https://login.microsoftonline.com/{self.tenant_id}/v2.0"
+        if not self.extra_issuers:
+            self.extra_issuers = [f"https://sts.windows.net/{self.tenant_id}/"]
+        if not self.audience and self.resource_app_id:
+            self.audience = self.resource_app_id
+<%- endif %>
 
 <%- endif %>
 
