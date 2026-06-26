@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::path::Path;
 
 use crate::constants::{Framework, Language};
+use crate::generators::auth_options::AuthMode;
 use crate::generators::gin_options::GinProjectOptions;
 use crate::generators::mcp_options::McpBackend;
 use crate::generators::registry::{FrameworkSpec, GenKind};
@@ -29,6 +30,14 @@ pub struct GenerationRequest<'a> {
     pub enable_build: bool,
     pub gin_options: GinProjectOptions,
     pub mcp_backend: McpBackend,
+    pub auth_mode: AuthMode,
+}
+
+/// mcp-python 生成的两个旋钮（后端 + 鉴权模式），合并为一个 typed 入参，
+/// 避免 `generate_mcp_python_language` 形参过多（clippy too_many_arguments）。
+struct McpPythonOptions {
+    backend: McpBackend,
+    auth_mode: AuthMode,
 }
 
 /// 生成器编排器，负责协调三层架构的生成器
@@ -184,7 +193,10 @@ impl GeneratorOrchestrator {
                     request.gin_options.host.clone(),
                     request.gin_options.port,
                     request.enable_precommit,
-                    request.mcp_backend,
+                    McpPythonOptions {
+                        backend: request.mcp_backend,
+                        auth_mode: request.auth_mode,
+                    },
                 )
                 .await?;
             }
@@ -438,7 +450,9 @@ impl GeneratorOrchestrator {
     ///
     /// 与 FastAPI 同形：配置驱动的完整项目，全部由模板渲染，无需 `uv init`/`uv sync`。
     /// host/port 写入上下文（端口规范为 8000，区别于 FastAPI 的 8080）；`mcp_backend` /
-    /// `mcp_backend_is_official` 在 `to_template_context()` 之后注入，驱动模板按后端分支渲染。
+    /// `mcp_backend_is_official` 在 `to_template_context()` 之后注入，驱动模板按后端分支渲染；
+    /// `auth_mode` / `auth_enabled` 同样在其后注入，驱动可选 JWT 鉴权代码的渲染。
+    #[allow(clippy::too_many_arguments)]
     async fn generate_mcp_python_language(
         &mut self,
         project_name: String,
@@ -446,9 +460,11 @@ impl GeneratorOrchestrator {
         host: Option<String>,
         port: Option<u16>,
         enable_precommit: bool,
-        backend: McpBackend,
+        mcp_options: McpPythonOptions,
     ) -> Result<()> {
         tracing::info!("Starting Python MCP server generation: {project_name}");
+
+        let McpPythonOptions { backend, auth_mode } = mcp_options;
 
         let env_checker = EnvironmentChecker::new();
         let python_version = env_checker
@@ -477,6 +493,14 @@ impl GeneratorOrchestrator {
         context.insert(
             "mcp_backend_is_official".to_string(),
             serde_json::json!(backend.is_official()),
+        );
+        context.insert(
+            "auth_mode".to_string(),
+            serde_json::json!(auth_mode.as_str()),
+        );
+        context.insert(
+            "auth_enabled".to_string(),
+            serde_json::json!(auth_mode.is_enabled()),
         );
 
         let mut template_processor = TemplateProcessor::new()?;
@@ -654,6 +678,7 @@ mod tests {
             enable_build,
             gin_options: GinProjectOptions::new(),
             mcp_backend: McpBackend::Fastmcp,
+            auth_mode: AuthMode::None,
         }
     }
 

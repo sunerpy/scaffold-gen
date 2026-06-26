@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use super::new::NewCommand;
 use crate::constants::{Framework, Language};
-use crate::generators::McpBackend;
+use crate::generators::{AuthMode, McpBackend};
 use crate::utils::env_checker::EnvironmentChecker;
 
 impl NewCommand {
@@ -109,6 +109,24 @@ impl NewCommand {
             Ok(McpBackend::Official)
         } else {
             Ok(McpBackend::Fastmcp)
+        }
+    }
+
+    pub(super) fn select_auth_mode(&self) -> Result<AuthMode> {
+        let options = vec![
+            "none（不启用 / disabled，默认）",
+            "jwt（JWKS 校验 / validate IdP tokens — ADFS·Entra·Okta·SSO）",
+        ];
+
+        let selected = Select::new("选择 MCP 鉴权模式 / Choose the MCP auth mode:", options)
+            .with_help_message("默认 none（零鉴权代码）；选 jwt 启用 JWKS 资源服务器校验 / none is the default (zero auth code); pick jwt to validate IdP JWTs")
+            .prompt()
+            .context("Failed to select auth mode")?;
+
+        if selected.starts_with("jwt") {
+            Ok(AuthMode::Jwt)
+        } else {
+            Ok(AuthMode::None)
         }
     }
 

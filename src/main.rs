@@ -90,6 +90,12 @@ enum Commands {
             help = "MCP Python backend (fastmcp, official) — for mcp-python framework"
         )]
         mcp_backend: Option<String>,
+        /// Optional auth mode (for mcp-python framework)
+        #[arg(
+            long,
+            help = "Auth mode (none, jwt) — for mcp-python framework; default none"
+        )]
+        auth: Option<String>,
     },
     /// List available languages and frameworks
     List {
@@ -220,6 +226,7 @@ async fn run(command: Commands) -> anyhow::Result<()> {
             error_gen,
             with_build,
             mcp_backend,
+            auth,
         } => {
             NewCommand::new(name, path)
                 .with_framework(framework)
@@ -234,6 +241,7 @@ async fn run(command: Commands) -> anyhow::Result<()> {
                 .with_error_gen(error_gen)
                 .with_build(with_build)
                 .with_mcp_backend(mcp_backend)
+                .with_auth_mode(auth)
                 .execute()
                 .await
         }
