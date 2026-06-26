@@ -285,6 +285,59 @@ docker run --rm --network host ghcr.io/modelcontextprotocol/inspector:latest
 
 ---
 
+<%if auth_enabled%>
+
+## 鉴权 / 认证 (Optional auth)
+
+本服务作为 **OAuth 2.1 资源服务器**校验 IdP 签发的 JWT bearer token（**只校验、不负责登录/发 token**）。本节仅在生成时加 `--auth jwt` 时出现；`--auth none`（默认）的项目无鉴权、无本节。
+
+### 开启
+
+在 `config.toml` 的 `[auth]` 段设 `enabled = true`，并填入以下字段：
+
+```toml
+[auth]
+enabled = true
+jwks_uri = ""           # 取自 IdP /.well-known/openid-configuration 的 jwks_uri 字段
+issuer   = ""           # 取自同上的 issuer 字段
+audience = ""           # IdP 为本 API 签发 token 时写入的受众标识（如 Entra 的 api://<client-id>）
+resource_server_url = "http://<<default_host>>:<<default_port>>"  # 本服务自身的公开 URL
+required_scopes = []    # 需要的 scope 列表，空表示不校验 scope
+```
+
+> `resource_server_url` 是**本服务**的公开 URL，用于 `/.well-known/oauth-protected-resource`；不可与 `audience` 混用（`audience` 可能是裸 URI/GUID，`resource_server_url` 必须是合法 http(s) URL）。
+
+### 各 IdP 的 well-known 地址
+
+从 `/.well-known/openid-configuration` 读出 `jwks_uri` 与 `issuer` 填入上方配置：
+
+| IdP | `/.well-known/openid-configuration` |
+| --- | --- |
+| AD FS | `https://<adfs-host>/adfs/.well-known/openid-configuration` |
+| Entra ID | `https://login.microsoftonline.com/<tenant>/v2.0/.well-known/openid-configuration` |
+| Okta / Keycloak / Auth0 | `<issuer>/.well-known/openid-configuration`（各自 issuer 拼上后缀） |
+
+### 客户端调用
+
+所有请求需携带 `Authorization: Bearer <token>` 头，例如：
+
+```bash
+curl -s http://<<default_host>>:<<default_port>>/mcp \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+本服务开启鉴权后会在 `GET /.well-known/oauth-protected-resource` 公布资源元数据（RFC 9728），客户端可据此发现对应的 Authorization Server。
+
+### SAML 注意
+
+纯 SAML 不能直接用于 MCP 的 OAuth 2.1 模型（SAML 是 XML 断言，不签发 OAuth bearer token）。若组织只有 SAML IdP，需通过 Entra ID / Keycloak 做 OIDC 桥接才能接入。本脚手架不内置 SAML 支持。
+
+---
+
+<%endif%>
+
 ## 在 Claude / Cursor / opencode 中接入
 
 把客户端的 MCP 服务器地址指向 streamable-HTTP 端点即可：
