@@ -4,9 +4,12 @@
   这个文件负责把 MCP 工具暴露成两种 HTTP 传输：
     - streamable-HTTP  挂载在 settings.mcp.mcp_path (默认 /mcp)
     - SSE              挂载在 settings.mcp.sse_path  (默认 /sse，可关闭)
-  所有"后端差异"(fastmcp vs official) 都被收敛在本文件，工具代码完全无感。
-  This file wires the MCP tools onto two HTTP transports (streamable-HTTP + SSE)
-  and is the ONLY place that knows which backend is in use. Tool files never do.
+  共享的 `mcp` 单例来自 app/mcp_instance.py（工具文件也从那里 import 并用装饰器
+  注册）；本文件只负责"传输装配"的后端差异 (fastmcp vs official)。
+  This file wires the MCP tools onto two HTTP transports (streamable-HTTP + SSE).
+  The shared `mcp` singleton comes from app/mcp_instance.py (tool files import it
+  from there too and register via the decorator); this file owns only the
+  TRANSPORT-level backend differences.
 
 ★ 普通用户无需修改本文件 ★ —— 写工具请去 app/tools/ 下新建 .py 文件。
 You normally never edit this file — add tools under app/tools/ instead.
@@ -21,26 +24,22 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from app.logging import get_logger
+from app.mcp_instance import mcp
 from app.settings import settings
 from app.tools import register_tools
 
 logger = get_logger(__name__)
 
+# 在构建传输 app 之前，import 所有工具模块 —— 它们的 `@mcp.tool` 装饰器在被 import
+# 时把工具注册到共享的 `mcp` 单例上。注册必须发生在构建 ASGI app 之前。
+# Import all tool modules BEFORE building the transport apps: their `@mcp.tool`
+# decorators register against the shared `mcp` singleton at import time.
+register_tools()
+
 <%if mcp_backend_is_official%>
 # ── 后端：official (modelcontextprotocol/python-sdk v1) ──────────────────────
-#    json_response / stateless_http 在构造器上传入 (v1 在 ctor 接收)。
-from mcp.server.fastmcp import FastMCP
-
-mcp = FastMCP(
-    "<<project_name>>",
-    json_response=True,
-    stateless_http=settings.mcp.stateless,
-)
-
-# 工具必须在构建 ASGI app 之前注册到实例上。
-# Register tools on the instance BEFORE building the transport apps.
-register_tools(mcp)
-
+#    实例在 app/mcp_instance.py 用 json_response/stateless_http 构造 (v1 ctor)。
+#
 # 路径拥有一次：让每个传输子应用在其工厂里就拥有完整路径 (/mcp、/sse)，
 # 随后把子应用的子路由"上提"到父应用，而不是用 Mount 前缀包一层。
 # Path is owned ONCE — each transport sub-app owns its FULL path (/mcp, /sse) in
@@ -63,14 +62,7 @@ async def lifespan(app: Starlette):
 # ── 后端：fastmcp (默认 / default) ───────────────────────────────────────────
 #    fastmcp 的构造器不接收 json_response/stateless_http (已移除)；
 #    stateless_http 在 http_app() 工厂上传入。
-from fastmcp import FastMCP
-
-mcp = FastMCP("<<project_name>>")
-
-# 工具必须在构建 ASGI app 之前注册到实例上。
-# Register tools on the instance BEFORE building the transport apps.
-register_tools(mcp)
-
+#
 # 路径拥有一次：让每个传输子应用在其工厂里就拥有完整路径 (/mcp、/sse)，
 # 随后把子应用的子路由"上提"到父应用，而不是用 Mount 前缀包一层。
 # Path is owned ONCE — each transport sub-app owns its FULL path (/mcp, /sse) in

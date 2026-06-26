@@ -37,10 +37,11 @@
 │   └── test_echo.py         # echo 工具测试范例
 └── app/
     ├── server.py            # 传输装配：挂载 /mcp + /sse（一般不动）
+    ├── mcp_instance.py      # 共享的 mcp 单例（工具从这里 import）（不用动）
     ├── settings.py          # 读取 config.toml / .env（不用动）
     ├── logging.py           # structlog 初始化（不用动）
     └── tools/               # ★★★ 你的工具写在这里 ★★★
-        ├── __init__.py      # 自动发现 register(mcp)（不用动）
+        ├── __init__.py      # import 即注册：自动发现并 import 工具模块（不用动）
         └── echo.py          # ★ 范例工具：照着它加新工具 ★
 ```
 
@@ -112,10 +113,14 @@ sse_enabled = true     # 设为 false 可关闭 SSE，只保留 streamable-HTTP
 | --- | --- | --- |
 | **定位** | 协议源头，精细控制，贴近 spec | 高层封装，最省事，装饰器优先 |
 | **适合场景** | 需要控制会话/传输细节、追踪最新协议变更 | 快速上手、工具逻辑为主、减少样板 |
-| **写工具** | 显式 `mcp.tool(name=...)(fn)`（两端通用）；装饰器写 `@mcp.tool()` | 显式 `mcp.tool(name=...)(fn)`（两端通用）；装饰器写 `@mcp.tool`（无括号也行，更简洁） |
-| **装饰器便利性** | 支持 `@mcp.tool()`（需带括号） | 支持 `@mcp.tool`（可省括号），书写最省事 |
+| **写工具（本脚手架默认装饰器写法）** | `@mcp.tool()`（必须带括号） | `@mcp.tool`（可省括号，最省事） |
+| **可移植替代写法** | 手写 `def register(mcp): mcp.tool(name=...)(fn)`（两端通用） | 手写 `def register(mcp): mcp.tool(name=...)(fn)`（两端通用） |
 | **协议完整性** | 直接跟随 MCP spec 迭代 | 封装层可能滞后，但覆盖日常用例 |
 | **生产可控性** | 会话管理、错误细节更透明 | 开箱即用，隐藏了部分底层细节 |
+
+> 本项目当前后端是 `<%if mcp_backend_is_official%>official<%else%>fastmcp<%endif%>`，
+> 所以下面"三步加一个工具"只展示该后端的装饰器写法
+> （`<%if mcp_backend_is_official%>@mcp.tool()<%else%>@mcp.tool<%endif%>`）。
 
 生成时选择：
 
@@ -136,13 +141,17 @@ scafgen new my-mcp --framework mcp-python --language python --mcp-backend offici
 
 例如，新建 `app/tools/math.py`。
 
-### 第 2 步：写带类型注解的函数，用 `Annotated[..., Field(...)]` 描述每个入参
+### 第 2 步：从 `app.mcp_instance` import 共享的 `mcp` 单例，写带类型注解的函数
+
+用 `Annotated[..., Field(...)]` 描述每个入参：
 
 ```python
 # app/tools/math.py
 from typing import Annotated
 
 from pydantic import Field
+
+from app.mcp_instance import mcp
 
 
 def add(
@@ -176,43 +185,44 @@ def add(
 > To log **business-logic** failures inside a tool, `try/except` in your own function and call
 > `get_logger(__name__).error(...)`.
 
-### 第 3 步：写 `register(mcp)` 函数注册工具
+### 第 3 步：用 `<%if mcp_backend_is_official%>@mcp.tool()<%else%>@mcp.tool<%endif%>`（本后端写法）装饰你的函数即可；保存自动注册
 
-在同一个文件末尾加（**本脚手架推荐的显式调用形式，两种后端通用**）：
-
-```python
-def register(mcp) -> None:
-    mcp.tool(name="add", description="把两个整数相加。")(add)
-```
-
-为什么默认用这种**显式调用**形式：它对 fastmcp / official 两种后端完全通用，
-工具文件无需 import 任何后端、保持后端无感，出了问题也更容易排查。
-
-如果你**确定只用一种后端**，也可以用**装饰器**快速注册（更简洁）——但要注意两种
-后端的装饰器写法不同，且装饰器需要在模块里能拿到 `mcp` 实例：
+在函数上方加装饰器（**本项目后端是 `<%if mcp_backend_is_official%>official<%else%>fastmcp<%endif%>`，写法如下**）：
 
 ```python
-# fastmcp：可省括号，最省事
-@mcp.tool
-def add(a: int, b: int) -> dict:
-    return {"result": a + b}
-
-# official SDK：必须带括号
-@mcp.tool()
-def add(a: int, b: int) -> dict:
+<%if mcp_backend_is_official%># official SDK：装饰器必须带括号
+@mcp.tool()<%else%># fastmcp（默认）：装饰器可省括号
+@mcp.tool<%endif%>
+def add(
+    a: Annotated[int, Field(description="第一个加数 / First number")],
+    b: Annotated[int, Field(description="第二个加数 / Second number")],
+) -> dict:
+    """把两个整数相加。Add two integers."""
     return {"result": a + b}
 ```
 
-> **怎么选**：装饰器不是"禁用"，而是它的确切写法**因后端而异**（fastmcp `@mcp.tool` /
-> official `@mcp.tool()`）。所以本脚手架默认用**可移植的显式调用形式**，让工具文件保持
-> 后端无感；当你已经锁定单一后端、更看重简洁时，用装饰器即可。
-> The decorator isn't banned — its exact form just differs per backend (fastmcp
-> `@mcp.tool`, official `@mcp.tool()`), so this scaffold defaults to the portable
-> explicit `mcp.tool(...)(fn)` form. Use the decorator once you've picked one backend
-> and prefer brevity.
+装饰器在工具模块被 import 时执行，把工具注册到共享的 `mcp` 单例上——所以
+**import 即注册**。`app/tools/__init__.py` 会自动 import 本目录下的每个 `.py`。
 
-保存文件后，`app/tools/__init__.py` 会**自动发现并注册**这个工具——你不用改任何其它文件，
-不用改 `server.py`，不用改 `main.py`。
+如果你**不想用装饰器**、或想要一份**跨两种后端都通用**的可移植写法，也可以删掉装饰器，
+改用手写的显式调用形式（函数不在模块层引用 `mcp`，由一个 `register(mcp)` 接收实例）：
+
+```python
+# 可移植替代写法（两端通用）/ portable alternative (works on both backends):
+# def register(mcp) -> None:
+#     mcp.tool(name="add", description="把两个整数相加。")(add)
+```
+
+> **怎么选**：本脚手架默认用**装饰器**（最省事），它的确切写法**因后端而异**
+> （fastmcp `@mcp.tool` / official `@mcp.tool()`），本文件已按你所选后端给出。
+> 若你更看重跨后端可移植性，改用上面注释里的手写 `register(mcp)` 显式调用形式即可。
+> This scaffold defaults to the decorator (least boilerplate); its exact form
+> differs per backend (fastmcp `@mcp.tool`, official `@mcp.tool()`) and is already
+> set for your chosen backend. For cross-backend portability, switch to the
+> hand-written `register(mcp)` / explicit `mcp.tool(...)(fn)` form shown commented above.
+
+保存文件后，`app/tools/__init__.py` 会在 import 时**自动加载并注册**这个工具——你不用改任何
+其它文件，不用改 `server.py`，不用改 `main.py`。
 
 ---
 

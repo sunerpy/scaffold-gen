@@ -1,0 +1,39 @@
+"""MCP 实例单例 / the shared MCP instance.
+
+═══════════════════════════════════════════════════════════════════════════
+  这里构建全局唯一的 `mcp` 实例。工具文件从这里 import mcp 并用装饰器注册。
+  The shared MCP instance lives here. Tool files import `mcp` from this module
+  and register against it with the decorator (`@mcp.tool` / `@mcp.tool()`).
+
+  本文件是唯一"知道后端"(fastmcp vs official) 的工具侧入口 —— 后端差异被收敛在
+  下面的条件分支里。传输/应用装配仍然留在 app/server.py，本文件只负责
+  产出 `mcp` 实例本身。
+  This is the ONLY tool-facing place that knows which backend is in use; the
+  backend difference is confined to the branch below. Transport/app wiring stays
+  in app/server.py — this module only produces the `mcp` instance itself.
+
+★ 普通用户无需修改本文件 ★ —— 写工具请去 app/tools/ 下新建 .py 文件。
+You normally never edit this file — add tools under app/tools/ instead.
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+from app.settings import settings
+
+<%if mcp_backend_is_official%>
+# ── 后端：official (modelcontextprotocol/python-sdk v1) ──────────────────────
+#    json_response / stateless_http 在构造器上传入 (v1 在 ctor 接收)。
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP(
+    "<<project_name>>",
+    json_response=True,
+    stateless_http=settings.mcp.stateless,
+)
+<%else%>
+# ── 后端：fastmcp (默认 / default) ───────────────────────────────────────────
+#    fastmcp 的构造器不接收 json_response/stateless_http (已移除)；
+#    stateless_http 在 http_app() 工厂上传入 (见 app/server.py)。
+from fastmcp import FastMCP
+
+mcp = FastMCP("<<project_name>>")
+<%endif%>

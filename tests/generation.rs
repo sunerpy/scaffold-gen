@@ -248,6 +248,7 @@ fn mcp_python_embedded_generation_renders_without_external_tools() {
             "pyproject.toml",
             "app/__init__.py",
             "app/server.py",
+            "app/mcp_instance.py",
             "app/settings.py",
             "app/logging.py",
             "app/tools/__init__.py",
@@ -315,42 +316,61 @@ fn mcp_python_embedded_generation_renders_without_external_tools() {
             "[{backend}] config.toml backend not set to {backend}:\n{config}"
         );
 
-        // Then(5): server.py —— path-once 模式 + 后端 import 分歧（证明 `<%if%>` 命中）
+        // Then(5): server.py —— 从单例 import mcp + 调用 register_tools() + path-once 307 fix
+        //          + 后端 import 分歧（证明 `<%if%>` 命中）
         let server = fs::read_to_string(tmp.path().join("app/server.py"))
             .unwrap_or_else(|_| panic!("[{backend}] read app/server.py"));
+        // 共享单例：server.py 不再自己构造 FastMCP，而是从 app.mcp_instance import。
+        assert!(
+            server.contains("from app.mcp_instance import mcp"),
+            "[{backend}] server.py must import the shared singleton (from app.mcp_instance import mcp):\n{server}"
+        );
+        // 工具通过 register_tools()（无参，import 即注册）在构建传输前注册。
+        assert!(
+            server.contains("register_tools("),
+            "[{backend}] server.py must call register_tools() before building transports:\n{server}"
+        );
         // 新的 path-once：不再用 Mount，而是把子应用的路由 extend 进父应用的 routes。
         assert!(
             server.contains("streamable_app.routes") && server.contains("Route(\"/healthz\""),
             "[{backend}] server.py must splice transports via routes.extend() and healthz:\n{server}"
         );
+        // 后端构造收敛在 mcp_instance.py，server.py 不再 import FastMCP 后端构造符号。
         if backend == "official" {
-            assert!(
-                server.contains("from mcp.server.fastmcp import"),
-                "[official] server.py must import from mcp.server.fastmcp:\n{server}"
-            );
-            assert!(
-                server.contains("streamable_http_app()") && server.contains("sse_app()"),
-                "[official] server.py must build streamable_http_app() + sse_app():\n{server}"
-            );
             // path-once：官方后端在实例的 mcp.settings 上设置路径，而不是工厂参数。
             assert!(
                 server.contains("mcp.settings.streamable_http_path = settings.mcp.mcp_path"),
                 "[official] server.py must own the path once via mcp.settings.streamable_http_path = settings.mcp.mcp_path:\n{server}"
             );
+            assert!(
+                server.contains("streamable_http_app()") && server.contains("sse_app()"),
+                "[official] server.py must build streamable_http_app() + sse_app():\n{server}"
+            );
         } else {
-            assert!(
-                server.contains("from fastmcp import"),
-                "[fastmcp] server.py must import from fastmcp:\n{server}"
-            );
-            assert!(
-                !server.contains("from mcp.server.fastmcp"),
-                "[fastmcp] server.py must NOT import the official mcp.server.fastmcp:\n{server}"
-            );
             // path-once：http_app 工厂在 path 参数上拥有完整路径（settings.mcp.mcp_path）；SSE 走 transport="sse"。
             assert!(
                 server.contains("http_app(path=settings.mcp.mcp_path")
                     && server.contains("transport=\"sse\""),
                 "[fastmcp] server.py must build SSE (transport=\"sse\") + streamable (http_app(path=settings.mcp.mcp_path)):\n{server}"
+            );
+        }
+
+        // Then(5b): app/mcp_instance.py —— 唯一构造 FastMCP 的地方，后端 import 分歧在此。
+        let mcp_instance = fs::read_to_string(tmp.path().join("app/mcp_instance.py"))
+            .unwrap_or_else(|_| panic!("[{backend}] read app/mcp_instance.py"));
+        if backend == "official" {
+            assert!(
+                mcp_instance.contains("from mcp.server.fastmcp import"),
+                "[official] mcp_instance.py must import from mcp.server.fastmcp:\n{mcp_instance}"
+            );
+        } else {
+            assert!(
+                mcp_instance.contains("from fastmcp import"),
+                "[fastmcp] mcp_instance.py must import from fastmcp:\n{mcp_instance}"
+            );
+            assert!(
+                !mcp_instance.contains("from mcp.server.fastmcp"),
+                "[fastmcp] mcp_instance.py must NOT import the official mcp.server.fastmcp:\n{mcp_instance}"
             );
         }
 
@@ -374,19 +394,29 @@ fn mcp_python_embedded_generation_renders_without_external_tools() {
             "[{backend}] pyproject.toml missing pytest asyncio_mode/pythonpath config:\n{pyproject}"
         );
 
-        // Then(7): echo.py 后端无感 —— 用 mcp.tool( 显式调用，绝不 import 任何后端
+        // Then(7): echo.py 后端感知 —— 从单例 import mcp + 用本后端的装饰器（active 主形式）
         let echo = fs::read_to_string(tmp.path().join("app/tools/echo.py"))
             .unwrap_or_else(|_| panic!("[{backend}] read app/tools/echo.py"));
         assert!(
-            echo.contains("mcp.tool("),
-            "[{backend}] echo.py must register via explicit mcp.tool( call:\n{echo}"
+            echo.contains("from app.mcp_instance import mcp"),
+            "[{backend}] echo.py must import the shared singleton (from app.mcp_instance import mcp):\n{echo}"
         );
-        // `@mcp.tool` 仅作为反例出现在文档注释里（教用户别用装饰器），不计入；
-        // 真正要禁的是任何后端 import —— 工具文件必须对 fastmcp / official 无感。
-        for forbidden in ["import fastmcp", "from fastmcp", "from mcp"] {
+        if backend == "official" {
+            // official：装饰器必须带括号 @mcp.tool()。
             assert!(
-                !echo.contains(forbidden),
-                "[{backend}] echo.py must be backend-agnostic (found `{forbidden}`):\n{echo}"
+                echo.contains("@mcp.tool()"),
+                "[official] echo.py must use the parenthesized decorator @mcp.tool():\n{echo}"
+            );
+        } else {
+            // fastmcp：装饰器无括号 @mcp.tool（注意 @mcp.tool 是 @mcp.tool() 的前缀，
+            // 故要求出现 @mcp.tool 且 NOT 出现 @mcp.tool() —— 排除括号形式）。
+            assert!(
+                echo.contains("@mcp.tool"),
+                "[fastmcp] echo.py must use the parenless decorator @mcp.tool:\n{echo}"
+            );
+            assert!(
+                !echo.contains("@mcp.tool()"),
+                "[fastmcp] echo.py must NOT use the parenthesized form @mcp.tool():\n{echo}"
             );
         }
 
