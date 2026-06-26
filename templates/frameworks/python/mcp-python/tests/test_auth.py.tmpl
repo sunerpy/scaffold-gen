@@ -138,6 +138,97 @@ async def test_missing_required_scope_rejected(verifier, keypair) -> None:
     private_key, _ = keypair
     token = _sign(private_key, scope="other.scope")
     assert await verifier.verify_token(token) is None
+<%- if auth_is_azure_ad %>
+
+
+# ── azure-ad 预设：双 issuer (v1+v2) + 身份提取的离线校验 ──────────────────────
+#    Entra 同时存在 v1 (sts.windows.net) 与 v2 (login.microsoftonline.com) issuer。
+#    JwksTokenVerifier 用 issuer=v2 + extra_issuers=[v1] 接受两者；身份从
+#    identity_claims 按序提取 (preferred_username|upn|email|unique_name)。这里用本地
+#    RSA 私钥签名、把取键环节打桩成本地公钥，从而离线跑真实 verify_token 多 issuer 路径。
+#    Entra issues tokens under both v1 (sts.windows.net) and v2 (login.microsoftonline.com).
+#    JwksTokenVerifier accepts both via issuer=v2 + extra_issuers=[v1]; identity is taken
+#    from identity_claims in order. We sign with a local RSA key and stub key-fetch so the
+#    REAL multi-issuer verify_token path runs offline.
+AAD_TENANT = "test-tenant"
+AAD_V2_ISSUER = "https://login.microsoftonline.com/test-tenant/v2.0"
+AAD_V1_ISSUER = "https://sts.windows.net/test-tenant/"
+AAD_AUDIENCE = "test-app"
+AAD_IDENTITY = "alice@contoso.com"
+
+
+@pytest.fixture
+def aad_verifier(keypair, monkeypatch) -> JwksTokenVerifier:
+    """双 issuer JwksTokenVerifier，JWKS 取键打桩成本地公钥（不走网络）."""
+    _private_key, public_pem = keypair
+    v = JwksTokenVerifier(
+        jwks_uri="https://stub",
+        issuer=AAD_V2_ISSUER,
+        audience=AAD_AUDIENCE,
+        algorithm="RS256",
+        required_scopes=[],
+        extra_issuers=[AAD_V1_ISSUER],
+        identity_claims=["preferred_username", "upn", "email", "unique_name"],
+    )
+    monkeypatch.setattr(
+        v._jwks,
+        "get_signing_key_from_jwt",
+        lambda _token: _StubSigningKey(public_pem),
+    )
+    return v
+
+
+def _sign_aad(
+    private_key: rsa.RSAPrivateKey,
+    *,
+    issuer: str,
+    preferred_username: str | None = AAD_IDENTITY,
+) -> str:
+    """用本地私钥签一个 Entra 风格 RS256 JWT（指定 issuer，可带 preferred_username）."""
+    now = int(time.time())
+    claims = {
+        "iss": issuer,
+        "aud": AAD_AUDIENCE,
+        "sub": "oid-guid-123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    if preferred_username is not None:
+        claims["preferred_username"] = preferred_username
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    return jwt.encode(claims, private_pem, algorithm="RS256", headers={"kid": KID})
+
+
+async def test_aad_v1_issuer_accepted_with_identity(aad_verifier, keypair) -> None:
+    """Given a v1-issuer (sts.windows.net) Entra token with preferred_username
+    / When verified / Then accepted and subject == preferred_username."""
+    private_key, _ = keypair
+    token = _sign_aad(private_key, issuer=AAD_V1_ISSUER)
+    access = await aad_verifier.verify_token(token)
+    assert access is not None
+    assert access.subject == AAD_IDENTITY
+
+
+async def test_aad_v2_issuer_accepted(aad_verifier, keypair) -> None:
+    """Given a v2-issuer (login.microsoftonline.com) Entra token
+    / When verified / Then accepted."""
+    private_key, _ = keypair
+    token = _sign_aad(private_key, issuer=AAD_V2_ISSUER)
+    access = await aad_verifier.verify_token(token)
+    assert access is not None
+    assert access.subject == AAD_IDENTITY
+
+
+async def test_aad_unlisted_issuer_rejected(aad_verifier, keypair) -> None:
+    """Given a token from an UNLISTED issuer / When verified / Then None is returned."""
+    private_key, _ = keypair
+    token = _sign_aad(private_key, issuer="https://login.microsoftonline.com/evil/v2.0")
+    assert await aad_verifier.verify_token(token) is None
+<%- endif %>
 <%- else %>
 # ── 后端：fastmcp —— 测真实 JWTVerifier 的 jwks_uri 路径 ──────────────────────
 #    校验器以 jwks_uri 构造（app 真正构建的那条路径，非 public_key 分支）。打桩最窄
