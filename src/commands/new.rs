@@ -152,7 +152,9 @@ impl NewCommand {
     fn resolve_auth_mode(&self, framework: &Framework) -> Result<AuthMode> {
         if let Some(value) = &self.auth_mode {
             return AuthMode::parse_from_str(value).ok_or_else(|| {
-                anyhow::anyhow!("Unsupported auth mode: {value}. Supported modes: none, jwt")
+                anyhow::anyhow!(
+                    "Unsupported auth mode: {value}. Supported modes: none, jwt, azure-ad"
+                )
             });
         }
 

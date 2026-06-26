@@ -93,7 +93,7 @@ enum Commands {
         /// Optional auth mode (for mcp-python framework)
         #[arg(
             long,
-            help = "Auth mode (none, jwt) — for mcp-python framework; default none"
+            help = "Auth mode (none, jwt, azure-ad) — for mcp-python framework; default none"
         )]
         auth: Option<String>,
     },

@@ -116,6 +116,7 @@ impl NewCommand {
         let options = vec![
             "none（不启用 / disabled，默认）",
             "jwt（JWKS 校验 / validate IdP tokens — ADFS·Entra·Okta·SSO）",
+            "azure-ad（Entra/Azure AD 预设 / Entra preset — 租户驱动 + 双 issuer + 身份提取）",
         ];
 
         let selected = Select::new("选择 MCP 鉴权模式 / Choose the MCP auth mode:", options)
@@ -123,7 +124,9 @@ impl NewCommand {
             .prompt()
             .context("Failed to select auth mode")?;
 
-        if selected.starts_with("jwt") {
+        if selected.starts_with("azure-ad") {
+            Ok(AuthMode::AzureAd)
+        } else if selected.starts_with("jwt") {
             Ok(AuthMode::Jwt)
         } else {
             Ok(AuthMode::None)
