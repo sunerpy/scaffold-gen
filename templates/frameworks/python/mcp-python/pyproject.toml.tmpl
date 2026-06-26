@@ -13,7 +13,8 @@ dependencies = [
     "structlog>=24.4.0",
     "rich>=13.9.0",
     "starlette>=0.40.0",
-]
+<%if mcp_backend_is_official%><%if auth_enabled%>    "pyjwt[crypto]>=2.9.0,<3",
+<%endif%><%endif%>]
 
 [dependency-groups]
 dev = [
