@@ -319,6 +319,82 @@ required_scopes = []    # 需要的 scope 列表，空表示不校验 scope
 | Entra ID | `https://login.microsoftonline.com/<tenant>/v2.0/.well-known/openid-configuration` |
 | Okta / Keycloak / Auth0 | `<issuer>/.well-known/openid-configuration`（各自 issuer 拼上后缀） |
 
+<%if auth_is_azure_ad%>
+
+### Azure AD / Entra ID 预设模式 (azure-ad preset)
+
+`mode = "azure-ad"` 是针对 Microsoft Entra ID（前称 Azure AD）的 **turnkey 预设**：只需填 `tenant_id` 和 `resource_app_id`，服务器在启动时自动推导所有 JWKS / issuer 参数，无需手动查询 well-known 端点。
+
+> **Azure AD / Entra ID preset** — instead of manually looking up `jwks_uri` and `issuer`, supply `tenant_id` + `resource_app_id`; the server derives everything else at runtime.
+
+#### 自动推导的值 / Auto-derived values
+
+| 配置项 | 自动推导为 |
+| --- | --- |
+| `jwks_uri` | `https://login.microsoftonline.com/{tenant_id}/discovery/v2.0/keys` |
+| `issuer` (v2) | `https://login.microsoftonline.com/{tenant_id}/v2.0` |
+| `extra_issuers` (v1) | `https://sts.windows.net/{tenant_id}/`（仅 official backend） |
+| `audience` | `resource_app_id`（若留空） |
+
+`resource_server_url` 仍需手动填写（本服务的公开 URL）。
+
+#### 配置示例 / Configuration example
+
+```toml
+[auth]
+enabled = true
+mode = "azure-ad"
+tenant_id = "<your-entra-tenant-guid-or-domain>"
+resource_app_id = "<your-API-app-registration-client-id>"
+resource_server_url = "http://<<default_host>>:<<default_port>>"
+required_scopes = []   # 可选 / optional
+# jwks_uri / issuer / audience 留空将自动从 tenant_id 推导
+# Leave jwks_uri / issuer / audience blank — they are auto-derived from tenant_id
+```
+
+也可通过环境变量覆盖（适合容器部署 / CI）：
+
+```bash
+AUTH__TENANT_ID=<tenant-guid>
+AUTH__RESOURCE_APP_ID=<app-client-id>
+AUTH__RESOURCE_SERVER_URL=https://your-mcp-service.example.com
+AUTH__REQUIRED_SCOPES=[]
+```
+
+#### Entra 应用注册 / App registration
+
+本服务需要一个 **API 应用注册**（App Registration）：
+
+1. 在 [Azure Portal > App registrations](https://portal.azure.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/~/RegisteredApps) 注册一个 API 应用。
+2. 记录该注册的 **Application (client) ID** — 这就是 `resource_app_id`。
+3. 在该注册的 **Expose an API** 页面设置 App ID URI（通常为 `api://<client-id>`）并添加 scope 或 App Role。
+4. 客户端应用在请求 token 时需指定 `scope = api://<resource_app_id>/.default`（或具体 scope）。
+
+Entra 签发的 token 中 `aud` 字段为 `api://<resource_app_id>` 或裸 GUID，两者服务器均接受。
+
+#### 安全：身份来源于 Token，不信任外部参数
+
+> **重要安全设计** / **Security note (read this)**
+>
+> 服务器从**已验证的 JWT** 中提取用户身份（按优先级：`preferred_username` → `upn` → `email` → `unique_name`，以及 `oid` 对象 ID）。生成的 `whoami` 工具**直接返回 Token 中的身份，不接受任何用户传入的 `user` 参数**。
+>
+> **The server trusts only the verified token identity — it never accepts a caller-supplied user field.** This prevents an AI agent or any client from impersonating another user by passing a crafted parameter. The `whoami` tool takes no arguments; the identity it returns is always the authenticated principal from the token.
+
+#### JWKS 预热 / JWKS warm-up
+
+<%if mcp_backend_is_official%>Official backend 在启动时预先拉取 Entra 的 JWKS（`https://login.microsoftonline.com/{tenant_id}/discovery/v2.0/keys`），缓存公钥，避免第一个请求出现延迟。后续请求直接复用缓存，仅在 key 轮转时重新拉取。<%else%>FastMCP backend 在首次收到带 token 的请求时才拉取 JWKS；如需消除首请求延迟，可切换到 official backend（`--mcp-backend official`）以获得启动预热。<%endif%>
+
+#### 双 issuer 支持 / Dual issuer (v1 + v2)
+
+Entra 历史上有两种 token issuer：
+
+- **v2**：`https://login.microsoftonline.com/{tenant_id}/v2.0`（推荐，Microsoft Identity Platform）
+- **v1**：`https://sts.windows.net/{tenant_id}/`（旧版 Azure AD，部分遗留应用仍会签发）
+
+<%if mcp_backend_is_official%>Official backend 同时接受 v1 和 v2 issuer（`extra_issuers` 自动包含 v1 地址），可兼容遗留 Azure AD token。<%else%>FastMCP backend 仅接受 v2 issuer；若你的客户端仍签发 v1 token，请切换到 official backend（`--mcp-backend official`）。<%endif%>
+
+<%endif%>
+
 ### 客户端调用
 
 所有请求需携带 `Authorization: Bearer <token>` 头，例如：
