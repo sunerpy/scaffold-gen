@@ -23,8 +23,8 @@ MCP 采用 **OAuth 2.1 bearer** token。MCP 服务在该模型里是 **Resource 
 
 - 只**校验** token，**不**为用户登录、**不**签发 token、**不**充当 Authorization Server。
 - token 由外部 IdP（身份提供方）签发；服务只负责验证其有效性。
-- 服务在开启鉴权后自动暴露 `/.well-known/oauth-protected-resource`（RFC 9728），向客户端声明
-  "我是受保护资源，请去对应 AS 取 token"。该路由由库自身在设置 `auth=` 后接管，无需手写。
+- **官方 SDK（official）后端**在开启鉴权后自动暴露 `/.well-known/oauth-protected-resource`（RFC 9728），向客户端声明"我是受保护资源，请去对应 AS 取 token"。
+- **fastmcp 后端**在开启鉴权后校验 token，但不发布该 discovery 端点（JWTVerifier 只校验，不挂载发现路由）；客户端需直接配置 IdP issuer。
 
 > [!NOTE]
 > 鉴权**关闭**时观察到的 `GET /.well-known/openid-configuration 404` 属正常现象：客户端在探测
@@ -33,8 +33,10 @@ MCP 采用 **OAuth 2.1 bearer** token。MCP 服务在该模型里是 **Resource 
 > metadata — the server is a resource server, not an AS.
 
 MCP = OAuth 2.1 bearer; the MCP server is a **Resource Server** (validates tokens, does NOT log
-users in or issue tokens); an external IdP issues tokens; the server advertises
-`/.well-known/oauth-protected-resource` (RFC 9728) once auth is enabled.
+users in or issue tokens); an external IdP issues tokens. **Official SDK** exposes
+`/.well-known/oauth-protected-resource` (RFC 9728) for discovery; **fastmcp** validates tokens but
+does NOT publish the discovery endpoint (JWTVerifier mounts no routes by design) — clients must be
+configured directly with the IdP issuer URL.
 
 ## 3. AD 与 SSO 殊途同归 / Convergence
 

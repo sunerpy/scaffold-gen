@@ -330,7 +330,7 @@ curl -s http://<<default_host>>:<<default_port>>/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
-本服务开启鉴权后会在 `GET /.well-known/oauth-protected-resource` 公布资源元数据（RFC 9728），客户端可据此发现对应的 Authorization Server。
+<%if mcp_backend_is_official%>本服务开启鉴权后会在 `GET /.well-known/oauth-protected-resource` 公布资源元数据（RFC 9728），客户端可据此发现对应的 Authorization Server。<%else%>本服务开启鉴权后会校验 Bearer token 的有效性，但不发布 `/.well-known/oauth-protected-resource` 发现端点（fastmcp 的 JWTVerifier 不挂载 discovery 路由）；客户端需直接指向 IdP 的 issuer 地址。<%endif%>
 
 ### SAML 注意
 
