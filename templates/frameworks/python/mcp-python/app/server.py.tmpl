@@ -112,6 +112,27 @@ def _build_routes() -> list:
     return routes
 
 
+def _collect_middleware() -> list:
+    # 子应用把 bearer 认证中间件挂在 app 级 middleware 上；_build_routes 只拼了 routes，
+    # 必须把认证中间件也复制到父应用，否则 RequireAuthMiddleware 读不到 scope['user'] 会一律 401。
+    # Re-attach the sub-apps' app-level auth middleware onto the parent
+    # (routes were spliced, middleware was not).
+    mw: list = []
+<%- if auth_enabled %>
+    if settings.auth.enabled:
+        seen = set()
+        subs = (streamable_app, sse_app) if settings.mcp.sse_enabled else (streamable_app,)
+        for sub in subs:
+            for m in getattr(sub, "user_middleware", []):
+                key = getattr(m, "cls", m)
+                if key not in seen:
+                    seen.add(key)
+                    mw.append(m)
+<%- endif %>
+    return mw
+
+
 # 父 Starlette 应用：main.py 以 "app.server:asgi_app" 运行它。
 # Parent Starlette app — main.py serves it as "app.server:asgi_app".
-asgi_app = Starlette(routes=_build_routes(), lifespan=lifespan)
+_middleware = _collect_middleware() or None
+asgi_app = Starlette(routes=_build_routes(), middleware=_middleware, lifespan=lifespan)

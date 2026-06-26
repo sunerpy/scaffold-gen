@@ -20,20 +20,92 @@ You normally never edit this file — add tools under app/tools/ instead.
 <%if mcp_backend_is_official-%>
 # ── 后端：official (modelcontextprotocol/python-sdk v1) ──────────────────────
 #    json_response / stateless_http 在构造器上传入 (v1 在 ctor 接收)。
+<%- if auth_enabled %>
+from mcp.server.auth.settings import AuthSettings
+<%- endif %>
 from mcp.server.fastmcp import FastMCP
 
+<%if auth_enabled-%>
+from app.auth import JwksTokenVerifier
+<%endif-%>
 from app.settings import settings
-
+<%if auth_enabled%>
+if settings.auth.enabled:
+    _missing = (
+        not settings.auth.jwks_uri
+        or not settings.auth.issuer
+        or not settings.auth.resource_server_url
+    )
+    if _missing:
+        raise RuntimeError(
+            "[auth] enabled 但 jwks_uri / issuer / resource_server_url 未配置完整。"
+            " [auth] enabled but jwks_uri/issuer/resource_server_url are not all set."
+        )
+    _verifier = JwksTokenVerifier(
+        jwks_uri=settings.auth.jwks_uri,
+        issuer=settings.auth.issuer,
+        audience=settings.auth.audience,
+        algorithm=settings.auth.algorithm,
+        required_scopes=settings.auth.required_scopes,
+    )
+    _auth_settings = AuthSettings(
+        issuer_url=settings.auth.issuer,
+        resource_server_url=settings.auth.resource_server_url,
+        required_scopes=settings.auth.required_scopes or None,
+    )
+    mcp = FastMCP(
+        "<<project_name>>",
+        json_response=True,
+        stateless_http=settings.mcp.stateless,
+        auth=_auth_settings,
+        token_verifier=_verifier,
+    )
+else:
+    mcp = FastMCP(
+        "<<project_name>>",
+        json_response=True,
+        stateless_http=settings.mcp.stateless,
+    )
+<%else%>
 mcp = FastMCP(
     "<<project_name>>",
     json_response=True,
     stateless_http=settings.mcp.stateless,
 )
+<%-endif%>
 <%-else-%>
 # ── 后端：fastmcp (默认 / default) ───────────────────────────────────────────
 #    fastmcp 的构造器不接收 json_response/stateless_http (已移除)；
 #    stateless_http 在 http_app() 工厂上传入 (见 app/server.py)。
 from fastmcp import FastMCP
+<%- if auth_enabled %>
+from fastmcp.server.auth.providers.jwt import JWTVerifier
 
+from app.settings import settings
+<%- endif %>
+<%if auth_enabled%>
+if settings.auth.enabled:
+    _missing = (
+        not settings.auth.jwks_uri
+        or not settings.auth.issuer
+        or not settings.auth.resource_server_url
+    )
+    if _missing:
+        raise RuntimeError(
+            "[auth] enabled 但 jwks_uri / issuer / resource_server_url 未配置完整。"
+            " [auth] enabled but jwks_uri/issuer/resource_server_url are not all set."
+        )
+    _verifier = JWTVerifier(
+        jwks_uri=settings.auth.jwks_uri,
+        issuer=settings.auth.issuer,
+        audience=settings.auth.audience or None,
+        algorithm=settings.auth.algorithm,
+        required_scopes=settings.auth.required_scopes or None,
+    )
+    mcp = FastMCP("<<project_name>>", auth=_verifier)
+else:
+    mcp = FastMCP("<<project_name>>")
+<%else%>
 mcp = FastMCP("<<project_name>>")
+<%-endif%>
 <%-endif%>
