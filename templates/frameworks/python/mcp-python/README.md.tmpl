@@ -9,9 +9,7 @@
 
 ---
 
-## 必要说明 / 术语表 (Glossary for beginners)
-
-不熟悉 MCP 的同学，先花 2 分钟读这里：
+## 术语表 (Glossary)
 
 | 术语 | 白话解释 |
 | --- | --- |
@@ -47,7 +45,7 @@
 
 ---
 
-## 必要工具 (Requirements)
+## 依赖 (Requirements)
 
 - **Python <<python_version>>+**
 - **[uv](https://docs.astral.sh/uv/)** —— 极快的 Python 包管理器（安装：`curl -LsSf https://astral.sh/uv/install.sh | sh`）
@@ -75,7 +73,7 @@ make run
 - **SSE**：`http://<<default_host>>:<<default_port>>/sse`（GET，事件流）
 - **健康检查**：`http://<<default_host>>:<<default_port>>/healthz`
 
-开发时想要**热重载**（改代码自动重启），用：
+开发时热重载（改代码自动重启）：
 
 ```bash
 make dev
@@ -85,22 +83,6 @@ make dev
 > `make dev`（设 `SERVER__RELOAD=true`）是唯一开启方式；生产用 `make run`。
 > Hot-reload is dev-only — keep `reload = false` in production; `make dev` is the
 > only intended way to enable it.
-
-> **关于 Ctrl+C 退出时的报错（上游已知现象，不是 bug，不影响功能）**：如果你按 Ctrl+C
-> 停服时**恰好还有活跃的 SSE / streamable-HTTP 长连接**，可能会看到类似
-> `ASGI callable returned without completing response` /
-> `RuntimeError: Expected ASGI message 'http.response.body', but got 'http.response.start'`
-> 的 traceback。这是 MCP SDK / FastMCP 在优雅关闭时**立即取消会话任务组**、把仍在进行的
-> 流式响应中途打断导致的——进程本来就在退出，属于无害的关闭噪声。**空闲时（无活跃连接）
-> Ctrl+C 不会有此报错**。这是上游已知问题，与本脚手架生成的代码无关，无需处理。
-> **About the traceback on Ctrl+C (a known upstream artifact — not a bug, no functional impact)**:
-> if you stop the server with Ctrl+C while an SSE / streamable-HTTP connection is still open,
-> you may see `ASGI callable returned without completing response` /
-> `RuntimeError: Expected ASGI message 'http.response.body', but got 'http.response.start'`.
-> This is the MCP SDK / FastMCP cancelling the session task group immediately on graceful
-> shutdown, interrupting an in-flight streaming response while the process is exiting — harmless
-> shutdown noise. Ctrl+C while **idle** (no active connection) shuts down cleanly. It is a known
-> upstream issue, unrelated to the scaffolded code, and needs no action.
 
 ---
 
@@ -151,7 +133,7 @@ scafgen new my-mcp --framework mcp-python --language python --mcp-backend offici
 
 ## 三步加一个工具 (Add a tool in 3 steps)
 
-这是最重要的一节。加一个新 MCP 工具，**只动 `app/tools/`，不改任何其它文件**。
+加一个新 MCP 工具，**只动 `app/tools/`，不改任何其它文件**。
 
 ### 第 1 步：在 `app/tools/` 下新建一个 `.py` 文件
 
@@ -184,22 +166,8 @@ def add(
 > **提示**：用扁平参数（每个入参单独列出），不要把所有参数打包成一个 Pydantic 模型类再传入。
 > 这样 `call_tool("add", {"a": 1, "b": 2})` 就能直接调用，更直观。
 
-> **关于参数校验错误（这是预期行为，不是 bug）**：如果客户端传错参数（比如漏传必填的
-> `text`），校验会在框架层（FastMCP / official SDK）发生，**发生在你的工具函数被调用之前**——
-> 框架会捕获该错误、把一条合规的错误响应**返回给客户端**，并在服务端以 **INFO** 级别记录
-> （形如 `... 1 validation error ... Missing required argument`）。因此你**不会**在服务端看到
-> "失败/ERROR"级别的日志，你的函数体也不会执行（所以也不会有你自己写的成功日志）。这是有意
-> 设计：错误已正确返回给调用方、未被吞掉。若你想在工具内部记录**业务逻辑**的失败，在你自己的
-> 函数里 `try/except` 后用 `get_logger(__name__).error(...)` 记录即可。
-> **About argument-validation errors (expected behavior, not a bug)**: if a client sends bad
-> arguments (e.g. omits the required `text`), validation happens in the framework layer
-> (FastMCP / official SDK) **before your tool function is called**. The framework catches it,
-> returns a proper error response **to the client**, and logs it server-side at **INFO** level
-> (e.g. `... 1 validation error ... Missing required argument`). So you will NOT see a
-> failure/ERROR-level server log, and your function body never runs (hence no success log
-> either). This is intentional — the error is correctly returned to the caller, not swallowed.
-> To log **business-logic** failures inside a tool, `try/except` in your own function and call
-> `get_logger(__name__).error(...)`.
+> **参数校验**：客户端传错参数时，框架在调用你的函数前返回校验错误，服务端记 INFO 级别日志。
+> 要记录业务失败，在函数里 `try/except` + `get_logger(__name__).error(...)` 即可。
 
 ### 第 3 步：用 `<%if mcp_backend_is_official%>@mcp.tool()<%else%>@mcp.tool<%endif%>`（本后端写法）装饰你的函数即可；保存自动注册
 
@@ -229,13 +197,8 @@ def add(
 #     mcp.tool(name="add", description="把两个整数相加。")(add)
 ```
 
-> **怎么选**：本脚手架默认用**装饰器**（最省事），它的确切写法**因后端而异**
-> （fastmcp `@mcp.tool` / official `@mcp.tool()`），本文件已按你所选后端给出。
-> 若你更看重跨后端可移植性，改用上面注释里的手写 `register(mcp)` 显式调用形式即可。
-> This scaffold defaults to the decorator (least boilerplate); its exact form
-> differs per backend (fastmcp `@mcp.tool`, official `@mcp.tool()`) and is already
-> set for your chosen backend. For cross-backend portability, switch to the
-> hand-written `register(mcp)` / explicit `mcp.tool(...)(fn)` form shown commented above.
+> 本脚手架默认用**装饰器**，写法因后端而异（fastmcp `@mcp.tool` / official `@mcp.tool()`），已按所选后端给出。
+> 跨后端可移植时，改用上面注释里的 `register(mcp)` 显式调用形式。
 
 保存文件后，`app/tools/__init__.py` 会在 import 时**自动加载并注册**这个工具——你不用改任何
 其它文件，不用改 `server.py`，不用改 `main.py`。
