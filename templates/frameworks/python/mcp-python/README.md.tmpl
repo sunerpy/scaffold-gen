@@ -86,6 +86,22 @@ make dev
 > Hot-reload is dev-only — keep `reload = false` in production; `make dev` is the
 > only intended way to enable it.
 
+> **关于 Ctrl+C 退出时的报错（上游已知现象，不是 bug，不影响功能）**：如果你按 Ctrl+C
+> 停服时**恰好还有活跃的 SSE / streamable-HTTP 长连接**，可能会看到类似
+> `ASGI callable returned without completing response` /
+> `RuntimeError: Expected ASGI message 'http.response.body', but got 'http.response.start'`
+> 的 traceback。这是 MCP SDK / FastMCP 在优雅关闭时**立即取消会话任务组**、把仍在进行的
+> 流式响应中途打断导致的——进程本来就在退出，属于无害的关闭噪声。**空闲时（无活跃连接）
+> Ctrl+C 不会有此报错**。这是上游已知问题，与本脚手架生成的代码无关，无需处理。
+> **About the traceback on Ctrl+C (a known upstream artifact — not a bug, no functional impact)**:
+> if you stop the server with Ctrl+C while an SSE / streamable-HTTP connection is still open,
+> you may see `ASGI callable returned without completing response` /
+> `RuntimeError: Expected ASGI message 'http.response.body', but got 'http.response.start'`.
+> This is the MCP SDK / FastMCP cancelling the session task group immediately on graceful
+> shutdown, interrupting an in-flight streaming response while the process is exiting — harmless
+> shutdown noise. Ctrl+C while **idle** (no active connection) shuts down cleanly. It is a known
+> upstream issue, unrelated to the scaffolded code, and needs no action.
+
 ---
 
 ## 改监听地址 / 端口 / 传输（只改 config.toml）
