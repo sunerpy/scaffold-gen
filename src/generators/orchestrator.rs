@@ -85,7 +85,36 @@ impl GeneratorOrchestrator {
             self.render_build_tooling(&request)?;
         }
 
+        self.format_python_project(&request);
+
         Ok(())
+    }
+
+    /// 尽力而为：用 ruff 格式化生成的 Python 代码。非 Python 项目或 ruff 不可用时
+    /// 直接跳过（no-op）。绝不让格式化失败影响生成结果 —— 与 `init_git_repository`
+    /// 的「告警继续」风格一致。
+    fn format_python_project(&self, request: &GenerationRequest<'_>) {
+        if request.spec.language != Language::Python {
+            return;
+        }
+        // 优先用 PATH 上的 `ruff`；缺失时回退到 `uvx ruff`（若有 `uvx`）。
+        let (program, prefix_args): (&str, &[&str]) =
+            if crate::utils::toolchain::tool_available("ruff") {
+                ("ruff", &[])
+            } else if crate::utils::toolchain::tool_available("uvx") {
+                ("uvx", &["ruff"])
+            } else {
+                tracing::debug!("未找到 ruff/uvx，跳过 Python 自动格式化");
+                return;
+            };
+        let mut cmd = std::process::Command::new(program);
+        cmd.args(prefix_args)
+            .args(["format", "."])
+            .current_dir(request.output_path);
+        match cmd.status() {
+            Ok(s) if s.success() => tracing::info!("已用 ruff 格式化生成的 Python 代码"),
+            _ => tracing::warn!("ruff format 已跳过/失败（非致命）"),
+        }
     }
 
     /// 项目级 `--with-build` 渲染步骤：把 `templates/build/<lang>/` 渲染进项目根目录。
