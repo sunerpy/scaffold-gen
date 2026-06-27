@@ -65,8 +65,7 @@ def _sign(
     )
     return jwt.encode(claims, private_pem, algorithm=ALGORITHM, headers={"kid": KID})
 
-
-<%- if mcp_backend_is_official %>
+<% if mcp_backend_is_official %>
 # ── 后端：official —— 直接测 app/auth.py 的 JwksTokenVerifier ─────────────────
 from app.auth import JwksTokenVerifier
 
@@ -288,4 +287,4 @@ async def test_bad_signature_rejected(verifier) -> None:
 <%- endif %>
 <%- else -%>
 # 鉴权未启用：本文件无测试内容 (auth disabled — no tests here).
-<%- endif -%>
+<% endif %>

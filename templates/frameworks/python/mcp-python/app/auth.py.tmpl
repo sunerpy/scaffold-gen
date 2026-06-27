@@ -100,9 +100,7 @@ class JwksTokenVerifier(TokenVerifier):
         # 可接受的 issuer 列表（Entra v1 sts.windows.net + v2 login.microsoftonline.com）。
         # 默认仅 [issuer] → 单 issuer 行为与原来一致；多 issuer 时改走手动校验。
         # Accepted issuers (e.g. Entra v1 sts.windows.net + v2 login.microsoftonline.com).
-        self._accepted_issuers = [
-            iss for iss in [issuer, *(extra_issuers or [])] if iss
-        ]
+        self._accepted_issuers = [iss for iss in [issuer, *(extra_issuers or [])] if iss]
         # 身份声明优先级；默认 ["sub"] → 保持原 subject=sub 行为。
         # Identity-claim precedence; default ["sub"] preserves subject=sub.
         self._identity_claims = identity_claims or ["sub"]
@@ -155,9 +153,7 @@ class JwksTokenVerifier(TokenVerifier):
         subject = _extract_identity(claims, self._identity_claims) or claims.get("sub")
         return AccessToken(
             token=token,
-            client_id=(
-                claims.get("client_id") or claims.get("azp") or claims.get("sub") or ""
-            ),
+            client_id=(claims.get("client_id") or claims.get("azp") or claims.get("sub") or ""),
             scopes=scopes,
             expires_at=claims.get("exp"),
             subject=subject,
@@ -168,4 +164,4 @@ class JwksTokenVerifier(TokenVerifier):
 <%- endif -%>
 <%- else -%>
 """fastmcp 后端使用其内置 JWTVerifier，无需本文件。fastmcp uses its built-in JWTVerifier; this module is unused."""
-<%- endif -%>
+<%- endif %>

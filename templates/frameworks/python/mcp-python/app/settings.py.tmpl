@@ -87,8 +87,8 @@ class LogConfig(BaseModel):
     # 轮转后是否 gzip 压缩 / gzip-compress rotated files
     compress: bool = True
 
-
 <%- if auth_enabled %>
+
 
 class AuthConfig(BaseModel):
     """OAuth2 / JWT 鉴权配置 (auth configuration)，对应 config.toml 的 [auth] 段."""

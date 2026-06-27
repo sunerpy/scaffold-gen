@@ -22,7 +22,7 @@ from app.mcp_instance import mcp
 # official 后端：身份来自 app.auth.current_identity()（读取本请求已验签令牌）。
 # official backend: identity comes from app.auth.current_identity() (verified token).
 from app.auth import current_identity
-<%-else-%>
+<% else -%>
 # fastmcp 后端：用 fastmcp 自带的 get_access_token() 读取本请求已验签令牌，
 # 再适配成与 official 相同的 dict 形状（subject / scopes / claims）。
 # fastmcp backend: read the verified token via fastmcp's own get_access_token()
@@ -54,7 +54,7 @@ def current_identity() -> dict | None:
         "scopes": list(getattr(tok, "scopes", None) or []),
         "claims": claims,
     }
-<%-endif%>
+<% endif %>
 
 <%if mcp_backend_is_official-%>
 # official SDK：装饰器必须带括号 / parentheses required.
@@ -80,4 +80,4 @@ def whoami() -> dict:
     }
 <%- else -%>
 # whoami 工具仅在 --auth azure-ad 时生成 / whoami tool is only generated for --auth azure-ad.
-<%- endif -%>
+<% endif %>

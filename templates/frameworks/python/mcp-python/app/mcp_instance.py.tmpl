@@ -87,13 +87,13 @@ else:
         json_response=True,
         stateless_http=settings.mcp.stateless,
     )
-<%else%>
+<%- else %>
 mcp = FastMCP(
     "<<project_name>>",
     json_response=True,
     stateless_http=settings.mcp.stateless,
 )
-<%-endif%>
+<%- endif %>
 <%-else-%>
 # ── 后端：fastmcp (默认 / default) ───────────────────────────────────────────
 #    fastmcp 的构造器不接收 json_response/stateless_http (已移除)；
@@ -146,7 +146,7 @@ if settings.auth.enabled:
     mcp = FastMCP("<<project_name>>", auth=_verifier)
 else:
     mcp = FastMCP("<<project_name>>")
-<%else%>
+<%- else %>
 mcp = FastMCP("<<project_name>>")
-<%-endif%>
-<%-endif%>
+<%- endif %>
+<%- endif %>
