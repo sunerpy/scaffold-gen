@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/sunerpy/scaffold-gen/compare/v0.7.0...v0.7.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* self-update 已是最新版本时不再提示下载升级 ([#19](https://github.com/sunerpy/scaffold-gen/issues/19)) ([c30d798](https://github.com/sunerpy/scaffold-gen/commit/c30d798d3149768767ec3cfac9fa9b59a8cc1c4e))
+
 ## [0.7.0](https://github.com/sunerpy/scaffold-gen/compare/v0.6.0...v0.7.0) (2026-06-25)
 
 
