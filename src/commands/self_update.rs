@@ -33,15 +33,25 @@ pub fn execute(check: bool, force: bool, tag: Option<String>) -> Result<()> {
     })
 }
 
+fn strip_v(s: &str) -> &str {
+    s.strip_prefix('v').unwrap_or(s)
+}
+
+fn is_same_version(current: &str, latest: &str) -> bool {
+    strip_v(current) == strip_v(latest)
+}
+
 fn run_blocking(check: bool, force: bool, tag: Option<String>) -> Result<()> {
     use self_update::cargo_crate_version;
+
+    let current = cargo_crate_version!();
 
     let mut builder = self_update::backends::github::Update::configure();
     builder
         .repo_owner(REPO_OWNER)
         .repo_name(REPO_NAME)
         .bin_name(BIN_NAME)
-        .current_version(cargo_crate_version!())
+        .current_version(current)
         .show_download_progress(true)
         .no_confirm(force);
     if let Some(tag) = &tag {
@@ -55,7 +65,6 @@ fn run_blocking(check: bool, force: bool, tag: Option<String>) -> Result<()> {
         let latest = updater
             .get_latest_release()
             .context("querying the latest GitHub release")?;
-        let current = cargo_crate_version!();
         if self_update::version::bump_is_greater(current, &latest.version).unwrap_or(false) {
             tracing::info!("{BIN_NAME} {current} -> {} available", latest.version);
             tracing::info!("run `{BIN_NAME} self-update` to install it");
@@ -65,6 +74,25 @@ fn run_blocking(check: bool, force: bool, tag: Option<String>) -> Result<()> {
         return Ok(());
     }
 
+    // self_update 0.42's `update_extended` never checks current == target, so
+    // when already on the latest release it still prints the download/replace
+    // prompt. Short-circuit here; `--force` deliberately bypasses it to reinstall.
+    if !force {
+        let target = match &tag {
+            Some(explicit) => explicit.clone(),
+            None => {
+                updater
+                    .get_latest_release()
+                    .context("querying the latest GitHub release")?
+                    .version
+            }
+        };
+        if is_same_version(current, &target) {
+            tracing::info!("{BIN_NAME} {current} is already up to date");
+            return Ok(());
+        }
+    }
+
     let status = updater.update().context("performing the self-update")?;
     if status.updated() {
         tracing::info!("Updated {BIN_NAME} to {}", status.version());
@@ -72,4 +100,34 @@ fn run_blocking(check: bool, force: bool, tag: Option<String>) -> Result<()> {
         tracing::info!("{BIN_NAME} {} is already up to date", status.version());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_same_version;
+
+    #[test]
+    fn same_bare_versions_are_equal() {
+        assert!(is_same_version("0.7.0", "0.7.0"));
+    }
+
+    #[test]
+    fn v_prefix_on_latest_is_ignored() {
+        assert!(is_same_version("0.7.0", "v0.7.0"));
+    }
+
+    #[test]
+    fn v_prefix_on_current_is_ignored() {
+        assert!(is_same_version("v0.7.0", "0.7.0"));
+    }
+
+    #[test]
+    fn different_minor_is_not_equal() {
+        assert!(!is_same_version("0.7.0", "0.8.0"));
+    }
+
+    #[test]
+    fn different_patch_is_not_equal() {
+        assert!(!is_same_version("0.7.0", "0.7.1"));
+    }
 }
