@@ -1,0 +1,137 @@
+# ============================================================================
+#  <<project_name>> — 运行配置 (Runtime Configuration)
+# ----------------------------------------------------------------------------
+#  ★ 这是你最常修改的文件之一 ★
+#  改监听地址 / 端口 / 传输路径，只改这里，不要改代码。
+#  启动时由 app/settings.py 读取；环境变量 (.env / 系统环境) 可覆盖同名项。
+#  Change host / port / transport paths HERE — never in code.
+# ============================================================================
+
+[server]
+# 监听地址：本机调试用 127.0.0.1；容器/对外暴露用 0.0.0.0
+# Listen address. Use 127.0.0.1 for local, 0.0.0.0 to expose externally.
+host = "<<default_host>>"
+
+# 监听端口 / Listen port
+port = <<default_port>>
+
+# 是否开启热重载 (默认 false)。开发时用 `make dev` 自动开启，无需在此改。
+# ⚠️ 生产环境必须保持 false（热重载仅用于本地开发，会监视文件变化、增加开销，
+#    且可能在写日志时反复重启）。Production MUST keep this false — hot-reload is
+#    for local dev only (it watches files, adds overhead, and can restart in a loop
+#    when logs are written). Use `make dev` to flip it on locally; never in prod.
+reload = false
+
+# ----------------------------------------------------------------------------
+#  MCP 传输配置 / MCP transport configuration
+#  双传输始终开启：streamable-HTTP (mcp_path) + SSE (sse_path)。
+#  Dual transport: streamable-HTTP at mcp_path AND SSE at sse_path.
+# ----------------------------------------------------------------------------
+[mcp]
+# MCP 后端 / MCP backend: "fastmcp" (默认) 或 "official" (mcp[cli])
+backend = "<<mcp_backend>>"
+
+# streamable-HTTP 挂载路径 / streamable-HTTP mount path
+mcp_path = "/mcp"
+
+# SSE 挂载路径 / SSE mount path
+sse_path = "/sse"
+
+# 是否无状态 (stateless) / stateless session mode
+stateless = true
+
+# 是否启用 SSE 传输 (默认 true，与 Go 版对齐)。设为 false 可关闭 SSE，只保留
+# streamable-HTTP。Enable the SSE transport (default true, Go parity). Set to
+# false to disable SSE and keep only streamable-HTTP.
+sse_enabled = true
+
+# ----------------------------------------------------------------------------
+#  日志 (structlog) 配置 / logging configuration
+#  本地开发推荐 format="console" + show_line=true；
+#  生产推荐 format="json" + compress=true。
+# ----------------------------------------------------------------------------
+[log]
+# 日志级别 / log level: debug / info / warning / error / critical
+level = "info"
+
+# 输出格式 / output format: "console" (彩色人类可读) 或 "json" (结构化)
+format = "console"
+
+# 日志目录 / log directory (留空则不写文件，仅控制台)
+directory = "logs"
+
+# 显式文件路径 / explicit file path (留空则用 directory + 默认名)
+file = ""
+
+# 是否同时输出到控制台 / also emit to console
+log_in_console = true
+
+# 是否附带 文件名/函数/行号 / include filename, func, lineno
+show_line = false
+
+# 单文件最大体积 (MB)，超过即按大小轮转 / max size per file (MB)
+max_size = 10
+
+# 保留的轮转文件数量 / number of rotated backups to keep
+max_backups = 10
+
+# 旧日志保留天数，超过自动清理 (0 = 永久) / days to keep old logs
+max_age = 30
+
+# 轮转后是否 gzip 压缩 / gzip-compress rotated files
+compress = true
+<%- if auth_enabled %>
+
+# ----------------------------------------------------------------------------
+#  OAuth2 / JWT 鉴权配置 / auth (Bearer JWT) configuration
+#  enabled=false 时不校验任何 token；启用后需填好 jwks_uri / issuer / audience。
+#  When enabled=false no token is checked. To turn on, fill jwks_uri/issuer/audience.
+# ----------------------------------------------------------------------------
+[auth]
+# 是否启用鉴权 / enable auth (默认 false)
+enabled = false
+
+# 鉴权模式 / auth mode: "jwt" 或 "azure-ad" (Entra 预设)
+mode = "<%if auth_is_azure_ad%>azure-ad<%else%>jwt<%endif%>"
+
+# JWKS 公钥地址 / JWKS URI —— 取自 IdP 的 /.well-known/openid-configuration 的 "jwks_uri"
+# From your IdP's /.well-known/openid-configuration → "jwks_uri".
+<%- if auth_is_azure_ad %>
+# azure-ad 模式下留空将自动从 tenant_id 推导 / left blank → auto-derived from tenant_id at runtime.
+<%- endif %>
+jwks_uri = ""
+
+# 令牌签发者 / token issuer —— openid-configuration 的 "issuer" (必须是合法 http(s) URL)
+# The "issuer" from openid-configuration. MUST be a valid http(s) URL.
+<%- if auth_is_azure_ad %>
+# azure-ad 模式下留空将自动从 tenant_id 推导 / left blank → auto-derived from tenant_id at runtime.
+<%- endif %>
+issuer = ""
+
+# 令牌受众 / token audience —— 本 API 的标识 (可为 URI 或 GUID，不要求是 URL)
+# This API's identifier (a bare URI or GUID is fine; need NOT be a URL).
+<%- if auth_is_azure_ad %>
+# azure-ad 模式下留空且填了 resource_app_id 时将自动取 resource_app_id / blank → resource_app_id.
+<%- endif %>
+audience = ""
+
+# 本服务自身的公开访问地址 / THIS server's own public base URL, e.g. http://host:port
+# 用于 resource_server_url 与 /.well-known/oauth-protected-resource；不是 audience，必须是合法 URL。
+# Used for resource_server_url + /.well-known/oauth-protected-resource. NOT the audience; MUST be a valid URL.
+resource_server_url = ""
+
+# 必需的 scope 列表 / required scopes (留空 = 不校验 scope)
+# Required scopes (empty = no scope check).
+required_scopes = []
+
+# JWT 签名算法 / JWT signing algorithm (默认 RS256)
+algorithm = "RS256"
+<%- if auth_is_azure_ad %>
+
+# ---- Entra / Azure AD 预设字段 / Entra preset fields ----
+tenant_id = ""           # Entra 租户 ID / Azure AD tenant id
+resource_app_id = ""     # 资源应用(API) App ID；token aud 应等于它或 api://<它>
+# extra_issuers 留空将自动取 Entra v1 issuer；identity_claims 留空用默认顺序
+# extra_issuers blank → auto Entra v1 issuer; identity_claims blank → default order.
+<%- endif %>
+<%- endif %>

@@ -204,6 +204,798 @@ fn fastapi_embedded_generation_renders_without_external_tools() {
     );
 }
 
+/// 渲染 mcp-python 框架模板到临时目录（离线，仅渲染，不触发 uv/网络/pytest）。
+///
+/// 复刻 orchestrator 在 `to_template_context()` 之后注入的两个后端键：
+/// `mcp_backend` / `mcp_backend_is_official`（其它现有 python/fastapi 测试无此步骤，
+/// mcp-python 必须有——它驱动 `app/server.py` 里唯一的 `<%if%>` 后端分支）。
+/// 直接以 `serde_json::Value::String/Bool` 注入，避免宏/导入问题
+/// （`to_template_context` 返回的就是 `HashMap<String, serde_json::Value>`）。
+fn render_mcp_python(backend: &str) -> tempfile::TempDir {
+    let mut params = PythonParams::new("mcp-py-demo".to_string());
+    params.base.host = Some("0.0.0.0".to_string());
+    params.base.port = Some(8000);
+    let mut context = params.to_template_context();
+    context.insert(
+        "mcp_backend".to_string(),
+        serde_json::Value::String(backend.to_string()),
+    );
+    context.insert(
+        "mcp_backend_is_official".to_string(),
+        serde_json::Value::Bool(backend == "official"),
+    );
+
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    processor
+        .process_embedded_template_directory("frameworks/python/mcp-python", tmp.path(), context)
+        .expect("render embedded mcp-python templates");
+    tmp
+}
+
+#[test]
+fn mcp_python_embedded_generation_renders_without_external_tools() {
+    // Given/When/Then × 两个后端（fastmcp 默认 + official）：离线 render-assert。
+    // 该测试不触发 uv/网络/pytest；live boot 证据在 F3，不在这里。
+    for backend in ["fastmcp", "official"] {
+        let tmp = render_mcp_python(backend);
+
+        // Then(1): 预期文件存在且 .tmpl 后缀已剥离
+        let files = collect_relative_files(tmp.path());
+        for expected in [
+            "config.toml",
+            "main.py",
+            "pyproject.toml",
+            "app/__init__.py",
+            "app/server.py",
+            "app/mcp_instance.py",
+            "app/settings.py",
+            "app/logging.py",
+            "app/tools/__init__.py",
+            "app/tools/echo.py",
+            "tests/conftest.py",
+            "tests/test_echo.py",
+            "tests/__init__.py",
+            "Makefile",
+            "README.md",
+            ".gitignore",
+            ".pre-commit-config.yaml",
+            ".env.example",
+        ] {
+            assert!(
+                files.iter().any(|f| f == expected),
+                "[{backend}] expected {expected}, got: {files:?}"
+            );
+        }
+        assert!(
+            !files.iter().any(|f| f.ends_with(".tmpl")),
+            "[{backend}] no .tmpl files should remain, got: {files:?}"
+        );
+
+        // Then(2): 任何渲染文件都不得残留自定义分隔符 `<<` / `%>` / `<%`
+        for rel in &files {
+            let content = fs::read_to_string(tmp.path().join(rel))
+                .unwrap_or_else(|_| panic!("[{backend}] read generated file {rel}"));
+            assert!(
+                !content.contains("<<"),
+                "[{backend}] file {rel} still contains unrendered `<<`"
+            );
+            assert!(
+                !content.contains("%>"),
+                "[{backend}] file {rel} still contains unrendered `%>`"
+            );
+            assert!(
+                !content.contains("<%"),
+                "[{backend}] file {rel} still contains unrendered `<%`"
+            );
+        }
+
+        // Then(3): project_name 被替换进 config.toml
+        let config = fs::read_to_string(tmp.path().join("config.toml"))
+            .unwrap_or_else(|_| panic!("[{backend}] read config.toml"));
+        assert!(
+            config.contains("mcp-py-demo"),
+            "[{backend}] project_name not substituted into config.toml:\n{config}"
+        );
+
+        // Then(4): config.toml 含三段 + 端口 8000 + sse_enabled + 正确 backend
+        assert!(
+            config.contains("[server]") && config.contains("[mcp]") && config.contains("[log]"),
+            "[{backend}] config.toml missing [server]/[mcp]/[log]:\n{config}"
+        );
+        assert!(
+            config.contains("port = 8000"),
+            "[{backend}] config.toml missing port = 8000:\n{config}"
+        );
+        assert!(
+            config.contains("sse_enabled = true"),
+            "[{backend}] config.toml missing sse_enabled = true:\n{config}"
+        );
+        assert!(
+            config.contains(&format!("backend = \"{backend}\"")),
+            "[{backend}] config.toml backend not set to {backend}:\n{config}"
+        );
+
+        // Then(5): server.py —— 从单例 import mcp + 调用 register_tools() + path-once 307 fix
+        //          + 后端 import 分歧（证明 `<%if%>` 命中）
+        let server = fs::read_to_string(tmp.path().join("app/server.py"))
+            .unwrap_or_else(|_| panic!("[{backend}] read app/server.py"));
+        // 共享单例：server.py 不再自己构造 FastMCP，而是从 app.mcp_instance import。
+        assert!(
+            server.contains("from app.mcp_instance import mcp"),
+            "[{backend}] server.py must import the shared singleton (from app.mcp_instance import mcp):\n{server}"
+        );
+        // 工具通过 register_tools()（无参，import 即注册）在构建传输前注册。
+        assert!(
+            server.contains("register_tools("),
+            "[{backend}] server.py must call register_tools() before building transports:\n{server}"
+        );
+        // 新的 path-once：不再用 Mount，而是把子应用的路由 extend 进父应用的 routes。
+        assert!(
+            server.contains("streamable_app.routes") && server.contains("Route(\"/healthz\""),
+            "[{backend}] server.py must splice transports via routes.extend() and healthz:\n{server}"
+        );
+        // 后端构造收敛在 mcp_instance.py，server.py 不再 import FastMCP 后端构造符号。
+        if backend == "official" {
+            // path-once：官方后端在实例的 mcp.settings 上设置路径，而不是工厂参数。
+            assert!(
+                server.contains("mcp.settings.streamable_http_path = settings.mcp.mcp_path"),
+                "[official] server.py must own the path once via mcp.settings.streamable_http_path = settings.mcp.mcp_path:\n{server}"
+            );
+            assert!(
+                server.contains("streamable_http_app()") && server.contains("sse_app()"),
+                "[official] server.py must build streamable_http_app() + sse_app():\n{server}"
+            );
+        } else {
+            // path-once：http_app 工厂在 path 参数上拥有完整路径（settings.mcp.mcp_path）；SSE 走 transport="sse"。
+            assert!(
+                server.contains("http_app(path=settings.mcp.mcp_path")
+                    && server.contains("transport=\"sse\""),
+                "[fastmcp] server.py must build SSE (transport=\"sse\") + streamable (http_app(path=settings.mcp.mcp_path)):\n{server}"
+            );
+        }
+
+        // Then(5b): app/mcp_instance.py —— 唯一构造 FastMCP 的地方，后端 import 分歧在此。
+        let mcp_instance = fs::read_to_string(tmp.path().join("app/mcp_instance.py"))
+            .unwrap_or_else(|_| panic!("[{backend}] read app/mcp_instance.py"));
+        if backend == "official" {
+            assert!(
+                mcp_instance.contains("from mcp.server.fastmcp import"),
+                "[official] mcp_instance.py must import from mcp.server.fastmcp:\n{mcp_instance}"
+            );
+        } else {
+            assert!(
+                mcp_instance.contains("from fastmcp import"),
+                "[fastmcp] mcp_instance.py must import from fastmcp:\n{mcp_instance}"
+            );
+            assert!(
+                !mcp_instance.contains("from mcp.server.fastmcp"),
+                "[fastmcp] mcp_instance.py must NOT import the official mcp.server.fastmcp:\n{mcp_instance}"
+            );
+        }
+
+        // Then(6): pyproject.toml —— 依赖分歧（证明另一条 `<%if%>` 命中）+ 共有 pytest 配置
+        let pyproject = fs::read_to_string(tmp.path().join("pyproject.toml"))
+            .unwrap_or_else(|_| panic!("[{backend}] read pyproject.toml"));
+        if backend == "official" {
+            assert!(
+                pyproject.contains("mcp[cli]>=1.2,<2"),
+                "[official] pyproject.toml must pin mcp[cli]>=1.2,<2:\n{pyproject}"
+            );
+        } else {
+            assert!(
+                pyproject.contains("fastmcp>=2,<3"),
+                "[fastmcp] pyproject.toml must pin fastmcp>=2,<3:\n{pyproject}"
+            );
+        }
+        assert!(
+            pyproject.contains("asyncio_mode = \"auto\"")
+                && pyproject.contains("pythonpath = [\".\"]"),
+            "[{backend}] pyproject.toml missing pytest asyncio_mode/pythonpath config:\n{pyproject}"
+        );
+
+        // Then(7): echo.py 后端感知 —— 从单例 import mcp + 用本后端的装饰器（active 主形式）
+        let echo = fs::read_to_string(tmp.path().join("app/tools/echo.py"))
+            .unwrap_or_else(|_| panic!("[{backend}] read app/tools/echo.py"));
+        assert!(
+            echo.contains("from app.mcp_instance import mcp"),
+            "[{backend}] echo.py must import the shared singleton (from app.mcp_instance import mcp):\n{echo}"
+        );
+        if backend == "official" {
+            // official：装饰器必须带括号 @mcp.tool()。
+            assert!(
+                echo.contains("@mcp.tool()"),
+                "[official] echo.py must use the parenthesized decorator @mcp.tool():\n{echo}"
+            );
+        } else {
+            // fastmcp：装饰器无括号 @mcp.tool（注意 @mcp.tool 是 @mcp.tool() 的前缀，
+            // 故要求出现 @mcp.tool 且 NOT 出现 @mcp.tool() —— 排除括号形式）。
+            assert!(
+                echo.contains("@mcp.tool"),
+                "[fastmcp] echo.py must use the parenless decorator @mcp.tool:\n{echo}"
+            );
+            assert!(
+                !echo.contains("@mcp.tool()"),
+                "[fastmcp] echo.py must NOT use the parenthesized form @mcp.tool():\n{echo}"
+            );
+        }
+
+        // Then(8): README 提及双传输端点与测试入口
+        let readme = fs::read_to_string(tmp.path().join("README.md"))
+            .unwrap_or_else(|_| panic!("[{backend}] read README.md"));
+        assert!(
+            readme.contains("/mcp") && readme.contains("/sse") && readme.contains("make test"),
+            "[{backend}] README missing /mcp, /sse or `make test`:\n{readme}"
+        );
+    }
+}
+
+/// 渲染开启鉴权的 mcp-python（离线，仅渲染）。
+///
+/// 复刻 orchestrator `generate_mcp_python_language` 在 `to_template_context()` 之后注入的四个键：
+/// `mcp_backend` / `mcp_backend_is_official`（后端分支）+ `auth_mode` / `auth_enabled`（鉴权分支）。
+/// `auth_mode=="jwt"` ↔ `auth_enabled==true`；`auth_mode=="none"` ↔ `auth_enabled==false`，
+/// 与 `AuthMode::as_str()` / `AuthMode::is_enabled()` 的语义一致。
+fn render_mcp_python_auth(backend: &str, auth_mode: &str) -> tempfile::TempDir {
+    let mut params = PythonParams::new("mcp-py-auth-demo".to_string());
+    params.base.host = Some("0.0.0.0".to_string());
+    params.base.port = Some(8000);
+    let mut context = params.to_template_context();
+    context.insert(
+        "mcp_backend".to_string(),
+        serde_json::Value::String(backend.to_string()),
+    );
+    context.insert(
+        "mcp_backend_is_official".to_string(),
+        serde_json::Value::Bool(backend == "official"),
+    );
+    context.insert(
+        "auth_mode".to_string(),
+        serde_json::Value::String(auth_mode.to_string()),
+    );
+    context.insert(
+        "auth_enabled".to_string(),
+        serde_json::Value::Bool(auth_mode == "jwt"),
+    );
+
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    processor
+        .process_embedded_template_directory("frameworks/python/mcp-python", tmp.path(), context)
+        .expect("render embedded mcp-python templates (auth)");
+    tmp
+}
+
+/// 读取渲染后的项目内某个文件（缺失即 panic，带后端/模式上下文）。
+fn read_rendered(tmp: &tempfile::TempDir, rel: &str, backend: &str, mode: &str) -> String {
+    fs::read_to_string(tmp.path().join(rel))
+        .unwrap_or_else(|_| panic!("[{backend}/{mode}] read {rel}"))
+}
+
+#[test]
+fn mcp_python_auth_renders() {
+    // Given/When/Then：离线 render-assert 覆盖鉴权 ON（两后端）+ OFF（两后端，默认）。
+    // 不触发 uv/网络/pytest；live auth boot（401/200）证据在 F3，不在这里。
+
+    // ── auth ON：official + jwt ────────────────────────────────────────────────
+    {
+        let backend = "official";
+        let mode = "jwt";
+        let tmp = render_mcp_python_auth(backend, mode);
+
+        // 渲染产物不得残留自定义分隔符。
+        let files = collect_relative_files(tmp.path());
+        for rel in &files {
+            let content = read_rendered(&tmp, rel, backend, mode);
+            for delim in ["<<", "%>", "<%"] {
+                assert!(
+                    !content.contains(delim),
+                    "[{backend}/{mode}] file {rel} still contains unrendered `{delim}`"
+                );
+            }
+        }
+
+        // settings.py：AuthConfig + resource_server_url。
+        let settings = read_rendered(&tmp, "app/settings.py", backend, mode);
+        assert!(
+            settings.contains("class AuthConfig") && settings.contains("resource_server_url"),
+            "[{backend}/{mode}] settings.py must define AuthConfig with resource_server_url:\n{settings}"
+        );
+
+        // config.toml：[auth] + enabled = false + resource_server_url。
+        let config = read_rendered(&tmp, "config.toml", backend, mode);
+        assert!(
+            config.contains("[auth]")
+                && config.contains("enabled = false")
+                && config.contains("resource_server_url"),
+            "[{backend}/{mode}] config.toml must have [auth] enabled=false + resource_server_url:\n{config}"
+        );
+
+        // mcp_instance.py：official 后端导入 JwksTokenVerifier + AuthSettings + token_verifier=。
+        let mcp_instance = read_rendered(&tmp, "app/mcp_instance.py", backend, mode);
+        assert!(
+            mcp_instance.contains("from app.auth import JwksTokenVerifier")
+                && mcp_instance.contains("AuthSettings")
+                && mcp_instance.contains("token_verifier="),
+            "[{backend}/{mode}] mcp_instance.py must wire JwksTokenVerifier + AuthSettings + token_verifier=:\n{mcp_instance}"
+        );
+
+        // server.py：B1 离线护栏 —— _collect_middleware + Starlette(routes= ... middleware=。
+        let server = read_rendered(&tmp, "app/server.py", backend, mode);
+        assert!(
+            server.contains("_collect_middleware"),
+            "[{backend}/{mode}] server.py must define _collect_middleware (B1 re-attach):\n{server}"
+        );
+        assert!(
+            server.contains("Starlette(routes=") && server.contains("middleware="),
+            "[{backend}/{mode}] server.py must re-attach middleware onto the spliced parent (Starlette(routes=..., middleware=)):\n{server}"
+        );
+
+        // app/auth.py：official 后端真实 JwksTokenVerifier + require exp。
+        let auth = read_rendered(&tmp, "app/auth.py", backend, mode);
+        assert!(
+            auth.contains("class JwksTokenVerifier")
+                && auth.contains("options={\"require\": [\"exp\"]}"),
+            "[{backend}/{mode}] app/auth.py must define JwksTokenVerifier with options require exp:\n{auth}"
+        );
+
+        // pyproject.toml：official+auth 才有 pyjwt[crypto]。
+        let pyproject = read_rendered(&tmp, "pyproject.toml", backend, mode);
+        assert!(
+            pyproject.contains("pyjwt[crypto]"),
+            "[{backend}/{mode}] pyproject.toml must contain pyjwt[crypto] for official+auth:\n{pyproject}"
+        );
+
+        // README：鉴权小节存在。
+        let readme = read_rendered(&tmp, "README.md", backend, mode);
+        assert!(
+            readme.contains("鉴权") || readme.contains("oauth-protected-resource"),
+            "[{backend}/{mode}] README must contain the auth section:\n{readme}"
+        );
+    }
+
+    // ── auth ON：fastmcp + jwt ─────────────────────────────────────────────────
+    {
+        let backend = "fastmcp";
+        let mode = "jwt";
+        let tmp = render_mcp_python_auth(backend, mode);
+
+        let files = collect_relative_files(tmp.path());
+        for rel in &files {
+            let content = read_rendered(&tmp, rel, backend, mode);
+            for delim in ["<<", "%>", "<%"] {
+                assert!(
+                    !content.contains(delim),
+                    "[{backend}/{mode}] file {rel} still contains unrendered `{delim}`"
+                );
+            }
+        }
+
+        // settings.py：AuthConfig 存在（两后端共用配置面）。
+        let settings = read_rendered(&tmp, "app/settings.py", backend, mode);
+        assert!(
+            settings.contains("class AuthConfig"),
+            "[{backend}/{mode}] settings.py must define AuthConfig:\n{settings}"
+        );
+
+        // mcp_instance.py：fastmcp 后端导入内置 JWTVerifier + auth=。
+        let mcp_instance = read_rendered(&tmp, "app/mcp_instance.py", backend, mode);
+        assert!(
+            mcp_instance.contains("from fastmcp.server.auth.providers.jwt import JWTVerifier")
+                && mcp_instance.contains("auth="),
+            "[{backend}/{mode}] mcp_instance.py must wire the built-in JWTVerifier + auth=:\n{mcp_instance}"
+        );
+
+        // server.py：B1 中间件再挂载仍存在。
+        let server = read_rendered(&tmp, "app/server.py", backend, mode);
+        assert!(
+            server.contains("_collect_middleware") && server.contains("middleware="),
+            "[{backend}/{mode}] server.py must keep _collect_middleware + middleware= (B1):\n{server}"
+        );
+
+        // app/auth.py：fastmcp 用内置 verifier，本文件仅 docstring（无 JwksTokenVerifier）。
+        let auth = read_rendered(&tmp, "app/auth.py", backend, mode);
+        assert!(
+            !auth.contains("class JwksTokenVerifier"),
+            "[{backend}/{mode}] app/auth.py must be docstring-only for fastmcp (no JwksTokenVerifier):\n{auth}"
+        );
+
+        // pyproject.toml：fastmcp 自带 crypto，不应引入 pyjwt。
+        let pyproject = read_rendered(&tmp, "pyproject.toml", backend, mode);
+        assert!(
+            !pyproject.contains("pyjwt"),
+            "[{backend}/{mode}] pyproject.toml must NOT contain pyjwt for fastmcp+auth:\n{pyproject}"
+        );
+    }
+
+    // ── auth OFF：两后端默认（--auth none）—— 证明 ZERO 鉴权代码/配置/依赖 ───────────
+    for backend in ["fastmcp", "official"] {
+        let mode = "none";
+        let tmp = render_mcp_python_auth(backend, mode);
+
+        let files = collect_relative_files(tmp.path());
+        for rel in &files {
+            let content = read_rendered(&tmp, rel, backend, mode);
+            for delim in ["<<", "%>", "<%"] {
+                assert!(
+                    !content.contains(delim),
+                    "[{backend}/{mode}] file {rel} still contains unrendered `{delim}`"
+                );
+            }
+        }
+
+        // settings.py：无 AuthConfig。
+        let settings = read_rendered(&tmp, "app/settings.py", backend, mode);
+        assert!(
+            !settings.contains("AuthConfig"),
+            "[{backend}/{mode}] settings.py must NOT contain AuthConfig when auth off:\n{settings}"
+        );
+
+        // config.toml：无 [auth]。
+        let config = read_rendered(&tmp, "config.toml", backend, mode);
+        assert!(
+            !config.contains("[auth]"),
+            "[{backend}/{mode}] config.toml must NOT contain [auth] when auth off:\n{config}"
+        );
+
+        // mcp_instance.py：无任何 verifier / AuthSettings。
+        let mcp_instance = read_rendered(&tmp, "app/mcp_instance.py", backend, mode);
+        assert!(
+            !mcp_instance.contains("JWTVerifier")
+                && !mcp_instance.contains("AuthSettings")
+                && !mcp_instance.contains("JwksTokenVerifier"),
+            "[{backend}/{mode}] mcp_instance.py must contain NO auth wiring when auth off:\n{mcp_instance}"
+        );
+
+        // server.py：_collect_middleware 仍是无条件 helper（B1 实现），但其体内无 settings.auth。
+        let server = read_rendered(&tmp, "app/server.py", backend, mode);
+        assert!(
+            !server.contains("settings.auth"),
+            "[{backend}/{mode}] server.py must reference NO settings.auth when auth off:\n{server}"
+        );
+
+        // app/auth.py：docstring-only（无 JwksTokenVerifier）。
+        let auth = read_rendered(&tmp, "app/auth.py", backend, mode);
+        assert!(
+            !auth.contains("class JwksTokenVerifier"),
+            "[{backend}/{mode}] app/auth.py must be docstring-only when auth off:\n{auth}"
+        );
+
+        // pyproject.toml：无 pyjwt。
+        let pyproject = read_rendered(&tmp, "pyproject.toml", backend, mode);
+        assert!(
+            !pyproject.contains("pyjwt"),
+            "[{backend}/{mode}] pyproject.toml must NOT contain pyjwt when auth off:\n{pyproject}"
+        );
+
+        // README：无鉴权小节。
+        let readme = read_rendered(&tmp, "README.md", backend, mode);
+        assert!(
+            !readme.contains("## 鉴权"),
+            "[{backend}/{mode}] README must NOT contain the auth section when auth off:\n{readme}"
+        );
+
+        // test_auth.py：鉴权关闭时不应渲染出实际测试体（empty/comment-only，pytest 不收集）。
+        let test_auth_path = tmp.path().join("tests/test_auth.py");
+        if test_auth_path.exists() {
+            let test_auth = fs::read_to_string(&test_auth_path)
+                .unwrap_or_else(|_| panic!("[{backend}/{mode}] read tests/test_auth.py"));
+            assert!(
+                !test_auth.contains("def test_"),
+                "[{backend}/{mode}] tests/test_auth.py must contain NO tests when auth off:\n{test_auth}"
+            );
+        }
+    }
+}
+
+/// 渲染 `--auth azure-ad` 的 mcp-python（离线，仅渲染）。
+///
+/// 在 `render_mcp_python_auth` 的四键之外，额外注入 `auth_is_azure_ad=true`，
+/// 与 orchestrator `generate_mcp_python_language` 在 `to_template_context()` 之后
+/// 注入的第五个键一致（`AuthMode::is_azure_ad()`）。azure-ad ⇒ `auth_enabled==true`
+/// 且 `auth_mode=="azure-ad"`，镜像 `AuthMode::AzureAd` 的语义。
+fn render_mcp_python_azuread(backend: &str) -> tempfile::TempDir {
+    let mut params = PythonParams::new("mcp-py-azuread-demo".to_string());
+    params.base.host = Some("0.0.0.0".to_string());
+    params.base.port = Some(8000);
+    let mut context = params.to_template_context();
+    context.insert(
+        "mcp_backend".to_string(),
+        serde_json::Value::String(backend.to_string()),
+    );
+    context.insert(
+        "mcp_backend_is_official".to_string(),
+        serde_json::Value::Bool(backend == "official"),
+    );
+    context.insert(
+        "auth_mode".to_string(),
+        serde_json::Value::String("azure-ad".to_string()),
+    );
+    context.insert("auth_enabled".to_string(), serde_json::Value::Bool(true));
+    context.insert(
+        "auth_is_azure_ad".to_string(),
+        serde_json::Value::Bool(true),
+    );
+
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    processor
+        .process_embedded_template_directory("frameworks/python/mcp-python", tmp.path(), context)
+        .expect("render embedded mcp-python templates (azure-ad)");
+    tmp
+}
+
+#[test]
+fn mcp_python_azuread_renders() {
+    // Given/When/Then：离线 render-assert 覆盖 --auth azure-ad（两后端）+ none/jwt 回归。
+    // 不触发 uv/网络/pytest；live boot（dual-issuer 接受 / 401）证据在 F3，不在这里。
+
+    // ── azure-ad：official ─────────────────────────────────────────────────────
+    {
+        let backend = "official";
+        let mode = "azure-ad";
+        let tmp = render_mcp_python_azuread(backend);
+
+        // 渲染产物不得残留自定义分隔符。
+        let files = collect_relative_files(tmp.path());
+        for rel in &files {
+            let content = read_rendered(&tmp, rel, backend, mode);
+            for delim in ["<<", "%>", "<%"] {
+                assert!(
+                    !content.contains(delim),
+                    "[{backend}/{mode}] file {rel} still contains unrendered `{delim}`"
+                );
+            }
+        }
+
+        // settings.py：AuthConfig + azure-ad 预设字段 + model_post_init 自动推导。
+        let settings = read_rendered(&tmp, "app/settings.py", backend, mode);
+        for marker in [
+            "class AuthConfig",
+            "tenant_id",
+            "resource_app_id",
+            "extra_issuers",
+            "identity_claims",
+            "model_post_init",
+        ] {
+            assert!(
+                settings.contains(marker),
+                "[{backend}/{mode}] settings.py must contain `{marker}`:\n{settings}"
+            );
+        }
+
+        // config.toml：mode = "azure-ad" + tenant_id + resource_app_id。
+        let config = read_rendered(&tmp, "config.toml", backend, mode);
+        for marker in ["mode = \"azure-ad\"", "tenant_id", "resource_app_id"] {
+            assert!(
+                config.contains(marker),
+                "[{backend}/{mode}] config.toml must contain `{marker}`:\n{config}"
+            );
+        }
+
+        // app/auth.py：official 多 issuer 校验器 + 身份提取 + 当前身份 + JWKS 预热。
+        let auth = read_rendered(&tmp, "app/auth.py", backend, mode);
+        for marker in [
+            "class JwksTokenVerifier",
+            "extra_issuers",
+            "identity_claims",
+            "_extract_identity",
+            "def current_identity",
+            "def warm_up_jwks",
+        ] {
+            assert!(
+                auth.contains(marker),
+                "[{backend}/{mode}] app/auth.py must contain `{marker}`:\n{auth}"
+            );
+        }
+
+        // mcp_instance.py：tenant fail-fast + extra_issuers= / identity_claims= 入参 + warm_up_jwks 调用。
+        let mcp_instance = read_rendered(&tmp, "app/mcp_instance.py", backend, mode);
+        for marker in [
+            "from app.auth import JwksTokenVerifier",
+            "warm_up_jwks",
+            "warm_up_jwks(",
+            "settings.auth.tenant_id",
+            "extra_issuers=",
+            "identity_claims=",
+        ] {
+            assert!(
+                mcp_instance.contains(marker),
+                "[{backend}/{mode}] mcp_instance.py must contain `{marker}`:\n{mcp_instance}"
+            );
+        }
+
+        // whoami.py：存在、无参（不接收任何标识用户的入参）。
+        let whoami = read_rendered(&tmp, "app/tools/whoami.py", backend, mode);
+        assert!(
+            whoami.contains("def whoami("),
+            "[{backend}/{mode}] whoami.py must define def whoami(:\n{whoami}"
+        );
+        assert!(
+            whoami.contains("def whoami() -> dict:"),
+            "[{backend}/{mode}] whoami() must take NO user param (def whoami() -> dict):\n{whoami}"
+        );
+
+        // pyproject.toml：official + azure-ad 才有 pyjwt。
+        let pyproject = read_rendered(&tmp, "pyproject.toml", backend, mode);
+        assert!(
+            pyproject.contains("pyjwt"),
+            "[{backend}/{mode}] pyproject.toml must contain pyjwt for official+azure-ad:\n{pyproject}"
+        );
+
+        // README：azure-ad 小节存在。
+        let readme = read_rendered(&tmp, "README.md", backend, mode);
+        assert!(
+            readme.contains("azure-ad") && readme.contains("tenant_id"),
+            "[{backend}/{mode}] README must contain the azure-ad section (azure-ad + tenant_id):\n{readme}"
+        );
+    }
+
+    // ── azure-ad：fastmcp ──────────────────────────────────────────────────────
+    {
+        let backend = "fastmcp";
+        let mode = "azure-ad";
+        let tmp = render_mcp_python_azuread(backend);
+
+        let files = collect_relative_files(tmp.path());
+        for rel in &files {
+            let content = read_rendered(&tmp, rel, backend, mode);
+            for delim in ["<<", "%>", "<%"] {
+                assert!(
+                    !content.contains(delim),
+                    "[{backend}/{mode}] file {rel} still contains unrendered `{delim}`"
+                );
+            }
+        }
+
+        // settings.py：azure-ad 预设字段（配置面两后端共用）。
+        let settings = read_rendered(&tmp, "app/settings.py", backend, mode);
+        for marker in ["class AuthConfig", "tenant_id", "resource_app_id"] {
+            assert!(
+                settings.contains(marker),
+                "[{backend}/{mode}] settings.py must contain `{marker}`:\n{settings}"
+            );
+        }
+
+        // config.toml：mode = "azure-ad" + tenant 字段。
+        let config = read_rendered(&tmp, "config.toml", backend, mode);
+        assert!(
+            config.contains("mode = \"azure-ad\"") && config.contains("tenant_id"),
+            "[{backend}/{mode}] config.toml must have mode=\"azure-ad\" + tenant_id:\n{config}"
+        );
+
+        // mcp_instance.py：tenant fail-fast + 单个内置 JWTVerifier；fastmcp 不导入 warm_up_jwks。
+        let mcp_instance = read_rendered(&tmp, "app/mcp_instance.py", backend, mode);
+        assert!(
+            mcp_instance.contains("settings.auth.tenant_id"),
+            "[{backend}/{mode}] mcp_instance.py must fail-fast on tenant_id:\n{mcp_instance}"
+        );
+        assert!(
+            mcp_instance.contains("from fastmcp.server.auth.providers.jwt import JWTVerifier"),
+            "[{backend}/{mode}] mcp_instance.py must import the built-in JWTVerifier:\n{mcp_instance}"
+        );
+        assert!(
+            !mcp_instance.contains("warm_up_jwks"),
+            "[{backend}/{mode}] mcp_instance.py must NOT import/call warm_up_jwks for fastmcp:\n{mcp_instance}"
+        );
+        assert!(
+            !mcp_instance.contains("from app.auth import JwksTokenVerifier"),
+            "[{backend}/{mode}] fastmcp must NOT import the official JwksTokenVerifier:\n{mcp_instance}"
+        );
+
+        // app/auth.py：fastmcp 用内置 verifier，本文件无 JwksTokenVerifier。
+        let auth = read_rendered(&tmp, "app/auth.py", backend, mode);
+        assert!(
+            !auth.contains("class JwksTokenVerifier"),
+            "[{backend}/{mode}] app/auth.py must be docstring-only for fastmcp:\n{auth}"
+        );
+
+        // whoami.py：存在、无参。
+        let whoami = read_rendered(&tmp, "app/tools/whoami.py", backend, mode);
+        assert!(
+            whoami.contains("def whoami() -> dict:"),
+            "[{backend}/{mode}] whoami() must take NO user param:\n{whoami}"
+        );
+
+        // pyproject.toml：fastmcp 自带 crypto，不应引入 pyjwt。
+        let pyproject = read_rendered(&tmp, "pyproject.toml", backend, mode);
+        assert!(
+            !pyproject.contains("pyjwt"),
+            "[{backend}/{mode}] pyproject.toml must NOT contain pyjwt for fastmcp+azure-ad:\n{pyproject}"
+        );
+
+        // README：azure-ad 小节存在。
+        let readme = read_rendered(&tmp, "README.md", backend, mode);
+        assert!(
+            readme.contains("azure-ad") && readme.contains("tenant_id"),
+            "[{backend}/{mode}] README must contain the azure-ad section:\n{readme}"
+        );
+    }
+
+    // ── 回归：--auth none（official）—— ZERO azure-ad 痕迹 ───────────────────────
+    {
+        let backend = "official";
+        let mode = "none";
+        let tmp = render_mcp_python_auth(backend, mode);
+
+        // settings.py / config.toml / README 不得含任何 azure-ad 痕迹。
+        let settings = read_rendered(&tmp, "app/settings.py", backend, mode);
+        for marker in ["tenant_id", "azure-ad", "current_identity"] {
+            assert!(
+                !settings.contains(marker),
+                "[{backend}/{mode}] settings.py must NOT contain `{marker}` when auth none:\n{settings}"
+            );
+        }
+        let config = read_rendered(&tmp, "config.toml", backend, mode);
+        for marker in ["tenant_id", "azure-ad"] {
+            assert!(
+                !config.contains(marker),
+                "[{backend}/{mode}] config.toml must NOT contain `{marker}` when auth none:\n{config}"
+            );
+        }
+        let readme = read_rendered(&tmp, "README.md", backend, mode);
+        assert!(
+            !readme.contains("azure-ad"),
+            "[{backend}/{mode}] README must NOT contain azure-ad when auth none:\n{readme}"
+        );
+
+        // whoami.py：注释-only stub（无实际 whoami 函数定义）。
+        let whoami_path = tmp.path().join("app/tools/whoami.py");
+        if whoami_path.exists() {
+            let whoami = fs::read_to_string(&whoami_path)
+                .unwrap_or_else(|_| panic!("[{backend}/{mode}] read app/tools/whoami.py"));
+            assert!(
+                !whoami.contains("def whoami("),
+                "[{backend}/{mode}] whoami.py must be comment-only stub when auth none:\n{whoami}"
+            );
+        }
+    }
+
+    // ── 回归：--auth jwt（official）—— 通用单 issuer，NO azure-ad 痕迹 ───────────
+    {
+        let backend = "official";
+        let mode = "jwt";
+        let tmp = render_mcp_python_auth(backend, mode);
+
+        // settings.py：AuthConfig 存在，但无 azure-ad 专属字段。
+        let settings = read_rendered(&tmp, "app/settings.py", backend, mode);
+        assert!(
+            settings.contains("class AuthConfig"),
+            "[{backend}/{mode}] settings.py must define AuthConfig:\n{settings}"
+        );
+        for marker in ["tenant_id", "resource_app_id", "model_post_init"] {
+            assert!(
+                !settings.contains(marker),
+                "[{backend}/{mode}] settings.py must NOT contain azure-ad field `{marker}` for jwt:\n{settings}"
+            );
+        }
+
+        // config.toml：mode = "jwt"，不得是 azure-ad，不得含 tenant_id。
+        let config = read_rendered(&tmp, "config.toml", backend, mode);
+        assert!(
+            config.contains("mode = \"jwt\""),
+            "[{backend}/{mode}] config.toml must have mode=\"jwt\":\n{config}"
+        );
+        assert!(
+            !config.contains("mode = \"azure-ad\""),
+            "[{backend}/{mode}] config.toml must NOT set mode=\"azure-ad\" for jwt:\n{config}"
+        );
+        assert!(
+            !config.contains("tenant_id"),
+            "[{backend}/{mode}] config.toml must NOT contain tenant_id for jwt:\n{config}"
+        );
+
+        // mcp_instance.py：单 issuer wiring，不传 extra_issuers / identity_claims，不调 warm_up_jwks。
+        let mcp_instance = read_rendered(&tmp, "app/mcp_instance.py", backend, mode);
+        for marker in ["extra_issuers=", "identity_claims=", "warm_up_jwks"] {
+            assert!(
+                !mcp_instance.contains(marker),
+                "[{backend}/{mode}] mcp_instance.py must NOT contain `{marker}` for jwt:\n{mcp_instance}"
+            );
+        }
+    }
+}
+
 #[test]
 fn vue3_embedded_generation_renders_without_external_tools() {
     // 1. Arrange: setup temp dir and parameters

@@ -1,0 +1,206 @@
+"""<<project_name>> 配置加载 (config loader).
+
+读取顺序 / Load order (later overrides earlier):
+  1. 字段默认值 / field defaults
+  2. config.toml  ([server], [mcp], [log] 段)
+  3. .env 文件 / .env file
+  4. 系统环境变量 (SERVER__HOST, SERVER__PORT, MCP__BACKEND ...)
+
+即：环境变量 > .env > config.toml > 默认值。环境变量以 `__` 分层覆盖 config.toml。
+i.e. env vars > .env > config.toml > defaults. Env vars override config.toml.
+
+★ 普通用户无需修改本文件 ★ —— 改 host/port/传输路径请改 config.toml 或 .env。
+You normally never edit this file — change host/port/paths in config.toml or .env.
+"""
+
+from pathlib import Path
+
+from pydantic import BaseModel<%if auth_enabled%>, Field<%endif%>
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    TomlConfigSettingsSource,
+)
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+CONFIG_FILE = BASE_DIR / "config.toml"
+
+
+class ServerConfig(BaseModel):
+    """HTTP 监听配置 (listen settings)."""
+
+    host: str = "<<default_host>>"
+    port: int = <<default_port>>
+    reload: bool = False
+
+
+class McpConfig(BaseModel):
+    """MCP 传输配置 (transport settings)，对应 config.toml 的 [mcp] 段."""
+
+    # MCP 后端 / MCP backend: "fastmcp" 或 "official"
+    backend: str = "<<mcp_backend>>"
+
+    # streamable-HTTP 挂载路径 / streamable-HTTP mount path
+    mcp_path: str = "/mcp"
+
+    # SSE 挂载路径 / SSE mount path
+    sse_path: str = "/sse"
+
+    # 是否无状态 / stateless session mode
+    stateless: bool = True
+
+    # 是否启用 SSE 传输 / enable the SSE transport
+    sse_enabled: bool = True
+
+
+class LogConfig(BaseModel):
+    """日志配置 (logging configuration)，对应 config.toml 的 [log] 段."""
+
+    # 日志级别 / log level: debug / info / warning / error / critical
+    level: str = "info"
+
+    # 输出格式 / output format: "console" (彩色人类可读) 或 "json" (结构化)
+    format: str = "json"
+
+    # 日志目录 / log directory (留空 = 不写文件)
+    directory: str = "logs"
+
+    # 显式文件路径 / explicit file path (优先于 directory；留空 = directory + 默认名)
+    file: str = ""
+
+    # 是否同时输出到控制台 / also log to console
+    log_in_console: bool = True
+
+    # 是否附带 文件名/函数/行号 / include filename/func/lineno
+    show_line: bool = False
+
+    # 单文件最大体积 (MB) / max size per file before rotation
+    max_size: int = 10
+
+    # 保留的轮转文件数量 / number of rotated backups to keep
+    max_backups: int = 10
+
+    # 旧日志保留天数 / days to keep old log files (0 = 永久)
+    max_age: int = 30
+
+    # 轮转后是否 gzip 压缩 / gzip-compress rotated files
+    compress: bool = True
+
+<%- if auth_enabled %>
+
+
+class AuthConfig(BaseModel):
+    """OAuth2 / JWT 鉴权配置 (auth configuration)，对应 config.toml 的 [auth] 段."""
+
+    # 是否启用鉴权 / enable auth (默认 false：默认不校验 Bearer token)
+    enabled: bool = False
+
+    # 鉴权模式 / auth mode: 目前仅 "jwt" (Bearer JWT 校验)
+    mode: str = "jwt"
+
+    # JWKS 公钥地址 / JWKS URI —— 从 IdP 的 /.well-known/openid-configuration 取 "jwks_uri"
+    # From your IdP's /.well-known/openid-configuration → "jwks_uri".
+    jwks_uri: str = ""
+
+    # 令牌签发者 / token issuer —— openid-configuration 的 "issuer" (必须是合法 http(s) URL)
+    # The "issuer" from openid-configuration. MUST be a valid http(s) URL.
+    issuer: str = ""
+
+    # 令牌受众 / token audience —— 本 API 的标识 (可为 URI 或 GUID，不要求是 URL)
+    # This API's identifier (a bare URI or GUID is fine; need NOT be a URL).
+    audience: str = ""
+
+    # 本服务自身的公开访问地址 / THIS server's own public base URL, e.g. http://host:port
+    # 用于 AuthSettings.resource_server_url 与 /.well-known/oauth-protected-resource。
+    # 注意：这不是 audience；必须是合法 http(s) URL。
+    # Used for AuthSettings.resource_server_url + /.well-known/oauth-protected-resource.
+    # NOT the audience; MUST be a valid http(s) URL.
+    resource_server_url: str = ""
+
+    # 必需的 scope 列表 / required scopes (留空 = 不校验 scope)
+    # Required scopes (empty = no scope check).
+    required_scopes: list[str] = Field(default_factory=list)
+
+    # JWT 签名算法 / JWT signing algorithm (默认 RS256)
+    algorithm: str = "RS256"
+<%- if auth_is_azure_ad %>
+
+    # Entra 租户 ID / Azure AD tenant id (GUID or domain).
+    tenant_id: str = ""
+
+    # 资源应用(API)的 App ID / the registered API's Application (client) ID;
+    # token `aud` 应等于它或 `api://<它>` / token `aud` should equal it or `api://<it>`.
+    resource_app_id: str = ""
+
+    # 额外接受的 issuer（用于 Entra v1 `sts.windows.net/{tenant}/` 与 v2 并存）
+    # Additional accepted issuers (Entra v1 alongside v2).
+    extra_issuers: list[str] = Field(default_factory=list)
+
+    # 从已验签 token 提取用户标识时按序尝试的 claim
+    # Claims tried in order to extract the user identity.
+    identity_claims: list[str] = Field(
+        default_factory=lambda: ["preferred_username", "upn", "email", "unique_name"]
+    )
+
+    def model_post_init(self, __context) -> None:
+        """azure-ad 模式下从 tenant_id 自动推导留空项 (only fills blanks)."""
+        if self.mode != "azure-ad" or not self.tenant_id:
+            return
+        if not self.jwks_uri:
+            self.jwks_uri = (
+                f"https://login.microsoftonline.com/{self.tenant_id}/discovery/v2.0/keys"
+            )
+        if not self.issuer:
+            self.issuer = f"https://login.microsoftonline.com/{self.tenant_id}/v2.0"
+        if not self.extra_issuers:
+            self.extra_issuers = [f"https://sts.windows.net/{self.tenant_id}/"]
+        if not self.audience and self.resource_app_id:
+            self.audience = self.resource_app_id
+<%- endif %>
+
+<%- endif %>
+
+
+class Settings(BaseSettings):
+    """全局配置 (global settings). 环境变量以 `__` 分层覆盖 config.toml。"""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_nested_delimiter="__",
+        extra="ignore",
+        toml_file=CONFIG_FILE,
+    )
+
+    server: ServerConfig = ServerConfig()
+    mcp: McpConfig = McpConfig()
+    log: LogConfig = LogConfig()
+<%- if auth_enabled %>
+    auth: AuthConfig = AuthConfig()
+<%- endif %>
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """优先级 (高→低) / priority (high→low): init > env > .env > config.toml > defaults."""
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            TomlConfigSettingsSource(settings_cls),
+            file_secret_settings,
+        )
+
+
+def load_settings() -> Settings:
+    """从 config.toml + .env + 环境变量构建配置实例 (env 覆盖 toml)."""
+    return Settings()
+
+
+settings = load_settings()

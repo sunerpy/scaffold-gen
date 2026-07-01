@@ -1,0 +1,508 @@
+# <<project_name>>
+
+<<project_description>>
+
+> 一个**配置驱动**的 Python MCP 服务器：监听地址、端口、传输参数写在 `config.toml`，
+> 你**只需在 `app/tools/` 里写工具函数**，其余交给框架自动装配。
+> A config-driven MCP server — set host/port/transport in `config.toml`,
+> and just write your tool functions under `app/tools/`.
+
+---
+
+## 术语表 (Glossary)
+
+| 术语 | 白话解释 |
+| --- | --- |
+| **MCP（Model Context Protocol）** | 让 AI 客户端（Claude、Cursor、opencode 等）调用你服务器上"工具"的协议。客户端发一个 JSON-RPC 请求，服务器执行你的 Python 函数，返回结果。 |
+| **工具（tool）** | 一个普通的 Python 函数，加上类型注解。MCP 框架会把它的参数类型自动转成 JSON Schema，AI 客户端据此知道该传什么。 |
+| **streamable-HTTP** | 一种 HTTP 通道，走 `POST /mcp`。无状态、现代，主流客户端首选。**默认开启。** |
+| **SSE（Server-Sent Events）** | 另一种 HTTP 通道，走 `GET /sse`，服务器可持续向客户端推送事件。**默认也开启**（与 Go 版对齐）。 |
+| **客户端** | 调用你工具的那端 —— Claude Desktop、Cursor、opencode，或你自己写的脚本。 |
+| **fastmcp / official** | 两种 MCP 后端库，选哪个由生成时的 `--mcp-backend` 决定（或改 `config.toml`）。工具代码对两者完全无感，写法一样。 |
+
+---
+
+## 目录结构 (Project layout)
+
+```
+<<project_name>>/
+├── config.toml              # ★ 改监听地址/端口/传输路径 —— 改这里
+├── main.py                  # 启动入口：读配置 → 跑 uvicorn（一般不动）
+├── pyproject.toml           # 依赖声明 (uv 管理)
+├── Makefile                 # 常用任务快捷方式
+├── tests/                   # pytest 测试（内存客户端，不起真实服务）
+│   ├── conftest.py          # 测试夹具（client 工厂）
+│   └── test_echo.py         # echo 工具测试范例
+└── app/
+    ├── server.py            # 传输装配：挂载 /mcp + /sse（一般不动）
+    ├── mcp_instance.py      # 共享的 mcp 单例（工具从这里 import）（不用动）
+    ├── settings.py          # 读取 config.toml / .env（不用动）
+    ├── logging.py           # structlog 初始化（不用动）
+    └── tools/               # ★★★ 你的工具写在这里 ★★★
+        ├── __init__.py      # import 即注册：自动发现并 import 工具模块（不用动）
+        └── echo.py          # ★ 范例工具：照着它加新工具 ★
+```
+
+---
+
+## 依赖 (Requirements)
+
+- **Python <<python_version>>+**
+- **[uv](https://docs.astral.sh/uv/)** —— 极快的 Python 包管理器（安装：`curl -LsSf https://astral.sh/uv/install.sh | sh`）
+
+---
+
+## 使用方法 (Usage)
+
+```bash
+# 1. 安装依赖（uv 会自动建虚拟环境）
+uv sync
+
+# 2. 先跑测试，确认环境正常
+make test
+
+# 3. 启动服务（读取 config.toml 里的 host/port）
+uv run python main.py
+# 或者用快捷方式
+make run
+```
+
+服务启动后：
+
+- **streamable-HTTP**：`http://<<default_host>>:<<default_port>>/mcp`（POST，AI 客户端首选）
+- **SSE**：`http://<<default_host>>:<<default_port>>/sse`（GET，事件流）
+- **健康检查**：`http://<<default_host>>:<<default_port>>/healthz`
+
+开发时热重载（改代码自动重启）：
+
+```bash
+make dev
+```
+
+> ⚠️ **热重载仅限本地开发**：`config.toml` 的 `reload` 生产环境必须保持 `false`，
+> `make dev`（设 `SERVER__RELOAD=true`）是唯一开启方式；生产用 `make run`。
+> Hot-reload is dev-only — keep `reload = false` in production; `make dev` is the
+> only intended way to enable it.
+
+---
+
+## 改监听地址 / 端口 / 传输（只改 config.toml）
+
+编辑 `config.toml`，**不要改代码**：
+
+```toml
+[server]
+host = "0.0.0.0"   # 改监听地址（本机调试用 127.0.0.1）
+port = 8000        # 改端口
+
+[mcp]
+mcp_path = "/mcp"      # streamable-HTTP 路径
+sse_path  = "/sse"     # SSE 路径
+sse_enabled = true     # 设为 false 可关闭 SSE，只保留 streamable-HTTP
+```
+
+---
+
+## 选择后端 (Backend comparison)
+
+`--mcp-backend` 在生成项目时选定，也可以事后修改 `config.toml` 的 `[mcp] backend` 再重新生成。
+
+| 维度 | 官方 SDK (`mcp[cli]`) | fastmcp（默认） |
+| --- | --- | --- |
+| **定位** | 协议源头，精细控制，贴近 spec | 高层封装，最省事，装饰器优先 |
+| **适合场景** | 需要控制会话/传输细节、追踪最新协议变更 | 快速上手、工具逻辑为主、减少样板 |
+| **写工具（本脚手架默认装饰器写法）** | `@mcp.tool()`（必须带括号） | `@mcp.tool`（可省括号，最省事） |
+| **可移植替代写法** | 手写 `def register(mcp): mcp.tool(name=...)(fn)`（两端通用） | 手写 `def register(mcp): mcp.tool(name=...)(fn)`（两端通用） |
+| **协议完整性** | 直接跟随 MCP spec 迭代 | 封装层可能滞后，但覆盖日常用例 |
+| **生产可控性** | 会话管理、错误细节更透明 | 开箱即用，隐藏了部分底层细节 |
+
+> 本项目当前后端是 `<%if mcp_backend_is_official%>official<%else%>fastmcp<%endif%>`，
+> 所以下面"三步加一个工具"只展示该后端的装饰器写法
+> （`<%if mcp_backend_is_official%>@mcp.tool()<%else%>@mcp.tool<%endif%>`）。
+
+生成时选择：
+
+```bash
+scafgen new my-mcp --framework mcp-python --language python --mcp-backend fastmcp
+scafgen new my-mcp --framework mcp-python --language python --mcp-backend official
+```
+
+两种后端都由 `uv sync` 根据 `pyproject.toml` 自动安装，**无需手动 pip install**。
+
+---
+
+## 三步加一个工具 (Add a tool in 3 steps)
+
+加一个新 MCP 工具，**只动 `app/tools/`，不改任何其它文件**。
+
+### 第 1 步：在 `app/tools/` 下新建一个 `.py` 文件
+
+例如，新建 `app/tools/math.py`。
+
+### 第 2 步：从 `app.mcp_instance` import 共享的 `mcp` 单例，写带类型注解的函数
+
+用 `Annotated[..., Field(...)]` 描述每个入参：
+
+```python
+# app/tools/math.py
+from typing import Annotated
+
+from pydantic import Field
+
+from app.mcp_instance import mcp
+
+
+def add(
+    a: Annotated[int, Field(description="第一个加数 / First number")],
+    b: Annotated[int, Field(description="第二个加数 / Second number")],
+) -> dict:
+    """把两个整数相加。Add two integers."""
+    return {"result": a + b}
+```
+
+`Field(description=...)` 的内容会成为 AI 客户端看到的参数说明，写清楚一点更好。
+参数类型（`int`、`str`、`float` 等）会自动生成 JSON Schema，客户端据此校验入参。
+
+> **提示**：用扁平参数（每个入参单独列出），不要把所有参数打包成一个 Pydantic 模型类再传入。
+> 这样 `call_tool("add", {"a": 1, "b": 2})` 就能直接调用，更直观。
+
+> **参数校验**：客户端传错参数时，框架在调用你的函数前返回校验错误，服务端记 INFO 级别日志。
+> 要记录业务失败，在函数里 `try/except` + `get_logger(__name__).error(...)` 即可。
+
+### 第 3 步：用 `<%if mcp_backend_is_official%>@mcp.tool()<%else%>@mcp.tool<%endif%>`（本后端写法）装饰你的函数即可；保存自动注册
+
+在函数上方加装饰器（**本项目后端是 `<%if mcp_backend_is_official%>official<%else%>fastmcp<%endif%>`，写法如下**）：
+
+```python
+<%if mcp_backend_is_official%># official SDK：装饰器必须带括号
+@mcp.tool()<%else%># fastmcp（默认）：装饰器可省括号
+@mcp.tool<%endif%>
+def add(
+    a: Annotated[int, Field(description="第一个加数 / First number")],
+    b: Annotated[int, Field(description="第二个加数 / Second number")],
+) -> dict:
+    """把两个整数相加。Add two integers."""
+    return {"result": a + b}
+```
+
+装饰器在工具模块被 import 时执行，把工具注册到共享的 `mcp` 单例上——所以
+**import 即注册**。`app/tools/__init__.py` 会自动 import 本目录下的每个 `.py`。
+
+如果你**不想用装饰器**、或想要一份**跨两种后端都通用**的可移植写法，也可以删掉装饰器，
+改用手写的显式调用形式（函数不在模块层引用 `mcp`，由一个 `register(mcp)` 接收实例）：
+
+```python
+# 可移植替代写法（两端通用）/ portable alternative (works on both backends):
+# def register(mcp) -> None:
+#     mcp.tool(name="add", description="把两个整数相加。")(add)
+```
+
+> 本脚手架默认用**装饰器**，写法因后端而异（fastmcp `@mcp.tool` / official `@mcp.tool()`），已按所选后端给出。
+> 跨后端可移植时，改用上面注释里的 `register(mcp)` 显式调用形式。
+
+保存文件后，`app/tools/__init__.py` 会在 import 时**自动加载并注册**这个工具——你不用改任何
+其它文件，不用改 `server.py`，不用改 `main.py`。
+
+---
+
+## 端点 (Endpoints)
+
+| 端点 | 方法 | 说明 |
+| --- | --- | --- |
+| `/mcp` | POST | streamable-HTTP，**始终开启**，现代客户端首选 |
+| `/sse` | GET | SSE 事件流，**默认开启**（`sse_enabled=true`）。关闭：`config.toml` 设 `sse_enabled=false` |
+| `/healthz` | GET | 健康检查，返回 `{"status":"ok"}` |
+
+---
+
+## curl 冒烟测试 (Smoke test with curl)
+
+先启动服务（`make run`），再在另一个终端：
+
+```bash
+# 列出所有已注册的工具
+curl -s http://<<default_host>>:<<default_port>>/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+# 调用 echo 工具（text="hi"，重复 2 次）
+curl -s http://<<default_host>>:<<default_port>>/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"text":"hi","repeat":2}}}'
+
+# 打开 SSE 事件流（Ctrl+C 退出）
+curl -N http://<<default_host>>:<<default_port>>/sse
+```
+
+---
+
+## 最小 Python 客户端 (Minimal Python client)
+
+```python
+import asyncio
+
+from fastmcp import Client
+
+
+async def main() -> None:
+    async with Client("http://<<default_host>>:<<default_port>>/mcp") as c:
+        result = await c.call_tool("echo", {"text": "hi", "repeat": 2})
+        print(result)
+
+
+asyncio.run(main())
+```
+
+把 URL 换成 `/sse` 可以改用 SSE 传输。
+
+---
+
+## 调试：MCP Inspector (Debugging)
+
+[MCP Inspector](https://github.com/modelcontextprotocol/inspector) 是官方可视化调试工具（列工具、看 schema、手动调用）。先 `make run` 启动本服务，再启动 Inspector。
+
+```bash
+# 方式一：npx（需要 Node；UI 默认 http://localhost:6274）
+npx @modelcontextprotocol/inspector
+
+# 方式二：Docker（无需本地 Node；--network host 便于访问跑在宿主机上的本服务）
+docker run --rm --network host ghcr.io/modelcontextprotocol/inspector:latest
+```
+
+浏览器打开 `http://localhost:6274`，在 **Connect** 面板：
+
+- **Transport Type** 选 `Streamable HTTP`，**URL** 填 `http://<<default_host>>:<<default_port>>/mcp`
+- SSE 调试则选 `SSE`，URL 填 `http://<<default_host>>:<<default_port>>/sse`
+- 连接后在 **Tools** 标签调用 `echo`，入参 `{"text":"hi","repeat":2}`
+
+也可直接用 auto-connect URL 一键连接：
+
+`http://localhost:6274/?transport=streamable-http&serverUrl=http://<<default_host>>:<<default_port>>/mcp`
+
+> **CLI 模式**（CI 适用）：`npx @modelcontextprotocol/inspector --cli ...`，连接→执行→打印→退出，无需浏览器。
+<%if auth_enabled%>
+> **鉴权**：若本服务启用了鉴权（`[auth]`），在 Connect 面板的 **Authentication** 处填 Bearer Token，Inspector 会自动带上 `Authorization: Bearer <token>` 头。
+<%endif%>
+> **安全**：使用 Inspector **≥ 0.14.1**（更早版本有 RCE 漏洞 CVE-2025-49596），勿在公网暴露。
+
+---
+
+<%if auth_enabled%>
+
+## 鉴权 / 认证 (Optional auth)
+
+本服务作为 **OAuth 2.1 资源服务器**校验 IdP 签发的 JWT bearer token（**只校验、不负责登录/发 token**）。本节仅在生成时加 `--auth jwt` 时出现；`--auth none`（默认）的项目无鉴权、无本节。
+
+### 开启
+
+在 `config.toml` 的 `[auth]` 段设 `enabled = true`，并填入以下字段：
+
+```toml
+[auth]
+enabled = true
+jwks_uri = ""           # 取自 IdP /.well-known/openid-configuration 的 jwks_uri 字段
+issuer   = ""           # 取自同上的 issuer 字段
+audience = ""           # IdP 为本 API 签发 token 时写入的受众标识（如 Entra 的 api://<client-id>）
+resource_server_url = "http://<<default_host>>:<<default_port>>"  # 本服务自身的公开 URL
+required_scopes = []    # 需要的 scope 列表，空表示不校验 scope
+```
+
+> `resource_server_url` 是**本服务**的公开 URL，用于 `/.well-known/oauth-protected-resource`；不可与 `audience` 混用（`audience` 可能是裸 URI/GUID，`resource_server_url` 必须是合法 http(s) URL）。
+
+### 各 IdP 的 well-known 地址
+
+从 `/.well-known/openid-configuration` 读出 `jwks_uri` 与 `issuer` 填入上方配置：
+
+| IdP | `/.well-known/openid-configuration` |
+| --- | --- |
+| AD FS | `https://<adfs-host>/adfs/.well-known/openid-configuration` |
+| Entra ID | `https://login.microsoftonline.com/<tenant>/v2.0/.well-known/openid-configuration` |
+| Okta / Keycloak / Auth0 | `<issuer>/.well-known/openid-configuration`（各自 issuer 拼上后缀） |
+
+<%if auth_is_azure_ad%>
+
+### Azure AD / Entra ID 预设模式 (azure-ad preset)
+
+`mode = "azure-ad"` 是针对 Microsoft Entra ID（前称 Azure AD）的 **turnkey 预设**：只需填 `tenant_id` 和 `resource_app_id`，服务器在启动时自动推导所有 JWKS / issuer 参数，无需手动查询 well-known 端点。
+
+> **Azure AD / Entra ID preset** — instead of manually looking up `jwks_uri` and `issuer`, supply `tenant_id` + `resource_app_id`; the server derives everything else at runtime.
+
+#### 自动推导的值 / Auto-derived values
+
+| 配置项 | 自动推导为 |
+| --- | --- |
+| `jwks_uri` | `https://login.microsoftonline.com/{tenant_id}/discovery/v2.0/keys` |
+| `issuer` (v2) | `https://login.microsoftonline.com/{tenant_id}/v2.0` |
+| `extra_issuers` (v1) | `https://sts.windows.net/{tenant_id}/`（仅 official backend） |
+| `audience` | `resource_app_id`（若留空） |
+
+`resource_server_url` 仍需手动填写（本服务的公开 URL）。
+
+#### 配置示例 / Configuration example
+
+```toml
+[auth]
+enabled = true
+mode = "azure-ad"
+tenant_id = "<your-entra-tenant-guid-or-domain>"
+resource_app_id = "<your-API-app-registration-client-id>"
+resource_server_url = "http://<<default_host>>:<<default_port>>"
+required_scopes = []   # 可选 / optional
+# jwks_uri / issuer / audience 留空将自动从 tenant_id 推导
+# Leave jwks_uri / issuer / audience blank — they are auto-derived from tenant_id
+```
+
+也可通过环境变量覆盖（适合容器部署 / CI）：
+
+```bash
+AUTH__TENANT_ID=<tenant-guid>
+AUTH__RESOURCE_APP_ID=<app-client-id>
+AUTH__RESOURCE_SERVER_URL=https://your-mcp-service.example.com
+AUTH__REQUIRED_SCOPES=[]
+```
+
+#### Entra 应用注册 / App registration
+
+本服务需要一个 **API 应用注册**（App Registration）：
+
+1. 在 [Azure Portal > App registrations](https://portal.azure.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/~/RegisteredApps) 注册一个 API 应用。
+2. 记录该注册的 **Application (client) ID** — 这就是 `resource_app_id`。
+3. 在该注册的 **Expose an API** 页面设置 App ID URI（通常为 `api://<client-id>`）并添加 scope 或 App Role。
+4. 客户端应用在请求 token 时需指定 `scope = api://<resource_app_id>/.default`（或具体 scope）。
+
+Entra 签发的 token 中 `aud` 字段为 `api://<resource_app_id>` 或裸 GUID，两者服务器均接受。
+
+#### 安全：身份来源于 Token，不信任外部参数
+
+> **重要安全设计** / **Security note (read this)**
+>
+> 服务器从**已验证的 JWT** 中提取用户身份（按优先级：`preferred_username` → `upn` → `email` → `unique_name`，以及 `oid` 对象 ID）。生成的 `whoami` 工具**直接返回 Token 中的身份，不接受任何用户传入的 `user` 参数**。
+>
+> **The server trusts only the verified token identity — it never accepts a caller-supplied user field.** This prevents an AI agent or any client from impersonating another user by passing a crafted parameter. The `whoami` tool takes no arguments; the identity it returns is always the authenticated principal from the token.
+
+#### JWKS 预热 / JWKS warm-up
+
+<%if mcp_backend_is_official%>Official backend 在启动时预先拉取 Entra 的 JWKS（`https://login.microsoftonline.com/{tenant_id}/discovery/v2.0/keys`），缓存公钥，避免第一个请求出现延迟。后续请求直接复用缓存，仅在 key 轮转时重新拉取。<%else%>FastMCP backend 在首次收到带 token 的请求时才拉取 JWKS；如需消除首请求延迟，可切换到 official backend（`--mcp-backend official`）以获得启动预热。<%endif%>
+
+#### 双 issuer 支持 / Dual issuer (v1 + v2)
+
+Entra 历史上有两种 token issuer：
+
+- **v2**：`https://login.microsoftonline.com/{tenant_id}/v2.0`（推荐，Microsoft Identity Platform）
+- **v1**：`https://sts.windows.net/{tenant_id}/`（旧版 Azure AD，部分遗留应用仍会签发）
+
+<%if mcp_backend_is_official%>Official backend 同时接受 v1 和 v2 issuer（`extra_issuers` 自动包含 v1 地址），可兼容遗留 Azure AD token。<%else%>FastMCP backend 仅接受 v2 issuer；若你的客户端仍签发 v1 token，请切换到 official backend（`--mcp-backend official`）。<%endif%>
+
+<%endif%>
+
+### 客户端调用
+
+所有请求需携带 `Authorization: Bearer <token>` 头，例如：
+
+```bash
+curl -s http://<<default_host>>:<<default_port>>/mcp \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+<%if mcp_backend_is_official%>本服务开启鉴权后会在 `GET /.well-known/oauth-protected-resource` 公布资源元数据（RFC 9728），客户端可据此发现对应的 Authorization Server。<%else%>本服务开启鉴权后会校验 Bearer token 的有效性，但不发布 `/.well-known/oauth-protected-resource` 发现端点（fastmcp 的 JWTVerifier 不挂载 discovery 路由）；客户端需直接指向 IdP 的 issuer 地址。<%endif%>
+
+### SAML 注意
+
+纯 SAML 不能直接用于 MCP 的 OAuth 2.1 模型（SAML 是 XML 断言，不签发 OAuth bearer token）。若组织只有 SAML IdP，需通过 Entra ID / Keycloak 做 OIDC 桥接才能接入。本脚手架不内置 SAML 支持。
+
+---
+
+<%endif%>
+
+## 在 Claude / Cursor / opencode 中接入
+
+把客户端的 MCP 服务器地址指向 streamable-HTTP 端点即可：
+
+**URL**：`http://<<default_host>>:<<default_port>>/mcp`
+
+- **Claude Desktop**（`claude_desktop_config.json`）：
+
+  ```json
+  {
+    "mcpServers": {
+      "<<project_name>>": {
+        "url": "http://<<default_host>>:<<default_port>>/mcp"
+      }
+    }
+  }
+  ```
+
+- **Cursor / opencode**：在 MCP 服务器设置里填入上方 URL，保存后重启编辑器即可。
+
+> 若客户端只支持 SSE，把 URL 改为 `http://<<default_host>>:<<default_port>>/sse`。
+
+---
+
+## 测试 (Testing)
+
+```bash
+uv sync      # 必须先安装依赖，否则 pytest 找不到包
+make test    # 运行 pytest（内存客户端，不起真实服务，不走网络）
+```
+
+测试用内存 MCP 客户端直接连接工具实例，**不需要启动服务器，也不占用端口**。
+提交代码前必须保证 `make test` 全绿，这是本项目的强制门槛。
+
+<% if enable_precommit %>
+### Pre-commit 钩子
+
+```bash
+uv run pre-commit install            # 安装
+uv run pre-commit run --all-files    # 全量运行
+```
+<% endif %>
+
+---
+
+## 构建与容器化 (Makefile + Docker)
+
+> 本节内容仅在项目生成时选择了 `--with-build`（或在交互提示"生成配套 Makefile + Dockerfile？"中选择了是）时才会生成。
+> 若当前项目没有 `Makefile` / `Dockerfile`，用 `scafgen new <name> --framework mcp-python --with-build` 重新生成即可。
+
+Makefile + 多阶段 Dockerfile 由 `scafgen` 自动生成，覆盖从本地构建到容器化的完整流程，
+**全部通过 `make` 完成，不依赖 GitHub Actions / CI 平台**。
+
+```bash
+make help          # 列出所有可用目标
+make build         # 打包 / 预编译
+make run           # 本地启动 MCP 服务（uv run python main.py）
+make test          # 运行测试
+make fmt           # 格式化代码（Ruff）
+make lint          # lint 检查（Ruff check）
+make check         # fmt + lint + test（一键本地校验）
+make docker-build  # 构建容器镜像（docker build -t <<project_name>>:latest .）
+make docker-run    # 运行容器（服务监听 <<default_port>>）
+```
+
+---
+
+## 推荐工具：CodeGraph (Recommended)
+
+当项目变大、或你用 AI 编程助手时，推荐集成
+**[codegraph-rust](https://github.com/sunerpy/codegraph-rust)** 作为代码分析工具：
+
+- 基于 **tree-sitter + SQLite/FTS5** 的确定性代码知识图谱，**不含任何 AI/LLM**，输出字节级稳定。
+- 提供符号 / 调用 / 依赖关系图，支持 **CLI 与 MCP server** 两种用法，可直接喂给 AI 编程 Agent。
+- **单一二进制、易用、极高性能**：显著提升开发效率，同时大幅降低 token 消耗。
+- 接入后 Agent **自动**通过 MCP 探索符号/调用关系，并**自动检测文件变更增量同步**，无需手动维护索引。
+
+在 opencode、Claude、Kiro、Cursor 等支持 MCP 的 AI 编程工具中，只需：
+
+```bash
+codegraph install   # 安装并自动接入 opencode / Claude / Kiro / Cursor 等工具的 MCP
+```
+
+重启编辑器 / Agent 工具后即自动接入 MCP，Agent 会自动调用 CodeGraph 检索，并在文件变更时自动增量同步（无需手动 sync/explore）。
+
+---
+
+## License
+
+<<license>>

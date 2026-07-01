@@ -1,0 +1,167 @@
+<%- if mcp_backend_is_official -%>
+<%- if auth_enabled -%>
+"""官方 SDK 后端的 JWKS Bearer Token 校验器 / JWKS bearer-token verifier (official SDK backend).
+
+把 IdP(AD FS / Entra / Okta / 通用 OIDC)签发的 JWT 当作资源服务器校验：
+通过 JWKS 验签 + 校验 iss/aud/exp + 必需 scope。fastmcp 后端用其内置 JWTVerifier，不需要本文件。
+Validates IdP-issued JWT access tokens as a Resource Server (JWKS signature + iss/aud/exp + scopes).
+
+★ 普通用户无需修改本文件 ★ —— 鉴权参数请改 config.toml 的 [auth] 段。
+You normally never edit this file — tune auth in config.toml's [auth] section.
+"""
+
+import jwt
+from mcp.server.auth.provider import AccessToken, TokenVerifier
+
+from app.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+def _parse_scopes(claims: dict) -> list[str]:
+    """从 claims 解析 scope 列表：优先 `scope`(空格分隔字符串)，否则 `scp`(列表或字符串).
+
+    Parse scopes: prefer the space-delimited `scope` string, else fall back to
+    `scp` (a list or a space-delimited string).
+    """
+    raw_scope = claims.get("scope")
+    if isinstance(raw_scope, str) and raw_scope:
+        return raw_scope.split()
+    scp = claims.get("scp")
+    if isinstance(scp, list):
+        return [str(item) for item in scp]
+    if isinstance(scp, str) and scp:
+        return scp.split()
+    return []
+
+
+def _extract_identity(claims: dict, identity_claims: list[str]) -> str | None:
+    """按优先级取第一个非空的身份声明值 (e.g. preferred_username|upn|email|unique_name).
+
+    Return the first non-empty claim value among `identity_claims`, else None.
+    """
+    for name in identity_claims:
+        value = claims.get(name)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def current_identity() -> dict | None:
+    """返回当前请求已验签的用户身份(subject/claims)，未鉴权时 None。
+    Return the verified identity (subject + claims) for the current request, else None."""
+    try:
+        from mcp.server.auth.middleware.auth_context import get_access_token
+
+        tok = get_access_token()
+    except Exception:
+        return None
+    if tok is None:
+        return None
+    return {
+        "subject": tok.subject,
+        "scopes": list(tok.scopes or []),
+        "claims": getattr(tok, "claims", {}) or {},
+    }
+
+
+def warm_up_jwks(jwks_uri: str) -> None:
+    """预热 JWKS 缓存，避免首个带 token 请求现拉公钥(跨境 Entra 延迟)。Warm the JWKS cache."""
+    if not jwks_uri:
+        return
+    try:
+        jwt.PyJWKClient(jwks_uri).get_jwk_set()
+    except Exception as exc:  # noqa: BLE001 - warm-up is best-effort
+        logger.debug("jwks_warmup_failed", error=str(exc))
+
+
+class JwksTokenVerifier(TokenVerifier):
+    """用 JWKS 校验 JWT 的 TokenVerifier。
+
+    verify_token 在校验失败时返回 None（不抛异常）→ 框架据此回 401。
+    Returns None on any verification failure so the framework responds 401.
+    """
+
+    def __init__(
+        self,
+        *,
+        jwks_uri: str,
+        issuer: str,
+        audience: str,
+        algorithm: str,
+        required_scopes: list[str],
+        extra_issuers: list[str] | None = None,
+        identity_claims: list[str] | None = None,
+    ) -> None:
+        self._issuer = issuer
+        self._audience = audience
+        self._algorithm = algorithm
+        self._required_scopes = set(required_scopes or [])
+        # 可接受的 issuer 列表（Entra v1 sts.windows.net + v2 login.microsoftonline.com）。
+        # 默认仅 [issuer] → 单 issuer 行为与原来一致；多 issuer 时改走手动校验。
+        # Accepted issuers (e.g. Entra v1 sts.windows.net + v2 login.microsoftonline.com).
+        self._accepted_issuers = [iss for iss in [issuer, *(extra_issuers or [])] if iss]
+        # 身份声明优先级；默认 ["sub"] → 保持原 subject=sub 行为。
+        # Identity-claim precedence; default ["sub"] preserves subject=sub.
+        self._identity_claims = identity_claims or ["sub"]
+        # PyJWKClient 懒加载 + 内部缓存：import 时不发网络请求，首次校验时才拉取 JWKS。
+        # PyJWKClient fetches lazily (with its own cache) — no network at import time.
+        self._jwks = jwt.PyJWKClient(jwks_uri)
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        # 多 issuer 时不能用 jwt.decode(issuer=...)（只接受单个字符串）→ 先不校验签发者，
+        # 解码后手动比对 iss ∈ accepted_issuers。单 issuer 时仍走原生 issuer 校验，保持等价。
+        # PyJWT's jwt.decode(issuer=...) accepts only one string; for multiple accepted
+        # issuers we decode WITHOUT issuer verification, then check iss manually.
+        multi_issuer = len(self._accepted_issuers) > 1
+        try:
+            signing_key = self._jwks.get_signing_key_from_jwt(token)
+            claims = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=[self._algorithm],
+                # 空 audience = 不校验受众 / empty audience = skip the aud check.
+                audience=self._audience or None,
+                # 单 issuer：交给 jwt.decode 校验；多 issuer：跳过，下面手动校验。
+                # single issuer → let jwt.decode verify; multi → skip, check below.
+                issuer=None if multi_issuer else (self._issuer or None),
+                # 必须带 exp：缺失或过期一律拒绝 / require exp: reject missing/expired.
+                options={"require": ["exp"]},
+            )
+        except (jwt.PyJWTError, jwt.exceptions.PyJWKClientError) as exc:
+            logger.debug("token_verify_failed", error=str(exc))
+            return None
+
+        # 多 issuer 模式下手动校验签发者 / manual issuer check in multi-issuer mode.
+        if multi_issuer and claims.get("iss") not in self._accepted_issuers:
+            logger.debug(
+                "token_issuer_not_accepted",
+                got=claims.get("iss"),
+                accepted=self._accepted_issuers,
+            )
+            return None
+
+        scopes = _parse_scopes(claims)
+        if not self._required_scopes <= set(scopes):
+            logger.debug(
+                "token_missing_required_scopes",
+                required=list(self._required_scopes),
+                got=scopes,
+            )
+            return None
+
+        subject = _extract_identity(claims, self._identity_claims) or claims.get("sub")
+        return AccessToken(
+            token=token,
+            client_id=(claims.get("client_id") or claims.get("azp") or claims.get("sub") or ""),
+            scopes=scopes,
+            expires_at=claims.get("exp"),
+            subject=subject,
+            claims=claims,
+        )
+<%- else -%>
+"""鉴权未启用：本文件无内容。Auth disabled — this module is intentionally empty."""
+<%- endif -%>
+<%- else -%>
+"""fastmcp 后端使用其内置 JWTVerifier，无需本文件。fastmcp uses its built-in JWTVerifier; this module is unused."""
+<%- endif %>

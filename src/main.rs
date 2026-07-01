@@ -14,7 +14,7 @@ use commands::new::NewCommand;
 use logging::Verbosity;
 
 const FRAMEWORK_HELP: &str =
-    "Framework type (gin, go-zero, mcp-server, tauri, vue3, react, fastapi, none)";
+    "Framework type (gin, go-zero, mcp-server, tauri, vue3, react, fastapi, mcp-python, none)";
 const LANGUAGE_HELP: &str = "Project language (go, rust, python, typescript)";
 
 #[derive(Parser)]
@@ -84,6 +84,18 @@ enum Commands {
             help = "Generate a companion Makefile + Dockerfile (build/image automation)"
         )]
         with_build: Option<bool>,
+        /// MCP Python backend (for mcp-python framework)
+        #[arg(
+            long,
+            help = "MCP Python backend (fastmcp, official) — for mcp-python framework"
+        )]
+        mcp_backend: Option<String>,
+        /// Optional auth mode (for mcp-python framework)
+        #[arg(
+            long,
+            help = "Auth mode (none, jwt, azure-ad) — for mcp-python framework; default none"
+        )]
+        auth: Option<String>,
     },
     /// List available languages and frameworks
     List {
@@ -213,6 +225,8 @@ async fn run(command: Commands) -> anyhow::Result<()> {
             proto_gen,
             error_gen,
             with_build,
+            mcp_backend,
+            auth,
         } => {
             NewCommand::new(name, path)
                 .with_framework(framework)
@@ -226,6 +240,8 @@ async fn run(command: Commands) -> anyhow::Result<()> {
                 .with_proto_gen(proto_gen)
                 .with_error_gen(error_gen)
                 .with_build(with_build)
+                .with_mcp_backend(mcp_backend)
+                .with_auth_mode(auth)
                 .execute()
                 .await
         }

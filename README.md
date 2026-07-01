@@ -48,6 +48,7 @@ defaults, a LICENSE, and an initialized git repo.
 | TypeScript | React      | ✅                             |
 | Python     | Basic      | ✅                             |
 | Python     | FastAPI    | ✅ (config-driven API)         |
+| Python     | MCP Server | ✅ (FastMCP / official SDK)    |
 
 ## Install
 
@@ -100,6 +101,8 @@ scafgen new my-vue-app    --framework vue3
 scafgen new my-react-app  --framework react
 scafgen new my-api        --framework fastapi --language python
 scafgen new my-mcp        --framework mcp-server --language go
+scafgen new my-mcp-py     --framework mcp-python --language python
+scafgen new my-mcp-py     --framework mcp-python --language python --mcp-backend official
 
 # Add a Makefile + Dockerfile for local build / containerization
 scafgen new my-gin-app --framework gin --with-build
@@ -130,7 +133,7 @@ Install first via the [Install](#install) section, then drive the tool with thes
 - `scafgen new --help` — discover available flags and frameworks.
 - `scafgen --version` — print the version.
 
-Supported frameworks: `gin`, `go-zero`, `mcp-server`, `tauri`, `vue3`, `react`, `fastapi`.
+Supported frameworks: `gin`, `go-zero`, `mcp-server`, `tauri`, `vue3`, `react`, `fastapi`, `mcp-python`.
 
 Diagnostics and errors go to stderr; the process exits non-zero on failure.
 

@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use super::new::NewCommand;
 use crate::constants::{Framework, Language};
+use crate::generators::{AuthMode, McpBackend};
 use crate::utils::env_checker::EnvironmentChecker;
 
 impl NewCommand {
@@ -59,7 +60,7 @@ impl NewCommand {
         if let Some(framework_str) = &self.framework {
             let framework = Framework::parse_from_str(framework_str).ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Unsupported framework: {framework_str}. Supported frameworks: gin, go-zero, tauri, vue3, react, none"
+                    "Unsupported framework: {framework_str}. Supported frameworks: gin, go-zero, mcp-server, fastapi, mcp-python, tauri, vue3, react, none"
                 )
             })?;
 
@@ -93,6 +94,45 @@ impl NewCommand {
         Ok(selected)
     }
 
+    pub(super) fn select_mcp_backend(&self) -> Result<McpBackend> {
+        let options = vec![
+            "fastmcp（推荐 / recommended）—— 高层封装、最省事 / high-level, least boilerplate",
+            "official mcp SDK —— 贴近协议规范 / closer to the protocol spec",
+        ];
+
+        let selected = Select::new("选择 Python MCP 后端 / Choose the Python MCP backend:", options)
+            .with_help_message("默认 fastmcp；想紧跟协议规范选 official / fastmcp is the default; pick official to track the protocol spec")
+            .prompt()
+            .context("Failed to select MCP backend")?;
+
+        if selected.starts_with("official") {
+            Ok(McpBackend::Official)
+        } else {
+            Ok(McpBackend::Fastmcp)
+        }
+    }
+
+    pub(super) fn select_auth_mode(&self) -> Result<AuthMode> {
+        let options = vec![
+            "none（不启用 / disabled，默认）",
+            "jwt（JWKS 校验 / validate IdP tokens — ADFS·Entra·Okta·SSO）",
+            "azure-ad（Entra/Azure AD 预设 / Entra preset — 租户驱动 + 双 issuer + 身份提取）",
+        ];
+
+        let selected = Select::new("选择 MCP 鉴权模式 / Choose the MCP auth mode:", options)
+            .with_help_message("默认 none（零鉴权代码）；选 jwt 启用 JWKS 资源服务器校验 / none is the default (zero auth code); pick jwt to validate IdP JWTs")
+            .prompt()
+            .context("Failed to select auth mode")?;
+
+        if selected.starts_with("azure-ad") {
+            Ok(AuthMode::AzureAd)
+        } else if selected.starts_with("jwt") {
+            Ok(AuthMode::Jwt)
+        } else {
+            Ok(AuthMode::None)
+        }
+    }
+
     pub(super) fn configure_network_settings(
         &self,
         framework: &Framework,
@@ -101,7 +141,10 @@ impl NewCommand {
         // Python FastAPI 是配置驱动的 API 服务，需要 host/port；其余 Python/Rust/TS
         // 纯项目不需要网络配置。
         let needs_network = matches!(language, Language::Go)
-            || matches!(framework, Framework::FastApi | Framework::McpServer);
+            || matches!(
+                framework,
+                Framework::FastApi | Framework::McpServer | Framework::McpServerPython
+            );
         if !needs_network {
             return Ok(("0.0.0.0".to_string(), 8080, 9000));
         }
@@ -129,6 +172,7 @@ impl NewCommand {
                 Framework::GoZero => 8888,
                 Framework::McpServer => 8080,
                 Framework::FastApi => 8000,
+                Framework::McpServerPython => 8000,
                 Framework::Tauri => 1420,
                 Framework::Vue3 => 5173,
                 Framework::React => 5173,

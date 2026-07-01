@@ -55,6 +55,8 @@ pub enum Framework {
     McpServer,
     /// Python FastAPI（配置驱动、业务代码集中的脚手架）
     FastApi,
+    /// Python MCP server（FastMCP / official mcp SDK，streamable-HTTP + SSE，Pydantic auto-schema）
+    McpServerPython,
     Tauri,
     Vue3,
     React,
@@ -69,6 +71,7 @@ impl Framework {
             Framework::GoZero => "go-zero",
             Framework::McpServer => "mcp-server",
             Framework::FastApi => "fastapi",
+            Framework::McpServerPython => "mcp-python",
             Framework::Tauri => "Tauri",
             Framework::Vue3 => "Vue3",
             Framework::React => "React",
@@ -83,6 +86,7 @@ impl Framework {
             Framework::GoZero => "go-zero (Microservice Framework)",
             Framework::McpServer => "MCP Server (Gin + go-sdk, streamable-HTTP + SSE)",
             Framework::FastApi => "FastAPI (Config-driven API Framework)",
+            Framework::McpServerPython => "MCP Server — Python (FastMCP, streamable-HTTP + SSE)",
             Framework::Tauri => "Tauri (Desktop App Framework)",
             Framework::Vue3 => "Vue3 (Frontend Framework)",
             Framework::React => "React (Frontend Framework)",
@@ -97,6 +101,7 @@ impl Framework {
             "go-zero" => Some(Framework::GoZero),
             "mcp-server" | "mcp" => Some(Framework::McpServer),
             "fastapi" | "fast-api" => Some(Framework::FastApi),
+            "mcp-python" | "mcp-py" => Some(Framework::McpServerPython),
             "tauri" => Some(Framework::Tauri),
             "vue3" | "vue" => Some(Framework::Vue3),
             "react" => Some(Framework::React),
@@ -108,7 +113,13 @@ impl Framework {
     pub fn frameworks_for_language(language: Language) -> Vec<Framework> {
         match language {
             Language::Go => vec![Framework::Gin, Framework::GoZero, Framework::McpServer],
-            Language::Python => vec![Framework::None, Framework::FastApi],
+            Language::Python => {
+                vec![
+                    Framework::None,
+                    Framework::FastApi,
+                    Framework::McpServerPython,
+                ]
+            }
             Language::Rust => vec![Framework::None, Framework::Tauri],
             Language::TypeScript => vec![Framework::Vue3, Framework::React],
         }
@@ -251,5 +262,31 @@ mod tests {
         assert_eq!(to_snake_case("HelloWorld"), "hello_world");
         assert_eq!(to_snake_case("TestProject"), "test_project");
         assert_eq!(to_snake_case("single"), "single");
+    }
+
+    #[test]
+    fn mcp_server_python_parses_round_trips_and_is_listed_for_python() {
+        assert_eq!(
+            Framework::parse_from_str("mcp-python"),
+            Some(Framework::McpServerPython)
+        );
+        assert_eq!(
+            Framework::parse_from_str("mcp-py"),
+            Some(Framework::McpServerPython)
+        );
+        assert_eq!(
+            Framework::parse_from_str("MCP-Python"),
+            Some(Framework::McpServerPython)
+        );
+        assert_eq!(Framework::McpServerPython.as_str(), "mcp-python");
+        assert_eq!(
+            Framework::parse_from_str(Framework::McpServerPython.as_str()),
+            Some(Framework::McpServerPython)
+        );
+
+        let python_frameworks = Framework::frameworks_for_language(Language::Python);
+        assert!(python_frameworks.contains(&Framework::McpServerPython));
+        assert!(python_frameworks.contains(&Framework::FastApi));
+        assert!(python_frameworks.contains(&Framework::None));
     }
 }

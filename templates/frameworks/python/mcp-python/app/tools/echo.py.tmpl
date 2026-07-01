@@ -1,0 +1,71 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  ★★★  你的业务代码写在这里 (WRITE YOUR TOOL HERE)  ★★★
+# ───────────────────────────────────────────────────────────────────────────
+#  这是一个"可直接照抄"的范例工具。新增一个 MCP 工具只需 3 步：
+#  Adding an MCP tool takes 3 steps — just copy this file and edit:
+#
+#    1) 在 app/tools/ 下新建一个 .py 文件（例如 weather.py）。
+#       Create a new .py file under app/tools/ (e.g. weather.py).
+#    2) 从 app.mcp_instance import 共享的 `mcp` 单例；写一个带类型注解的函数，
+#       用 `Annotated[..., Field(...)]` 描述每个入参。
+#       Import the shared `mcp` singleton from app.mcp_instance; write a
+#       type-annotated function and describe each input with
+#       `Annotated[..., Field(...)]`.
+#    3) 用 `<%if mcp_backend_is_official%>@mcp.tool()<%else%>@mcp.tool<%endif%>`（本后端写法）装饰你的函数即可；保存后由 app/tools/__init__.py
+#       在 import 时自动注册——你无需改任何其它文件。
+#       Decorate your function with `<%if mcp_backend_is_official%>@mcp.tool()<%else%>@mcp.tool<%endif%>` (the form for THIS backend);
+#       on save it is auto-registered at import time by app/tools/__init__.py — you
+#       edit no other file.
+#
+#  本文件从 app.mcp_instance import 共享的 `mcp` 单例，并用装饰器注册工具。
+#  因此本文件是"后端感知"的：它只展示当前所选后端的装饰器写法。
+#  This file imports the shared `mcp` singleton from app.mcp_instance and uses the
+#  decorator. It IS backend-aware: it shows only the chosen backend's decorator form.
+# ═══════════════════════════════════════════════════════════════════════════
+
+from typing import Annotated
+
+from pydantic import Field
+
+from app.logging import get_logger
+from app.mcp_instance import mcp
+
+
+# ── 写你的工具函数并用装饰器注册 (write + register via decorator) ──────────────
+#    用"扁平参数 + Annotated/Field"描述入参（不要包成一个 Pydantic 模型），
+#    这样调用方式就是 call_tool("echo", {"text": "hi", "repeat": 2})。
+#    Use FLAT params with Annotated/Field (not a single Pydantic model arg),
+#    so the call is call_tool("echo", {"text": "hi", "repeat": 2}).
+<%if mcp_backend_is_official-%>
+# official SDK：装饰器必须带括号 / parentheses required.
+@mcp.tool()
+<%-else-%>
+# fastmcp（默认）：装饰器可省括号 / parenless OK.
+@mcp.tool
+<%-endif%>
+def echo(
+    text: Annotated[str, Field(min_length=1, description="Text to echo back")],
+    repeat: Annotated[int, Field(ge=1, le=10)] = 1,
+) -> dict:
+    """Echo text back, optionally repeated 1-10 times."""
+    logger = get_logger(__name__)
+    echoed = " ".join([text] * repeat)
+    logger.info("echo_called", repeat=repeat)
+    return {"echoed": echoed, "repeat": repeat}
+
+
+# ── 手写注册替代写法 (hand-written register alternative) —— 可移植/不想用装饰器时 ──
+#  如果你不想用装饰器、或想要一份跨两种后端都通用的"显式调用"写法，可以删掉上面的
+#  装饰器，改成下面这种：函数不在模块层引用 `mcp`，而是由一个 `register(mcp)` 接收
+#  实例并显式注册。这种形式对 fastmcp / official 完全通用、最易移植。
+#  Prefer not to use the decorator, or want one portable form across both backends?
+#  Drop the decorator above and use the explicit call form below instead — the
+#  function takes no module-level `mcp`, a `register(mcp)` receives the instance
+#  and registers explicitly. This form is portable across fastmcp / official.
+#
+#    # def register(mcp) -> None:
+#    #     mcp.tool(name="echo", description="Echo text back, optionally repeated.")(echo)
+#
+#  注意：手写 `register(mcp)` 形式仅作说明，未启用——本文件默认用上面的装饰器。
+#  Note: the manual `register(mcp)` form is illustrative only and NOT active —
+#  this file uses the decorator above by default.

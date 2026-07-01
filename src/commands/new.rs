@@ -10,7 +10,7 @@ use crate::constants::Framework;
 use crate::constants::Language;
 use crate::generators::orchestrator::GenerationRequest;
 use crate::generators::registry;
-use crate::generators::{GeneratorOrchestrator, GinProjectOptions};
+use crate::generators::{AuthMode, GeneratorOrchestrator, GinProjectOptions, McpBackend};
 
 /// Project generation parameters
 pub(super) struct ProjectParams {
@@ -25,6 +25,8 @@ pub(super) struct ProjectParams {
     pub(super) enable_proto_gen: bool,
     pub(super) enable_error_gen: bool,
     pub(super) enable_build: bool,
+    pub(super) mcp_backend: McpBackend,
+    pub(super) auth_mode: AuthMode,
 }
 
 pub struct NewCommand {
@@ -41,6 +43,8 @@ pub struct NewCommand {
     pub(super) enable_proto_gen: Option<bool>,
     pub(super) enable_error_gen: Option<bool>,
     pub(super) enable_build: Option<bool>,
+    pub(super) mcp_backend: Option<String>,
+    pub(super) auth_mode: Option<String>,
 }
 
 impl NewCommand {
@@ -59,6 +63,8 @@ impl NewCommand {
             enable_proto_gen: None,
             enable_error_gen: None,
             enable_build: None,
+            mcp_backend: None,
+            auth_mode: None,
         }
     }
 
@@ -117,6 +123,48 @@ impl NewCommand {
         self
     }
 
+    pub fn with_mcp_backend(mut self, mcp_backend: Option<String>) -> Self {
+        self.mcp_backend = mcp_backend;
+        self
+    }
+
+    pub fn with_auth_mode(mut self, auth_mode: Option<String>) -> Self {
+        self.auth_mode = auth_mode;
+        self
+    }
+
+    fn resolve_mcp_backend(&self, framework: &Framework) -> Result<McpBackend> {
+        if let Some(value) = &self.mcp_backend {
+            return McpBackend::parse_from_str(value).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Unsupported mcp backend: {value}. Supported backends: fastmcp, official"
+                )
+            });
+        }
+
+        if *framework == Framework::McpServerPython {
+            return self.select_mcp_backend();
+        }
+
+        Ok(McpBackend::Fastmcp)
+    }
+
+    fn resolve_auth_mode(&self, framework: &Framework) -> Result<AuthMode> {
+        if let Some(value) = &self.auth_mode {
+            return AuthMode::parse_from_str(value).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Unsupported auth mode: {value}. Supported modes: none, jwt, azure-ad"
+                )
+            });
+        }
+
+        if *framework == Framework::McpServerPython {
+            return self.select_auth_mode();
+        }
+
+        Ok(AuthMode::None)
+    }
+
     pub async fn execute(&self) -> Result<()> {
         tracing::info!("Welcome to Scaffold-Gen Project Generator!");
 
@@ -141,6 +189,12 @@ impl NewCommand {
         // 配置构建工具链 (Makefile + Dockerfile)
         let enable_build = self.configure_build()?;
 
+        // 解析 mcp-python 后端 (flag / 交互 / 默认 fastmcp)
+        let mcp_backend = self.resolve_mcp_backend(&framework)?;
+
+        // 解析 mcp-python 鉴权模式 (flag / 交互 / 默认 none)
+        let auth_mode = self.resolve_auth_mode(&framework)?;
+
         // 确定项目路径
         let project_path = self.determine_project_path()?;
 
@@ -157,6 +211,8 @@ impl NewCommand {
             enable_proto_gen,
             enable_error_gen,
             enable_build,
+            mcp_backend,
+            auth_mode,
         };
 
         let equivalent_command = self.equivalent_command(&params);
@@ -211,7 +267,10 @@ impl NewCommand {
 
         // host/port 仅对需要网络的组合有意义（镜像 configure_network_settings）
         let needs_network = matches!(params.language, Language::Go)
-            || matches!(params.framework, Framework::FastApi | Framework::McpServer);
+            || matches!(
+                params.framework,
+                Framework::FastApi | Framework::McpServer | Framework::McpServerPython
+            );
         if needs_network {
             parts.push("--host".to_string());
             parts.push(quote_if_needed(&params.host));
@@ -241,6 +300,16 @@ impl NewCommand {
 
         parts.push("--with-build".to_string());
         parts.push(params.enable_build.to_string());
+
+        if params.framework == Framework::McpServerPython {
+            parts.push("--mcp-backend".to_string());
+            parts.push(params.mcp_backend.as_str().to_string());
+        }
+
+        if params.framework == Framework::McpServerPython && params.auth_mode != AuthMode::None {
+            parts.push("--auth".to_string());
+            parts.push(params.auth_mode.as_str().to_string());
+        }
 
         parts.join(" ")
     }
@@ -305,6 +374,8 @@ impl NewCommand {
                 enable_error_gen: params.enable_error_gen,
                 enable_build: params.enable_build,
                 gin_options,
+                mcp_backend: params.mcp_backend,
+                auth_mode: params.auth_mode,
             })
             .await
     }
@@ -355,6 +426,8 @@ mod tests {
             enable_proto_gen: false,
             enable_error_gen: false,
             enable_build: true,
+            mcp_backend: McpBackend::Fastmcp,
+            auth_mode: AuthMode::None,
         };
 
         assert_eq!(
@@ -378,6 +451,8 @@ mod tests {
             enable_proto_gen: false,
             enable_error_gen: false,
             enable_build: false,
+            mcp_backend: McpBackend::Fastmcp,
+            auth_mode: AuthMode::None,
         };
 
         let cmd = command_for(&params);
@@ -405,6 +480,8 @@ mod tests {
             enable_proto_gen: false,
             enable_error_gen: false,
             enable_build: false,
+            mcp_backend: McpBackend::Fastmcp,
+            auth_mode: AuthMode::None,
         };
 
         let cmd = command_for(&params);
@@ -431,6 +508,8 @@ mod tests {
             enable_proto_gen: false,
             enable_error_gen: false,
             enable_build: false,
+            mcp_backend: McpBackend::Fastmcp,
+            auth_mode: AuthMode::None,
         };
 
         let cmd = command_for(&params);
@@ -440,6 +519,85 @@ mod tests {
              --license MIT --with-build false"
         );
         assert!(!cmd.contains("-p "));
+    }
+
+    #[test]
+    fn python_mcp_python_emits_mcp_backend_flag() {
+        let params = ProjectParams {
+            language: Language::Python,
+            framework: Framework::McpServerPython,
+            project_path: PathBuf::from("/tmp/work/mcpsrv"),
+            host: "0.0.0.0".to_string(),
+            port: 8000,
+            enable_precommit: false,
+            license: "MIT".to_string(),
+            enable_swagger: false,
+            enable_proto_gen: false,
+            enable_error_gen: false,
+            enable_build: false,
+            mcp_backend: McpBackend::Official,
+            auth_mode: AuthMode::None,
+        };
+
+        let cmd = command_for(&params);
+        assert_eq!(
+            cmd,
+            "scafgen new mcpsrv -p /tmp/work --language python --framework mcp-python \
+             --host 0.0.0.0 --port 8000 --precommit false --license MIT \
+             --with-build false --mcp-backend official"
+        );
+        assert!(cmd.contains("--mcp-backend official"));
+        assert!(!cmd.contains("--auth"));
+    }
+
+    #[test]
+    fn python_mcp_python_jwt_emits_auth_flag() {
+        let params = ProjectParams {
+            language: Language::Python,
+            framework: Framework::McpServerPython,
+            project_path: PathBuf::from("/tmp/work/mcpauth"),
+            host: "0.0.0.0".to_string(),
+            port: 8000,
+            enable_precommit: false,
+            license: "MIT".to_string(),
+            enable_swagger: false,
+            enable_proto_gen: false,
+            enable_error_gen: false,
+            enable_build: false,
+            mcp_backend: McpBackend::Fastmcp,
+            auth_mode: AuthMode::Jwt,
+        };
+
+        let cmd = command_for(&params);
+        assert_eq!(
+            cmd,
+            "scafgen new mcpauth -p /tmp/work --language python --framework mcp-python \
+             --host 0.0.0.0 --port 8000 --precommit false --license MIT \
+             --with-build false --mcp-backend fastmcp --auth jwt"
+        );
+        assert!(cmd.contains("--auth jwt"));
+    }
+
+    #[test]
+    fn non_mcp_python_never_emits_auth_flag() {
+        let params = ProjectParams {
+            language: Language::Python,
+            framework: Framework::FastApi,
+            project_path: PathBuf::from("/tmp/work/api"),
+            host: "0.0.0.0".to_string(),
+            port: 8000,
+            enable_precommit: false,
+            license: "MIT".to_string(),
+            enable_swagger: false,
+            enable_proto_gen: false,
+            enable_error_gen: false,
+            enable_build: false,
+            mcp_backend: McpBackend::Fastmcp,
+            auth_mode: AuthMode::Jwt,
+        };
+
+        let cmd = command_for(&params);
+        assert!(!cmd.contains("--auth"));
     }
 
     #[test]

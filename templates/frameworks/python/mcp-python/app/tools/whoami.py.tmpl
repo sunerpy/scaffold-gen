@@ -1,0 +1,83 @@
+<%- if auth_is_azure_ad -%>
+# ═══════════════════════════════════════════════════════════════════════════
+#  ★★★  azure-ad 安全核心范例：whoami (SECURITY-CORE EXAMPLE: whoami)  ★★★
+# ───────────────────────────────────────────────────────────────────────────
+#  本工具返回"当前已认证用户"的身份——身份只从【已验签的 Entra 令牌】里读取。
+#  它【故意不接收任何标识用户的入参】（没有 user_email / user_id 之类参数），
+#  因此 AI/agent 无法通过传入一个伪造的邮箱/用户名来冒充他人。
+#  这正是 --auth azure-ad 预设的安全内核：服务器只信任"已验签令牌里的身份"，
+#  绝不信任 AI 传进来的用户参数。
+#
+#  This tool returns the CURRENT authenticated user's identity, read ONLY from
+#  the VERIFIED Entra token. It deliberately takes NO user-identifying parameter
+#  (no user_email / user_id), so an AI/agent cannot impersonate someone by
+#  passing a fake email. This is the security core of the azure-ad preset: the
+#  server trusts ONLY the verified-token identity, never an AI-supplied param.
+# ═══════════════════════════════════════════════════════════════════════════
+
+from app.logging import get_logger
+from app.mcp_instance import mcp
+
+<%if mcp_backend_is_official-%>
+# official 后端：身份来自 app.auth.current_identity()（读取本请求已验签令牌）。
+# official backend: identity comes from app.auth.current_identity() (verified token).
+from app.auth import current_identity
+<% else -%>
+# fastmcp 后端：用 fastmcp 自带的 get_access_token() 读取本请求已验签令牌，
+# 再适配成与 official 相同的 dict 形状（subject / scopes / claims）。
+# fastmcp backend: read the verified token via fastmcp's own get_access_token()
+# and adapt it to the same dict shape as official (subject / scopes / claims).
+from fastmcp.server.dependencies import get_access_token
+
+
+def current_identity() -> dict | None:
+    """读取 fastmcp 已验签令牌并适配成 {subject, scopes, claims}；未鉴权时 None。
+    Read fastmcp's verified token, adapted to {subject, scopes, claims}; None if unauthenticated."""
+    try:
+        tok = get_access_token()
+    except Exception:
+        return None
+    if tok is None:
+        return None
+    claims = getattr(tok, "claims", {}) or {}
+    # fastmcp 的 AccessToken 暴露 .subject/.client_id/.scopes/.claims；优先 subject。
+    # fastmcp's AccessToken exposes .subject/.client_id/.scopes/.claims; prefer subject.
+    subject = (
+        getattr(tok, "subject", None)
+        or getattr(tok, "client_id", None)
+        or claims.get("sub")
+        or claims.get("preferred_username")
+        or claims.get("upn")
+    )
+    return {
+        "subject": subject,
+        "scopes": list(getattr(tok, "scopes", None) or []),
+        "claims": claims,
+    }
+<% endif %>
+
+<%if mcp_backend_is_official-%>
+# official SDK：装饰器必须带括号 / parentheses required.
+@mcp.tool()
+<%-else-%>
+# fastmcp（默认）：装饰器可省括号 / parenless OK.
+@mcp.tool
+<%-endif%>
+def whoami() -> dict:
+    """Return the current authenticated user's identity (from the verified token; takes no parameters)."""
+    logger = get_logger(__name__)
+    logger.info("whoami_called")
+    ident = current_identity()
+    if ident is None:
+        return {"authenticated": False}
+    claims = ident["claims"]
+    return {
+        "authenticated": True,
+        "subject": ident["subject"],
+        "scopes": ident["scopes"],
+        "name": claims.get("name"),
+        "email": claims.get("email") or claims.get("preferred_username"),
+    }
+<%- else -%>
+# whoami 工具仅在 --auth azure-ad 时生成 / whoami tool is only generated for --auth azure-ad.
+<% endif %>

@@ -86,6 +86,18 @@ const REGISTRY: &[FrameworkSpec] = &[
         ],
     },
     FrameworkSpec {
+        framework: Framework::McpServerPython,
+        language: Language::Python,
+        kind: GenKind::EmbeddedAsync,
+        description_template: "A Python MCP server (FastMCP, streamable-HTTP + SSE): {name}",
+        accepts_proto_error_gen: false,
+        next_steps: &[
+            "  uv sync                       # Install dependencies",
+            "  make test                     # Run the tool tests (pytest, in-memory client)",
+            "  uv run python main.py         # Start the MCP server (reads config.toml / .env)",
+        ],
+    },
+    FrameworkSpec {
         framework: Framework::Tauri,
         language: Language::Rust,
         kind: GenKind::ExternalAsync,
@@ -298,6 +310,18 @@ mod tests {
         assert!(!spec.next_steps.is_empty());
     }
 
+    /// McpServerPython 解析为 Python + EmbeddedAsync，且不接受 proto/error-gen。
+    #[test]
+    fn mcp_python_resolves_to_python_embedded_async() {
+        let spec =
+            resolve(Language::Python, Framework::McpServerPython).expect("mcp-python spec exists");
+        assert_eq!(spec.framework, Framework::McpServerPython);
+        assert_eq!(spec.language, Language::Python);
+        assert_eq!(spec.kind, GenKind::EmbeddedAsync);
+        assert!(!spec.accepts_proto_error_gen);
+        assert!(!spec.next_steps.is_empty());
+    }
+
     /// McpServer 解析为 Go + EmbeddedAsync，且不接受 proto/error-gen。
     #[test]
     fn mcp_server_resolves_to_go_embedded_async() {
@@ -319,6 +343,7 @@ mod tests {
             Framework::GoZero,
             Framework::McpServer,
             Framework::FastApi,
+            Framework::McpServerPython,
             Framework::Tauri,
             Framework::Vue3,
             Framework::React,

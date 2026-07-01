@@ -1,0 +1,210 @@
+"""<<project_name>> 日志初始化 (structlog-based logging).
+
+设计 / Design:
+  - format="console" → 彩色控制台 + rich 异常回溯 (适合本地开发)
+  - format="json"    → 结构化 JSON (适合生产采集)
+  - 文件输出始终为 JSON；按大小轮转 (max_size MB × max_backups)
+  - compress=true 时，轮转文件用 gzip 压缩 (.gz)
+  - 超过 max_age 天的旧日志自动清理
+  - show_line=true 时附带 filename/func/lineno
+  - 抑制噪声库 (httpx/uvicorn.access ...) 到 WARNING
+  - captureWarnings(True) 把 warnings 纳入日志
+
+★ 普通用户无需修改本文件 ★ —— 调日志级别/格式请改 config.toml 的 [log] 段。
+You normally never edit this file — tune logging in config.toml's [log] section.
+
+用法 / Usage (已在 main.py 启动时自动调用):
+    from app.logging import get_logger
+    logger = get_logger(__name__)
+    logger.info("hello", user_id=42)
+"""
+
+import gzip
+import logging
+import logging.handlers
+import shutil
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+import structlog
+from structlog.processors import CallsiteParameter, CallsiteParameterAdder
+
+from app.settings import LogConfig
+
+# 默认日志文件名 (default log filename)
+_DEFAULT_LOG_FILE = "<<package_name>>.log"
+
+# 噪声库 → WARNING (noisy loggers suppressed to WARNING)
+_NOISY_LOGGERS = (
+    "httpx",
+    "httpcore",
+    "urllib3",
+    "asyncio",
+    "uvicorn.access",
+)
+
+
+def _resolve_log_file(config: LogConfig, default_file_name: str) -> str:
+    """计算日志文件完整路径；返回空串表示不写文件."""
+    if config.file:
+        return config.file
+    directory = str(config.directory or "").strip()
+    if not directory:
+        return ""
+    return str(Path(directory) / default_file_name)
+
+
+def _gzip_rotated_file(source: str, dest: str) -> None:
+    """轮转回调：把旧日志压缩成 .gz 并删除源文件."""
+    target = dest if dest.endswith(".gz") else f"{dest}.gz"
+    with open(source, "rb") as src, gzip.open(target, "wb") as gz:
+        shutil.copyfileobj(src, gz)
+    Path(source).unlink(missing_ok=True)
+
+
+def _cleanup_old_log_files(base_path: Path, max_age_days: int) -> None:
+    """删除超过 max_age_days 天的轮转日志文件."""
+    if max_age_days <= 0 or not base_path.parent.exists():
+        return
+
+    cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
+    for candidate in base_path.parent.glob(f"{base_path.name}*"):
+        if candidate == base_path or not candidate.is_file():
+            continue
+        modified_at = datetime.fromtimestamp(candidate.stat().st_mtime, tz=UTC)
+        if modified_at < cutoff:
+            candidate.unlink(missing_ok=True)
+
+
+def _build_shared_processors(*, show_line: bool) -> list:
+    """构建 console / json 共享的处理器链."""
+    processors: list = [
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+    ]
+    if show_line:
+        processors.append(
+            CallsiteParameterAdder(
+                [
+                    CallsiteParameter.FILENAME,
+                    CallsiteParameter.FUNC_NAME,
+                    CallsiteParameter.LINENO,
+                ]
+            )
+        )
+    return processors
+
+
+def init_logging(
+    config: LogConfig | None = None,
+    *,
+    default_file_name: str = _DEFAULT_LOG_FILE,
+) -> structlog.stdlib.BoundLogger:
+    """初始化日志系统，应在应用启动时调用一次.
+
+    Args:
+        config: 日志配置 (来自 settings.log)；为 None 时使用默认值。
+        default_file_name: directory 模式下的默认文件名。
+
+    Returns:
+        已绑定的 structlog logger。
+
+    """
+    if config is None:
+        config = LogConfig()
+
+    level = getattr(logging, config.level.upper(), logging.INFO)
+    shared_processors = _build_shared_processors(show_line=config.show_line)
+
+    console_renderer: structlog.types.Processor = (
+        structlog.processors.JSONRenderer()
+        if config.format == "json"
+        else structlog.dev.ConsoleRenderer(
+            colors=True,
+            exception_formatter=structlog.dev.rich_traceback,
+        )
+    )
+    json_renderer: structlog.types.Processor = structlog.processors.JSONRenderer()
+
+    def _make_formatter(
+        renderer: structlog.types.Processor,
+    ) -> structlog.stdlib.ProcessorFormatter:
+        return structlog.stdlib.ProcessorFormatter(
+            processors=[
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                renderer,
+            ],
+            foreign_pre_chain=shared_processors,
+        )
+
+    handlers: list[logging.Handler] = []
+
+    # 控制台输出 (console handler) —— 渲染器随 format 切换
+    if config.log_in_console:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(level)
+        console_handler.setFormatter(_make_formatter(console_renderer))
+        handlers.append(console_handler)
+
+    # 文件输出 (file handler) —— 始终 JSON + 按大小轮转 + 可选 gzip
+    log_file = _resolve_log_file(config, default_file_name)
+    if log_file:
+        file_path = Path(log_file)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        file_handler = logging.handlers.RotatingFileHandler(
+            filename=str(file_path),
+            maxBytes=config.max_size * 1024 * 1024,
+            backupCount=config.max_backups,
+            encoding="utf-8",
+        )
+        if config.compress:
+            file_handler.namer = lambda name: f"{name}.gz"
+            file_handler.rotator = _gzip_rotated_file
+        file_handler.setLevel(level)
+        file_handler.setFormatter(_make_formatter(json_renderer))
+        handlers.append(file_handler)
+        _cleanup_old_log_files(file_path, config.max_age)
+
+    structlog.configure(
+        processors=[
+            *shared_processors,
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+
+    logging.basicConfig(
+        format="%(message)s",
+        handlers=handlers,
+        level=level,
+        force=True,
+    )
+
+    # 抑制噪声库 (suppress noisy third-party loggers)
+    for noisy_logger in _NOISY_LOGGERS:
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
+
+    for uvicorn_logger_name in ("uvicorn", "uvicorn.error"):
+        uv_logger = logging.getLogger(uvicorn_logger_name)
+        uv_logger.handlers.clear()
+        uv_logger.propagate = True
+
+    # 把 warnings.warn(...) 也纳入日志 (route warnings into logging)
+    logging.captureWarnings(True)
+    logging.getLogger("py.warnings").setLevel(logging.WARNING)
+
+    return structlog.get_logger()
+
+
+def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
+    """获取一个 structlog logger (init_logging 之后调用)."""
+    return structlog.get_logger(name)
+
+
+__all__ = ["get_logger", "init_logging"]

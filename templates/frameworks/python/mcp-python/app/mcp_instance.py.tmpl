@@ -1,0 +1,152 @@
+"""MCP 实例单例 / the shared MCP instance.
+
+═══════════════════════════════════════════════════════════════════════════
+  这里构建全局唯一的 `mcp` 实例。工具文件从这里 import mcp 并用装饰器注册。
+  The shared MCP instance lives here. Tool files import `mcp` from this module
+  and register against it with the decorator (`@mcp.tool` / `@mcp.tool()`).
+
+  本文件是唯一"知道后端"(fastmcp vs official) 的工具侧入口 —— 后端差异被收敛在
+  下面的条件分支里。传输/应用装配仍然留在 app/server.py，本文件只负责
+  产出 `mcp` 实例本身。
+  This is the ONLY tool-facing place that knows which backend is in use; the
+  backend difference is confined to the branch below. Transport/app wiring stays
+  in app/server.py — this module only produces the `mcp` instance itself.
+
+★ 普通用户无需修改本文件 ★ —— 写工具请去 app/tools/ 下新建 .py 文件。
+You normally never edit this file — add tools under app/tools/ instead.
+═══════════════════════════════════════════════════════════════════════════
+"""
+
+<%if mcp_backend_is_official-%>
+# ── 后端：official (modelcontextprotocol/python-sdk v1) ──────────────────────
+#    json_response / stateless_http 在构造器上传入 (v1 在 ctor 接收)。
+<%- if auth_enabled %>
+from mcp.server.auth.settings import AuthSettings
+<%- endif %>
+from mcp.server.fastmcp import FastMCP
+
+<%if auth_enabled-%>
+from app.auth import JwksTokenVerifier<%if auth_is_azure_ad%>, warm_up_jwks<%endif%>
+<%endif-%>
+from app.settings import settings
+<%if auth_enabled%>
+if settings.auth.enabled:
+<%- if auth_is_azure_ad %>
+    _missing = (
+        not settings.auth.tenant_id
+        or not settings.auth.resource_app_id
+        or not settings.auth.resource_server_url
+    )
+    if _missing:
+        raise RuntimeError(
+            "[auth] azure-ad 已启用但 tenant_id / resource_app_id / resource_server_url 未配置完整。"
+            " [auth] azure-ad enabled but tenant_id/resource_app_id/resource_server_url are not all set."
+        )
+<%- else %>
+    _missing = (
+        not settings.auth.jwks_uri
+        or not settings.auth.issuer
+        or not settings.auth.resource_server_url
+    )
+    if _missing:
+        raise RuntimeError(
+            "[auth] enabled 但 jwks_uri / issuer / resource_server_url 未配置完整。"
+            " [auth] enabled but jwks_uri/issuer/resource_server_url are not all set."
+        )
+<%- endif %>
+    _verifier = JwksTokenVerifier(
+        jwks_uri=settings.auth.jwks_uri,
+        issuer=settings.auth.issuer,
+        audience=settings.auth.audience,
+        algorithm=settings.auth.algorithm,
+        required_scopes=settings.auth.required_scopes,
+<%- if auth_is_azure_ad %>
+        extra_issuers=settings.auth.extra_issuers,
+        identity_claims=settings.auth.identity_claims,
+<%- endif %>
+    )
+<%- if auth_is_azure_ad %>
+    # 预热 JWKS 缓存：避免首个带 token 请求现拉公钥(跨境 Entra 延迟)。best-effort, never raises.
+    warm_up_jwks(settings.auth.jwks_uri)
+<%- endif %>
+    _auth_settings = AuthSettings(
+        issuer_url=settings.auth.issuer,
+        resource_server_url=settings.auth.resource_server_url,
+        required_scopes=settings.auth.required_scopes or None,
+    )
+    mcp = FastMCP(
+        "<<project_name>>",
+        json_response=True,
+        stateless_http=settings.mcp.stateless,
+        auth=_auth_settings,
+        token_verifier=_verifier,
+    )
+else:
+    mcp = FastMCP(
+        "<<project_name>>",
+        json_response=True,
+        stateless_http=settings.mcp.stateless,
+    )
+<%- else %>
+mcp = FastMCP(
+    "<<project_name>>",
+    json_response=True,
+    stateless_http=settings.mcp.stateless,
+)
+<%- endif %>
+<%-else-%>
+# ── 后端：fastmcp (默认 / default) ───────────────────────────────────────────
+#    fastmcp 的构造器不接收 json_response/stateless_http (已移除)；
+#    stateless_http 在 http_app() 工厂上传入 (见 app/server.py)。
+from fastmcp import FastMCP
+<%- if auth_enabled %>
+from fastmcp.server.auth.providers.jwt import JWTVerifier
+
+from app.settings import settings
+<%- endif %>
+<%if auth_enabled%>
+if settings.auth.enabled:
+<%- if auth_is_azure_ad %>
+    _missing = (
+        not settings.auth.tenant_id
+        or not settings.auth.resource_app_id
+        or not settings.auth.resource_server_url
+    )
+    if _missing:
+        raise RuntimeError(
+            "[auth] azure-ad 已启用但 tenant_id / resource_app_id / resource_server_url 未配置完整。"
+            " [auth] azure-ad enabled but tenant_id/resource_app_id/resource_server_url are not all set."
+        )
+<%- else %>
+    _missing = (
+        not settings.auth.jwks_uri
+        or not settings.auth.issuer
+        or not settings.auth.resource_server_url
+    )
+    if _missing:
+        raise RuntimeError(
+            "[auth] enabled 但 jwks_uri / issuer / resource_server_url 未配置完整。"
+            " [auth] enabled but jwks_uri/issuer/resource_server_url are not all set."
+        )
+<%- endif %>
+    _verifier = JWTVerifier(
+        jwks_uri=settings.auth.jwks_uri,
+        issuer=settings.auth.issuer,
+        audience=settings.auth.audience or None,
+        algorithm=settings.auth.algorithm,
+        required_scopes=settings.auth.required_scopes or None,
+    )
+<%- if auth_is_azure_ad %>
+    # 注意：fastmcp 的 JWTVerifier 不支持多 issuer，只校验上面派生的单个 v2 issuer
+    # (login.microsoftonline.com/{tenant}/v2.0)。Entra v1 (sts.windows.net) 签发的 token
+    # 需改用 official 后端 (JwksTokenVerifier 支持 extra_issuers)。JWKS 缓存由 JWTVerifier 内部处理。
+    # NOTE: fastmcp's JWTVerifier validates ONLY the single derived v2 issuer; v1-issued
+    # tokens require the official backend. JWKS caching is handled internally by JWTVerifier.
+<%- endif %>
+    mcp = FastMCP("<<project_name>>", auth=_verifier)
+else:
+    mcp = FastMCP("<<project_name>>")
+<%- else %>
+mcp = FastMCP("<<project_name>>")
+<%- endif %>
+<%- endif %>

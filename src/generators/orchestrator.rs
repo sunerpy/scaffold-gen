@@ -2,7 +2,9 @@ use anyhow::{Context, Result};
 use std::path::Path;
 
 use crate::constants::{Framework, Language};
+use crate::generators::auth_options::AuthMode;
 use crate::generators::gin_options::GinProjectOptions;
+use crate::generators::mcp_options::McpBackend;
 use crate::generators::registry::{FrameworkSpec, GenKind};
 use crate::generators::{
     core::{Generator, Parameters, TemplateProcessor},
@@ -27,6 +29,15 @@ pub struct GenerationRequest<'a> {
     pub enable_error_gen: bool,
     pub enable_build: bool,
     pub gin_options: GinProjectOptions,
+    pub mcp_backend: McpBackend,
+    pub auth_mode: AuthMode,
+}
+
+/// mcp-python 生成的两个旋钮（后端 + 鉴权模式），合并为一个 typed 入参，
+/// 避免 `generate_mcp_python_language` 形参过多（clippy too_many_arguments）。
+struct McpPythonOptions {
+    backend: McpBackend,
+    auth_mode: AuthMode,
 }
 
 /// 生成器编排器，负责协调三层架构的生成器
@@ -74,7 +85,36 @@ impl GeneratorOrchestrator {
             self.render_build_tooling(&request)?;
         }
 
+        self.format_python_project(&request);
+
         Ok(())
+    }
+
+    /// 尽力而为：用 ruff 格式化生成的 Python 代码。非 Python 项目或 ruff 不可用时
+    /// 直接跳过（no-op）。绝不让格式化失败影响生成结果 —— 与 `init_git_repository`
+    /// 的「告警继续」风格一致。
+    fn format_python_project(&self, request: &GenerationRequest<'_>) {
+        if request.spec.language != Language::Python {
+            return;
+        }
+        // 优先用 PATH 上的 `ruff`；缺失时回退到 `uvx ruff`（若有 `uvx`）。
+        let (program, prefix_args): (&str, &[&str]) =
+            if crate::utils::toolchain::tool_available("ruff") {
+                ("ruff", &[])
+            } else if crate::utils::toolchain::tool_available("uvx") {
+                ("uvx", &["ruff"])
+            } else {
+                tracing::debug!("未找到 ruff/uvx，跳过 Python 自动格式化");
+                return;
+            };
+        let mut cmd = std::process::Command::new(program);
+        cmd.args(prefix_args)
+            .args(["format", "."])
+            .current_dir(request.output_path);
+        match cmd.status() {
+            Ok(s) if s.success() => tracing::info!("已用 ruff 格式化生成的 Python 代码"),
+            _ => tracing::warn!("ruff format 已跳过/失败（非致命）"),
+        }
     }
 
     /// 项目级 `--with-build` 渲染步骤：把 `templates/build/<lang>/` 渲染进项目根目录。
@@ -172,6 +212,20 @@ impl GeneratorOrchestrator {
                     request.gin_options.host.clone(),
                     request.gin_options.port,
                     request.enable_precommit,
+                )
+                .await?;
+            }
+            Language::Python if request.spec.framework == Framework::McpServerPython => {
+                self.generate_mcp_python_language(
+                    project_name.clone(),
+                    output_path,
+                    request.gin_options.host.clone(),
+                    request.gin_options.port,
+                    request.enable_precommit,
+                    McpPythonOptions {
+                        backend: request.mcp_backend,
+                        auth_mode: request.auth_mode,
+                    },
                 )
                 .await?;
             }
@@ -421,6 +475,76 @@ impl GeneratorOrchestrator {
         Ok(())
     }
 
+    /// 框架级别生成 (Python MCP Server) - 纯内嵌模板渲染（可离线、可测试）。
+    ///
+    /// 与 FastAPI 同形：配置驱动的完整项目，全部由模板渲染，无需 `uv init`/`uv sync`。
+    /// host/port 写入上下文（端口规范为 8000，区别于 FastAPI 的 8080）；`mcp_backend` /
+    /// `mcp_backend_is_official` 在 `to_template_context()` 之后注入，驱动模板按后端分支渲染；
+    /// `auth_mode` / `auth_enabled` 同样在其后注入，驱动可选 JWT 鉴权代码的渲染。
+    #[allow(clippy::too_many_arguments)]
+    async fn generate_mcp_python_language(
+        &mut self,
+        project_name: String,
+        output_path: &Path,
+        host: Option<String>,
+        port: Option<u16>,
+        enable_precommit: bool,
+        mcp_options: McpPythonOptions,
+    ) -> Result<()> {
+        tracing::info!("Starting Python MCP server generation: {project_name}");
+
+        let McpPythonOptions { backend, auth_mode } = mcp_options;
+
+        let env_checker = EnvironmentChecker::new();
+        let python_version = env_checker
+            .get_python_version()
+            .await
+            .unwrap_or_else(|_| "3.12".to_string());
+
+        let mut python_params = PythonParams::new(project_name.clone())
+            .with_version(python_version)
+            .with_precommit(enable_precommit);
+        python_params.base.host = Some(host.unwrap_or_else(|| "0.0.0.0".to_string()));
+        python_params.base.port = Some(port.unwrap_or(8000));
+
+        let template_path = "frameworks/python/mcp-python";
+        if !crate::template_engine::embedded_template_dir_exists(template_path) {
+            return Err(anyhow::anyhow!(
+                "mcp-python embedded templates not found at: {template_path}"
+            ));
+        }
+
+        let mut context = python_params.to_template_context();
+        context.insert(
+            "mcp_backend".to_string(),
+            serde_json::json!(backend.as_str()),
+        );
+        context.insert(
+            "mcp_backend_is_official".to_string(),
+            serde_json::json!(backend.is_official()),
+        );
+        context.insert(
+            "auth_mode".to_string(),
+            serde_json::json!(auth_mode.as_str()),
+        );
+        context.insert(
+            "auth_enabled".to_string(),
+            serde_json::json!(auth_mode.is_enabled()),
+        );
+        context.insert(
+            "auth_is_azure_ad".to_string(),
+            serde_json::json!(auth_mode.is_azure_ad()),
+        );
+
+        let mut template_processor = TemplateProcessor::new()?;
+        template_processor
+            .process_embedded_template_directory(template_path, output_path, context)
+            .context("Failed to generate mcp-python files")?;
+
+        tracing::info!("mcp-python structure generated");
+        Ok(())
+    }
+
     /// 语言级别生成 (Rust) - 使用模板创建项目。项目级尾段由 run_project_step 处理。
     async fn generate_rust_language(
         &mut self,
@@ -586,6 +710,8 @@ mod tests {
             enable_error_gen: false,
             enable_build,
             gin_options: GinProjectOptions::new(),
+            mcp_backend: McpBackend::Fastmcp,
+            auth_mode: AuthMode::None,
         }
     }
 
