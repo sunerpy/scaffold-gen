@@ -1,6 +1,6 @@
 # SCAFFOLD-GEN KNOWLEDGE BASE
 
-**Version:** v0.7.0 **Updated:** 2026-06-25 **Branch:** main
+**Version:** v0.7.1 **Updated:** 2026-06-25 **Branch:** main
 
 ## OVERVIEW
 
@@ -183,7 +183,7 @@ All tracing/diagnostics → **stderr**.
    confirmation
 4. **Go-Zero unimplemented**: `Framework::GoZero` resolves to `GenKind::Unimplemented` — returns a
    clear error; no generator struct exists; enum variant kept for CLI discoverability
-5. **Tests: 148 total**: 42 lib + 98 bin inline + 8 integration in `tests/generation.rs`; `make
+5. **Tests: 153 total**: 42 lib + 103 bin inline + 8 integration in `tests/generation.rs`; `make
 test` covers all
 6. **Vue3 is EmbeddedAsync**: moved from ExternalAsync — full offline scaffold, optional `pnpm
 install` post-step; `external.rs` no longer contains Vue3 logic
@@ -196,6 +196,12 @@ install` post-step; `external.rs` no longer contains Vue3 logic
    but not yet split (splitting the tightly-coupled dispatch would fragment logic)
 10. **AGENTS.md is now tracked**: removed from `.gitignore`; oxfmt formats it — `make fmt-check`
     enforces correct Markdown formatting on these files
+11. **`new` echoes the equivalent command**: after an interactive run, `execute()` prints the
+    fully-resolved non-interactive `scafgen new … --flags` (built from `ProjectParams`, only the
+    flags valid for the chosen lang/framework). Keep `equivalent_command()` in sync when adding flags.
+12. **`self-update` up-to-date short-circuit**: `self_update` 0.42's pinned-tag path skips its own
+    current-vs-target check, so `run_blocking` compares `is_same_version(current, latest)` and exits
+    early (unless `--force`) — otherwise it would offer to "download/replace" the same version
 
 ## COMMANDS
 
@@ -209,7 +215,7 @@ make release-upx    # Release + UPX compression
 make fmt            # Format code (rustfmt + oxfmt for YAML/JSON/Markdown)
 make fmt-check      # Check formatting (CI gate — also checks AGENTS.md now)
 make lint           # Clippy with -D warnings
-make test           # cargo test (42 lib + 62 bin + 8 integration)
+make test           # cargo test (42 lib + 103 bin + 8 integration)
 make ci             # fmt-check + lint + test
 
 # Cross-compile
