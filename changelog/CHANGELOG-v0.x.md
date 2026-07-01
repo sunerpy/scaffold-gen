@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/sunerpy/scaffold-gen/compare/v0.7.1...v0.8.0) (2026-07-01)
+
+
+### Features
+
+* 恢复并落地 Python MCP server 脚手架 (mcp-python) ([#22](https://github.com/sunerpy/scaffold-gen/issues/22)) ([ed11d18](https://github.com/sunerpy/scaffold-gen/commit/ed11d18d29159ddf3072752ef4e1a6a3c76bcb45))
+
 ## [0.7.1](https://github.com/sunerpy/scaffold-gen/compare/v0.7.0...v0.7.1) (2026-07-01)
 
 
