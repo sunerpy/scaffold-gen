@@ -43,16 +43,19 @@ _RELOAD_EXCLUDES = [
 
 def main() -> None:
     """按配置启动 HTTP 服务."""
-    uvicorn.run(
-        "app.main:app",
-        host=settings.server.host,
-        port=settings.server.port,
-        reload=settings.server.reload,
-        reload_dirs=_RELOAD_DIRS,
-        reload_includes=_RELOAD_INCLUDES,
-        reload_excludes=_RELOAD_EXCLUDES,
-        log_level=settings.app.log_level,
-    )
+    run_kwargs = {
+        "host": settings.server.host,
+        "port": settings.server.port,
+        "reload": settings.server.reload,
+        "log_level": settings.app.log_level,
+    }
+    if settings.server.reload:
+        run_kwargs.update({
+            "reload_dirs": _RELOAD_DIRS,
+            "reload_includes": _RELOAD_INCLUDES,
+            "reload_excludes": _RELOAD_EXCLUDES,
+        })
+    uvicorn.run("app.main:app", **run_kwargs)
 
 
 if __name__ == "__main__":

@@ -34,15 +34,28 @@ impl NewCommand {
                 }
                 Err(e) => return Err(anyhow::anyhow!("Go version check failed: {e}")),
             },
-            Language::Python => match env_checker.check_uv().await {
-                Ok(true) => tracing::info!("  uv: Available"),
-                Ok(false) => {
-                    return Err(anyhow::anyhow!(
-                        "uv is not available. Please install uv first: https://docs.astral.sh/uv/"
-                    ));
+            Language::Python => {
+                match env_checker.check_uv().await {
+                    Ok(true) => tracing::info!("  uv: Available"),
+                    Ok(false) => {
+                        return Err(anyhow::anyhow!(
+                            "uv is not available. Please install uv first: https://docs.astral.sh/uv/"
+                        ));
+                    }
+                    Err(e) => return Err(anyhow::anyhow!("uv check failed: {e}")),
                 }
-                Err(e) => return Err(anyhow::anyhow!("uv check failed: {e}")),
-            },
+
+                // Check Python version meets minimum requirement (>= 3.12)
+                match env_checker.check_python_version().await {
+                    Ok(true) => tracing::info!("  Python: >= 3.12"),
+                    Ok(false) => {
+                        return Err(anyhow::anyhow!(
+                            "Python version does not meet the minimum requirement (>= 3.12)"
+                        ));
+                    }
+                    Err(e) => return Err(anyhow::anyhow!("Python version check failed: {e}")),
+                }
+            }
             Language::Rust => {
                 // 检查 Cargo
                 match env_checker.check_cargo().await {

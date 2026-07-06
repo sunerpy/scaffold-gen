@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::path::Path;
 
 use crate::constants::{Framework, Language};
+use crate::generators::McpPythonAuthContext;
 use crate::generators::auth_options::AuthMode;
 use crate::generators::gin_options::GinProjectOptions;
 use crate::generators::mcp_options::McpBackend;
@@ -28,6 +29,11 @@ pub struct GenerationRequest<'a> {
     pub enable_proto_gen: bool,
     pub enable_error_gen: bool,
     pub enable_build: bool,
+    /// 顶层 host 配置，适用于所有需要网络绑定的生成路径（FastAPI / mcp-python / Go MCP）。
+    pub host: Option<String>,
+    /// 顶层 port 配置，适用于所有需要网络绑定的生成路径。
+    pub port: Option<u16>,
+    /// Gin-specific 选项（swagger/cors/jwt 等），仅在 GinSync 路径消费。
     pub gin_options: GinProjectOptions,
     pub mcp_backend: McpBackend,
     pub auth_mode: AuthMode,
@@ -38,6 +44,37 @@ pub struct GenerationRequest<'a> {
 struct McpPythonOptions {
     backend: McpBackend,
     auth_mode: AuthMode,
+}
+
+/// Shared helper to build PythonParams, eliminating duplicated initialization logic
+/// across generate_python_language, generate_fastapi_language, and generate_mcp_python_language.
+///
+/// Encapsulates: EnvironmentChecker construction, get_python_version(), get_uv_version()
+/// (already returns pure version; fallback to defaults on error), PythonParams::new() + configuration.
+async fn build_python_params(
+    project_name: String,
+    host: Option<String>,
+    port: Option<u16>,
+    enable_precommit: bool,
+) -> Result<PythonParams> {
+    let env_checker = EnvironmentChecker::new();
+    let python_version = env_checker
+        .get_python_version()
+        .await
+        .unwrap_or_else(|_| crate::constants::defaults::PYTHON_MIN_VERSION.to_string());
+    let uv_version = env_checker
+        .get_uv_version()
+        .await
+        .unwrap_or_else(|_| crate::constants::defaults::UV_VERSION.to_string());
+
+    let mut params = PythonParams::new(project_name)
+        .with_version(python_version)
+        .with_uv_version(uv_version)
+        .with_precommit(enable_precommit);
+    params.base.host = host;
+    params.base.port = port;
+
+    Ok(params)
 }
 
 /// 生成器编排器，负责协调三层架构的生成器
@@ -122,6 +159,9 @@ impl GeneratorOrchestrator {
     /// 在框架/语言生成之后执行，统一为所有项目类型生成配套 Makefile + Dockerfile。
     /// `<lang>` 由 `request.spec.language` 映射（见 `Language::build_dir`）；模板目录
     /// 缺失（如另一来源尚未提供 TS Dockerfile）时仅告警跳过，不阻断生成。
+    ///
+    /// 当 `request.spec.has_own_makefile` 为 true 时，跳过通用 Makefile 渲染（仅渲染
+    /// Dockerfile），避免覆盖框架自带的 Makefile。
     fn render_build_tooling(&mut self, request: &GenerationRequest<'_>) -> Result<()> {
         let build_dir = request.spec.language.build_dir();
         let template_path = format!("build/{build_dir}");
@@ -133,13 +173,99 @@ impl GeneratorOrchestrator {
             return Ok(());
         }
 
-        let context = self.build_tooling_context(request);
-        let mut template_processor = TemplateProcessor::new()?;
-        template_processor
-            .process_embedded_template_directory(&template_path, request.output_path, context)
-            .context("Failed to generate build tooling (Makefile + Dockerfile)")?;
+        if request.spec.has_own_makefile {
+            tracing::warn!(
+                "Framework {} already provides its own Makefile; skipping generic Makefile rendering (Dockerfile rendered normally)",
+                request.spec.framework.as_str()
+            );
+            // Only render Dockerfile, skip Makefile
+            let context = self.build_tooling_context(request);
+            self.render_build_tooling_filtered(&template_path, request.output_path, context)?;
+        } else {
+            let context = self.build_tooling_context(request);
+            let mut template_processor = TemplateProcessor::new()?;
+            template_processor
+                .process_embedded_template_directory(&template_path, request.output_path, context)
+                .context("Failed to generate build tooling (Makefile + Dockerfile)")?;
+            tracing::info!("Build tooling generated (Makefile + Dockerfile)");
+        }
 
-        tracing::info!("Build tooling generated (Makefile + Dockerfile)");
+        Ok(())
+    }
+
+    /// Render build tooling templates excluding Makefile (for frameworks that provide their own).
+    fn render_build_tooling_filtered(
+        &self,
+        template_path: &str,
+        output_path: &Path,
+        context: std::collections::HashMap<String, serde_json::Value>,
+    ) -> Result<()> {
+        use std::fs;
+
+        let template_files = crate::template_engine::get_embedded_template_files(template_path)
+            .with_context(|| {
+                format!("Failed to get embedded template files for: {template_path}")
+            })?;
+
+        let mut template_processor = TemplateProcessor::new()?;
+
+        for template_file in template_files {
+            let relative_path = template_file
+                .strip_prefix(&format!("{template_path}/"))
+                .unwrap_or(&template_file);
+
+            // Skip Makefile.tmpl — the framework provides its own
+            if relative_path == "Makefile.tmpl" || relative_path == "Makefile" {
+                continue;
+            }
+
+            let output_relative_path = if let Some(stripped) = relative_path.strip_suffix(".tmpl") {
+                stripped
+            } else {
+                relative_path
+            };
+
+            let output_file_path = output_path.join(output_relative_path);
+
+            if let Some(parent) = output_file_path.parent() {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
+            }
+
+            if template_file.ends_with(".tmpl") {
+                if let Some(template_content) =
+                    crate::template_engine::get_embedded_template_content(&template_file)
+                {
+                    let rendered_content = template_processor
+                        .render_template_content(&template_content, context.clone())
+                        .with_context(|| {
+                            format!("Failed to render embedded template: {template_file}")
+                        })?;
+                    fs::write(&output_file_path, rendered_content).with_context(|| {
+                        format!(
+                            "Failed to write rendered file: {}",
+                            output_file_path.display()
+                        )
+                    })?;
+                } else {
+                    return Err(anyhow::anyhow!(
+                        "Template content not found: {template_file}"
+                    ));
+                }
+            } else {
+                if let Some(file_content) =
+                    crate::template_engine::get_embedded_template_content(&template_file)
+                {
+                    fs::write(&output_file_path, file_content).with_context(|| {
+                        format!("Failed to write file: {}", output_file_path.display())
+                    })?;
+                } else {
+                    return Err(anyhow::anyhow!("File content not found: {template_file}"));
+                }
+            }
+        }
+
+        tracing::info!("Build tooling generated (Dockerfile only; Makefile skipped)");
         Ok(())
     }
 
@@ -152,14 +278,14 @@ impl GeneratorOrchestrator {
         match request.spec.language {
             Language::Go => {
                 let mut go_params = GoParams::from_project_name(project_name);
-                go_params.base.host = request.gin_options.host.clone();
-                go_params.base.port = request.gin_options.port;
+                go_params.base.host = request.host.clone();
+                go_params.base.port = request.port;
                 go_params.to_template_context()
             }
             Language::Python => {
                 let mut python_params = PythonParams::new(project_name);
-                python_params.base.host = request.gin_options.host.clone();
-                python_params.base.port = request.gin_options.port;
+                python_params.base.host = request.host.clone();
+                python_params.base.port = request.port;
                 python_params.to_template_context()
             }
             Language::Rust => RustParams::new(project_name).to_template_context(),
@@ -209,8 +335,8 @@ impl GeneratorOrchestrator {
                 self.generate_fastapi_language(
                     project_name.clone(),
                     output_path,
-                    request.gin_options.host.clone(),
-                    request.gin_options.port,
+                    request.host.clone(),
+                    request.port,
                     request.enable_precommit,
                 )
                 .await?;
@@ -219,8 +345,8 @@ impl GeneratorOrchestrator {
                 self.generate_mcp_python_language(
                     project_name.clone(),
                     output_path,
-                    request.gin_options.host.clone(),
-                    request.gin_options.port,
+                    request.host.clone(),
+                    request.port,
                     request.enable_precommit,
                     McpPythonOptions {
                         backend: request.mcp_backend,
@@ -255,8 +381,8 @@ impl GeneratorOrchestrator {
                 self.generate_mcp_server_embedded(
                     project_name.clone(),
                     output_path,
-                    request.gin_options.host.clone(),
-                    request.gin_options.port,
+                    request.host.clone(),
+                    request.port,
                 )
                 .await?;
             }
@@ -398,31 +524,7 @@ impl GeneratorOrchestrator {
     ) -> Result<()> {
         tracing::info!("Starting Python project generation: {project_name}");
 
-        // 获取实际的 uv 版本和 Python 版本
-        let env_checker = EnvironmentChecker::new();
-
-        let uv_version = env_checker
-            .get_uv_version()
-            .await
-            .unwrap_or_else(|_| "uv 0.9.5".to_string());
-
-        // 从 "uv x.y.z" 格式中提取版本号
-        let uv_version = uv_version
-            .strip_prefix("uv ")
-            .unwrap_or(&uv_version)
-            .trim()
-            .to_string();
-
-        // 获取系统 Python 版本，如果获取失败则使用默认值
-        let python_version = env_checker
-            .get_python_version()
-            .await
-            .unwrap_or_else(|_| "3.12".to_string());
-
-        let python_params = PythonParams::new(project_name.clone())
-            .with_version(python_version)
-            .with_uv_version(uv_version)
-            .with_precommit(enable_precommit);
+        let python_params = build_python_params(project_name, None, None, enable_precommit).await?;
 
         self.python_generator
             .generate(python_params, output_path)
@@ -446,17 +548,15 @@ impl GeneratorOrchestrator {
     ) -> Result<()> {
         tracing::info!("Starting FastAPI project generation: {project_name}");
 
-        let env_checker = EnvironmentChecker::new();
-        let python_version = env_checker
-            .get_python_version()
-            .await
-            .unwrap_or_else(|_| "3.12".to_string());
-
-        let mut python_params = PythonParams::new(project_name.clone())
-            .with_version(python_version)
-            .with_precommit(enable_precommit);
-        python_params.base.host = Some(host.unwrap_or_else(|| "0.0.0.0".to_string()));
-        python_params.base.port = Some(port.unwrap_or(8080));
+        let mut python_params =
+            build_python_params(project_name.clone(), host, port, enable_precommit).await?;
+        // FastAPI defaults: host 0.0.0.0, port 8080
+        if python_params.base.host.is_none() {
+            python_params.base.host = Some("0.0.0.0".to_string());
+        }
+        if python_params.base.port.is_none() {
+            python_params.base.port = Some(8080);
+        }
 
         let template_path = "frameworks/python/fastapi";
         if !crate::template_engine::embedded_template_dir_exists(template_path) {
@@ -495,17 +595,15 @@ impl GeneratorOrchestrator {
 
         let McpPythonOptions { backend, auth_mode } = mcp_options;
 
-        let env_checker = EnvironmentChecker::new();
-        let python_version = env_checker
-            .get_python_version()
-            .await
-            .unwrap_or_else(|_| "3.12".to_string());
-
-        let mut python_params = PythonParams::new(project_name.clone())
-            .with_version(python_version)
-            .with_precommit(enable_precommit);
-        python_params.base.host = Some(host.unwrap_or_else(|| "0.0.0.0".to_string()));
-        python_params.base.port = Some(port.unwrap_or(8000));
+        let mut python_params =
+            build_python_params(project_name.clone(), host, port, enable_precommit).await?;
+        // mcp-python defaults: host 0.0.0.0, port 8000
+        if python_params.base.host.is_none() {
+            python_params.base.host = Some("0.0.0.0".to_string());
+        }
+        if python_params.base.port.is_none() {
+            python_params.base.port = Some(8000);
+        }
 
         let template_path = "frameworks/python/mcp-python";
         if !crate::template_engine::embedded_template_dir_exists(template_path) {
@@ -515,26 +613,7 @@ impl GeneratorOrchestrator {
         }
 
         let mut context = python_params.to_template_context();
-        context.insert(
-            "mcp_backend".to_string(),
-            serde_json::json!(backend.as_str()),
-        );
-        context.insert(
-            "mcp_backend_is_official".to_string(),
-            serde_json::json!(backend.is_official()),
-        );
-        context.insert(
-            "auth_mode".to_string(),
-            serde_json::json!(auth_mode.as_str()),
-        );
-        context.insert(
-            "auth_enabled".to_string(),
-            serde_json::json!(auth_mode.is_enabled()),
-        );
-        context.insert(
-            "auth_is_azure_ad".to_string(),
-            serde_json::json!(auth_mode.is_azure_ad()),
-        );
+        McpPythonAuthContext::new(backend, auth_mode).inject_into(&mut context);
 
         let mut template_processor = TemplateProcessor::new()?;
         template_processor
@@ -709,6 +788,8 @@ mod tests {
             enable_proto_gen: false,
             enable_error_gen: false,
             enable_build,
+            host: None,
+            port: None,
             gin_options: GinProjectOptions::new(),
             mcp_backend: McpBackend::Fastmcp,
             auth_mode: AuthMode::None,

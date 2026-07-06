@@ -1,0 +1,14 @@
+"""健康检查端点测试 (health endpoint smoke test).
+
+pytest-asyncio auto 模式：直接写 `async def test_*` 即可，无需任何标记。
+asyncio_mode="auto" — plain `async def test_*`, no marker needed.
+"""
+
+import httpx
+
+
+async def test_health_returns_200(client: httpx.AsyncClient) -> None:
+    """Given a running app / When GET /health / Then status is 200."""
+    response = await client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}

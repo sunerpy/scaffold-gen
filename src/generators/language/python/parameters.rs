@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
+use crate::constants::defaults;
 use crate::generators::core::{BaseParams, InheritableParams};
 
 /// Python语言级别参数
@@ -18,15 +19,15 @@ pub struct PythonParams {
 impl Default for PythonParams {
     fn default() -> Self {
         let base = BaseParams {
-            language_version: Some("3.11".to_string()),
+            language_version: Some(defaults::PYTHON_MIN_VERSION.to_string()),
             enable_modules: true,
             ..Default::default()
         };
 
         Self {
             base,
-            uv_version: "0.9.1".to_string(),
-            ruff_version: "0.12.1".to_string(),
+            uv_version: defaults::UV_VERSION.to_string(),
+            ruff_version: defaults::RUFF_VERSION.to_string(),
         }
     }
 }
@@ -69,13 +70,13 @@ impl PythonParams {
         let mut base = BaseParams::new(project_name);
 
         // 设置Python特定的默认值
-        base.language_version = Some("3.11".to_string());
+        base.language_version = Some(defaults::PYTHON_MIN_VERSION.to_string());
         base.enable_modules = true;
 
         Self {
             base,
-            uv_version: "0.9.1".to_string(),
-            ruff_version: "0.12.1".to_string(),
+            uv_version: defaults::UV_VERSION.to_string(),
+            ruff_version: defaults::RUFF_VERSION.to_string(),
         }
     }
 

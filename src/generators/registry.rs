@@ -34,6 +34,8 @@ pub struct FrameworkSpec {
     pub accepts_proto_error_gen: bool,
     /// 生成完成后打印的 "Next steps" 提示行（不含框架自身在生成内部打印的提示）。
     pub next_steps: &'static [&'static str],
+    /// 该框架是否自带 Makefile（`--with-build` 时跳过通用 Makefile 渲染）。
+    pub has_own_makefile: bool,
 }
 
 impl FrameworkSpec {
@@ -54,6 +56,7 @@ const REGISTRY: &[FrameworkSpec] = &[
         description_template: "A Gin web application: {name}",
         accepts_proto_error_gen: false,
         next_steps: &[],
+        has_own_makefile: false,
     },
     FrameworkSpec {
         framework: Framework::GoZero,
@@ -62,6 +65,7 @@ const REGISTRY: &[FrameworkSpec] = &[
         description_template: "A go-zero microservice: {name}",
         accepts_proto_error_gen: false,
         next_steps: &[],
+        has_own_makefile: false,
     },
     FrameworkSpec {
         framework: Framework::McpServer,
@@ -73,6 +77,7 @@ const REGISTRY: &[FrameworkSpec] = &[
             "  make generate                 # buf generate: proto + JSON Schema",
             "  make run                      # Start the MCP server (reads config.toml)",
         ],
+        has_own_makefile: true,
     },
     FrameworkSpec {
         framework: Framework::FastApi,
@@ -84,6 +89,7 @@ const REGISTRY: &[FrameworkSpec] = &[
             "  uv sync                       # Install dependencies",
             "  uv run python main.py         # Start the API (reads config.toml / .env)",
         ],
+        has_own_makefile: true,
     },
     FrameworkSpec {
         framework: Framework::McpServerPython,
@@ -96,6 +102,7 @@ const REGISTRY: &[FrameworkSpec] = &[
             "  make test                     # Run the tool tests (pytest, in-memory client)",
             "  uv run python main.py         # Start the MCP server (reads config.toml / .env)",
         ],
+        has_own_makefile: true,
     },
     FrameworkSpec {
         framework: Framework::Tauri,
@@ -107,6 +114,7 @@ const REGISTRY: &[FrameworkSpec] = &[
             "  cargo tauri dev    # Start development server",
             "  cargo tauri build  # Build for production",
         ],
+        has_own_makefile: false,
     },
     FrameworkSpec {
         framework: Framework::Vue3,
@@ -118,6 +126,7 @@ const REGISTRY: &[FrameworkSpec] = &[
             "  pnpm dev    # Start development server",
             "  pnpm build  # Build for production",
         ],
+        has_own_makefile: false,
     },
     FrameworkSpec {
         framework: Framework::React,
@@ -129,6 +138,7 @@ const REGISTRY: &[FrameworkSpec] = &[
             "  pnpm dev    # Start development server",
             "  pnpm build  # Build for production",
         ],
+        has_own_makefile: false,
     },
 ];
 
@@ -142,6 +152,7 @@ const fn pure_language_spec(language: Language) -> Option<FrameworkSpec> {
             description_template: "A Python project: {name}",
             accepts_proto_error_gen: false,
             next_steps: &[],
+            has_own_makefile: false,
         }),
         Language::Rust => Some(FrameworkSpec {
             framework: Framework::None,
@@ -150,6 +161,7 @@ const fn pure_language_spec(language: Language) -> Option<FrameworkSpec> {
             description_template: "A Rust project: {name}",
             accepts_proto_error_gen: true,
             next_steps: &[],
+            has_own_makefile: false,
         }),
         // Go / TypeScript 没有 "纯语言" 路径 —— 它们要求一个框架。
         Language::Go | Language::TypeScript => None,

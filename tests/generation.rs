@@ -192,11 +192,17 @@ fn fastapi_embedded_generation_renders_without_external_tools() {
 
     // Then(5): 入口 main.py 必须把 uvicorn 热重载限定到 app/ 并排除 logs/，
     // 否则日志写入会反复触发 reload 形成死循环 (fix/fastapi-reload-loop)。
+    // 新的条件化实现：reload 参数通过 dict update 注入（`"reload_dirs": _RELOAD_DIRS`），
+    // 不再是直接 kwarg 形式（`reload_dirs=`）。
     let entry_main =
         fs::read_to_string(tmp.path().join("main.py")).expect("read generated main.py");
     assert!(
-        entry_main.contains("reload_dirs=") && entry_main.contains("reload_excludes="),
+        entry_main.contains("\"reload_dirs\"") && entry_main.contains("\"reload_excludes\""),
         "main.py must pass reload_dirs/reload_excludes to uvicorn.run to avoid the reload loop:\n{entry_main}"
+    );
+    assert!(
+        entry_main.contains("if settings.server.reload"),
+        "main.py must conditionally apply reload params only when reload is enabled:\n{entry_main}"
     );
     assert!(
         entry_main.contains("\"*.log\"") && entry_main.contains("\"logs\""),
@@ -432,31 +438,23 @@ fn mcp_python_embedded_generation_renders_without_external_tools() {
 
 /// 渲染开启鉴权的 mcp-python（离线，仅渲染）。
 ///
-/// 复刻 orchestrator `generate_mcp_python_language` 在 `to_template_context()` 之后注入的四个键：
-/// `mcp_backend` / `mcp_backend_is_official`（后端分支）+ `auth_mode` / `auth_enabled`（鉴权分支）。
+/// 复刻 orchestrator `generate_mcp_python_language` 在 `to_template_context()` 之后注入的五个键：
+/// `mcp_backend` / `mcp_backend_is_official`（后端分支）+ `auth_mode` / `auth_enabled` / `auth_is_azure_ad`（鉴权分支）。
 /// `auth_mode=="jwt"` ↔ `auth_enabled==true`；`auth_mode=="none"` ↔ `auth_enabled==false`，
 /// 与 `AuthMode::as_str()` / `AuthMode::is_enabled()` 的语义一致。
 fn render_mcp_python_auth(backend: &str, auth_mode: &str) -> tempfile::TempDir {
+    use scaffold_gen::generators::auth_options::AuthMode;
+    use scaffold_gen::generators::mcp_auth_context::McpPythonAuthContext;
+    use scaffold_gen::generators::mcp_options::McpBackend;
+
     let mut params = PythonParams::new("mcp-py-auth-demo".to_string());
     params.base.host = Some("0.0.0.0".to_string());
     params.base.port = Some(8000);
     let mut context = params.to_template_context();
-    context.insert(
-        "mcp_backend".to_string(),
-        serde_json::Value::String(backend.to_string()),
-    );
-    context.insert(
-        "mcp_backend_is_official".to_string(),
-        serde_json::Value::Bool(backend == "official"),
-    );
-    context.insert(
-        "auth_mode".to_string(),
-        serde_json::Value::String(auth_mode.to_string()),
-    );
-    context.insert(
-        "auth_enabled".to_string(),
-        serde_json::Value::Bool(auth_mode == "jwt"),
-    );
+
+    let backend_enum = McpBackend::parse_from_str(backend).unwrap();
+    let auth_enum = AuthMode::parse_from_str(auth_mode).unwrap();
+    McpPythonAuthContext::new(backend_enum, auth_enum).inject_into(&mut context);
 
     let tmp = tempfile::tempdir().expect("create tempdir");
     let mut processor = TemplateProcessor::new().expect("create processor");
@@ -690,32 +688,21 @@ fn mcp_python_auth_renders() {
 
 /// 渲染 `--auth azure-ad` 的 mcp-python（离线，仅渲染）。
 ///
-/// 在 `render_mcp_python_auth` 的四键之外，额外注入 `auth_is_azure_ad=true`，
-/// 与 orchestrator `generate_mcp_python_language` 在 `to_template_context()` 之后
-/// 注入的第五个键一致（`AuthMode::is_azure_ad()`）。azure-ad ⇒ `auth_enabled==true`
+/// 使用 `McpPythonAuthContext::inject_into` 注入全部 5 个 auth-related 键，
+/// 与 orchestrator `generate_mcp_python_language` 行为一致。azure-ad ⇒ `auth_enabled==true`
 /// 且 `auth_mode=="azure-ad"`，镜像 `AuthMode::AzureAd` 的语义。
 fn render_mcp_python_azuread(backend: &str) -> tempfile::TempDir {
+    use scaffold_gen::generators::auth_options::AuthMode;
+    use scaffold_gen::generators::mcp_auth_context::McpPythonAuthContext;
+    use scaffold_gen::generators::mcp_options::McpBackend;
+
     let mut params = PythonParams::new("mcp-py-azuread-demo".to_string());
     params.base.host = Some("0.0.0.0".to_string());
     params.base.port = Some(8000);
     let mut context = params.to_template_context();
-    context.insert(
-        "mcp_backend".to_string(),
-        serde_json::Value::String(backend.to_string()),
-    );
-    context.insert(
-        "mcp_backend_is_official".to_string(),
-        serde_json::Value::Bool(backend == "official"),
-    );
-    context.insert(
-        "auth_mode".to_string(),
-        serde_json::Value::String("azure-ad".to_string()),
-    );
-    context.insert("auth_enabled".to_string(), serde_json::Value::Bool(true));
-    context.insert(
-        "auth_is_azure_ad".to_string(),
-        serde_json::Value::Bool(true),
-    );
+
+    let backend_enum = McpBackend::parse_from_str(backend).unwrap();
+    McpPythonAuthContext::new(backend_enum, AuthMode::AzureAd).inject_into(&mut context);
 
     let tmp = tempfile::tempdir().expect("create tempdir");
     let mut processor = TemplateProcessor::new().expect("create processor");
@@ -1355,5 +1342,174 @@ fn without_build_flag_no_makefile_or_dockerfile() {
     assert!(
         !files.iter().any(|f| f == "Dockerfile"),
         "Dockerfile must be absent without --with-build, got: {files:?}"
+    );
+}
+
+// ─── Task 6.1: P2 integration validation tests ─────────────────────────────
+
+/// Helper: render a FastAPI project into a tempdir and return the tempdir handle.
+fn render_fastapi() -> tempfile::TempDir {
+    let mut params = PythonParams::new("fastapi-test".to_string());
+    params.base.host = Some("0.0.0.0".to_string());
+    params.base.port = Some(8000);
+    let context = params.to_template_context();
+
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    processor
+        .process_embedded_template_directory("frameworks/python/fastapi", tmp.path(), context)
+        .expect("render embedded fastapi templates");
+    tmp
+}
+
+#[test]
+fn test_fastapi_config_toml_reload_defaults_to_false() {
+    let tmp = render_fastapi();
+    let config = fs::read_to_string(tmp.path().join("config.toml")).expect("read config.toml");
+    assert!(
+        config.contains("reload = false"),
+        "config.toml must default reload to false (production safe):\n{config}"
+    );
+    // Ensure it does NOT contain reload = true
+    assert!(
+        !config.contains("reload = true"),
+        "config.toml must NOT contain reload = true:\n{config}"
+    );
+}
+
+#[test]
+fn test_fastapi_main_py_conditional_reload() {
+    let tmp = render_fastapi();
+    let main = fs::read_to_string(tmp.path().join("main.py")).expect("read main.py");
+    assert!(
+        main.contains("if settings.server.reload"),
+        "main.py must conditionally apply reload params:\n{main}"
+    );
+}
+
+#[test]
+fn test_fastapi_gitignore_excludes_uv_lock() {
+    let tmp = render_fastapi();
+    let gitignore = fs::read_to_string(tmp.path().join(".gitignore")).expect("read .gitignore");
+    assert!(
+        !gitignore.contains("uv.lock"),
+        ".gitignore must NOT contain uv.lock (lock file should be committed):\n{gitignore}"
+    );
+}
+
+#[test]
+fn test_fastapi_includes_test_scaffold() {
+    let tmp = render_fastapi();
+    let files = collect_relative_files(tmp.path());
+    assert!(
+        files.iter().any(|f| f == "tests/conftest.py"),
+        "FastAPI generation must include tests/conftest.py, got: {files:?}"
+    );
+    assert!(
+        files.iter().any(|f| f == "tests/test_health.py"),
+        "FastAPI generation must include tests/test_health.py, got: {files:?}"
+    );
+    assert!(
+        files.iter().any(|f| f == "tests/__init__.py"),
+        "FastAPI generation must include tests/__init__.py, got: {files:?}"
+    );
+}
+
+#[test]
+fn test_fastapi_includes_makefile() {
+    let tmp = render_fastapi();
+    let files = collect_relative_files(tmp.path());
+    assert!(
+        files.iter().any(|f| f == "Makefile"),
+        "FastAPI generation must include a Makefile, got: {files:?}"
+    );
+
+    // Verify Makefile has essential targets
+    let makefile = fs::read_to_string(tmp.path().join("Makefile")).expect("read Makefile");
+    assert!(
+        makefile.contains("install") && makefile.contains("test") && makefile.contains("dev"),
+        "Makefile must contain install, test, and dev targets:\n{makefile}"
+    );
+}
+
+#[test]
+fn test_mcp_python_gitignore_excludes_uv_lock() {
+    let tmp = render_mcp_python("fastmcp");
+    let gitignore = fs::read_to_string(tmp.path().join(".gitignore")).expect("read .gitignore");
+    assert!(
+        !gitignore.contains("uv.lock"),
+        ".gitignore must NOT contain uv.lock (lock file should be committed):\n{gitignore}"
+    );
+}
+
+#[test]
+fn test_with_build_does_not_overwrite_framework_makefile() {
+    // Given: render the mcp-python framework (which has_own_makefile=true)
+    let mut params = PythonParams::new("mcp-build-test".to_string());
+    params.base.host = Some("0.0.0.0".to_string());
+    params.base.port = Some(8000);
+    let mut context = params.to_template_context();
+    context.insert(
+        "mcp_backend".to_string(),
+        serde_json::Value::String("fastmcp".to_string()),
+    );
+    context.insert(
+        "mcp_backend_is_official".to_string(),
+        serde_json::Value::Bool(false),
+    );
+
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+
+    // Step 1: render the framework templates (mcp-python provides its own Makefile)
+    processor
+        .process_embedded_template_directory(
+            "frameworks/python/mcp-python",
+            tmp.path(),
+            context.clone(),
+        )
+        .expect("render mcp-python framework templates");
+
+    // Capture the framework's Makefile content
+    let framework_makefile =
+        fs::read_to_string(tmp.path().join("Makefile")).expect("read framework Makefile");
+    assert!(
+        !framework_makefile.is_empty(),
+        "mcp-python must provide its own Makefile"
+    );
+
+    // Step 2: simulate render_build_tooling with has_own_makefile=true.
+    // When has_own_makefile is true, orchestrator calls render_build_tooling_filtered
+    // which skips Makefile.tmpl. We verify by rendering build/python FULLY and checking
+    // that the framework Makefile content differs from the generic one.
+    let build_tmp = tempfile::tempdir().expect("create build tempdir");
+    let mut build_processor = TemplateProcessor::new().expect("create processor");
+    build_processor
+        .process_embedded_template_directory("build/python", build_tmp.path(), context)
+        .expect("render build/python templates");
+
+    let generic_makefile =
+        fs::read_to_string(build_tmp.path().join("Makefile")).expect("read generic Makefile");
+
+    // The framework's Makefile must differ from the generic build Makefile
+    assert_ne!(
+        framework_makefile, generic_makefile,
+        "Framework Makefile should differ from generic build Makefile — has_own_makefile protects it"
+    );
+
+    // The framework Makefile should be the MCP-specific one (contains MCP-specific markers)
+    assert!(
+        framework_makefile.contains("MCP") || framework_makefile.contains("mcp"),
+        "Framework Makefile should be the MCP-specific version:\n{framework_makefile}"
+    );
+
+    // The generic Makefile has docker targets that the framework one does NOT
+    assert!(
+        generic_makefile.contains("docker-build"),
+        "Generic build Makefile should have docker-build target:\n{generic_makefile}"
+    );
+    assert!(
+        !framework_makefile.contains("docker-build"),
+        "Framework Makefile should NOT have docker-build target (it's MCP-specific):\n{framework_makefile}"
     );
 }

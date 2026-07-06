@@ -1,0 +1,20 @@
+"""共享测试夹具 (shared pytest fixtures) —— 纯内存 ASGI 客户端，无网络、无服务进程.
+
+使用 httpx.AsyncClient + ASGITransport 直连 FastAPI app，
+`make test` 因此快速、确定、可离线运行。
+Uses httpx.AsyncClient + ASGITransport to connect directly to the FastAPI app;
+no live server needed — tests are fast, deterministic, and fully offline.
+"""
+
+import httpx
+import pytest_asyncio
+
+from app.main import app
+
+
+@pytest_asyncio.fixture
+async def client():
+    """返回一个异步 HTTP 客户端，直连 FastAPI app (in-memory ASGI transport)."""
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
