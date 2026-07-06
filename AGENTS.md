@@ -1,6 +1,6 @@
 # SCAFFOLD-GEN KNOWLEDGE BASE
 
-**Version:** v0.7.0 **Updated:** 2026-06-25 **Branch:** main
+**Version:** v0.9.0 **Updated:** 2026-07-06 **Branch:** main
 
 ## OVERVIEW
 
@@ -37,6 +37,7 @@ scaffold-gen/
 │   │   │                    #   render_build_tooling(), build_tooling_context() — ~665 LOC
 │   │   ├── external.rs      # ExternalAsync path: Tauri / React (Vue3 moved to embedded)
 │   │   ├── gin_options.rs   # GinProjectOptions struct + builders
+│   │   ├── mcp_auth_context.rs # McpPythonAuthContext auth template keys
 │   │   ├── core/            # Generator/ProjectGenerator traits, BaseParams, TemplateProcessor,
 │   │   │                    #   context.rs (build_base_context 31 keys), validation.rs
 │   │   ├── language/        # go/, rust/, python/
@@ -61,10 +62,13 @@ scaffold-gen/
 │       ├── SKILL.md         # Embedded agent skill (include_str! into src/skill/embed.rs)
 │       └── evals/evals.json # Eval test prompts (skill-creator loop artifact)
 ├── tests/
-│   └── generation.rs        # Integration tests (public API, 8 tests)
+│   └── generation.rs        # Integration tests (public API, 18 tests)
 ├── Makefile                 # Primary task runner
-└── Cargo.toml               # Edition 2024, binary: scafgen, version: 0.7.0
+└── Cargo.toml               # Edition 2024, binary: scafgen, version: 0.9.0
 ```
+
+Python generation shares `orchestrator.rs::build_python_params()`; `McpPythonAuthContext`
+centralizes the 5 mcp-python auth template keys.
 
 ## FRAMEWORK REGISTRY
 
@@ -184,15 +188,16 @@ All tracing/diagnostics → **stderr**.
    confirmation
 4. **Go-Zero unimplemented**: `Framework::GoZero` resolves to `GenKind::Unimplemented` — returns a
    clear error; no generator struct exists; enum variant kept for CLI discoverability
-5. **Tests: 169 total**: 50 lib + 110 bin inline + 9 integration in `tests/generation.rs`; `make
+5. **Tests: 219 total**: 67 lib + 134 bin inline + 18 integration in `tests/generation.rs`; `make
 test` covers all
 6. **Vue3 is EmbeddedAsync**: moved from ExternalAsync — full offline scaffold, optional `pnpm
 install` post-step; `external.rs` no longer contains Vue3 logic
 7. **`--with-build` is opt-in interactive**: omitting it on non-TTY stdin triggers an `inquire`
    Confirm error (same as `--precommit`); scripts must pass `--with-build true|false` explicitly
-8. **FastAPI reload-loop fix**: `uvicorn.run` in the generated `main.py` uses
-   `reload_dirs=["app"]` + `reload_excludes` to prevent log writes inside the watched dir from
-   triggering infinite reloads
+8. **FastAPI reload-loop fix**: `config.toml` defaults `reload = false`; generated `main.py` only
+   passes `reload_dirs`/`reload_includes`/`reload_excludes` when `settings.server.reload` is true.
+   Enable via `make dev` (`SERVER__RELOAD=true`) or the env var; `reload_dirs=["app"]` still scopes
+   reloads away from log writes when reload is on.
 9. **orchestrator.rs is ~665 LOC**: exceeds the 250-line guideline; known refactor candidate,
    but not yet split (splitting the tightly-coupled dispatch would fragment logic)
 10. **AGENTS.md is now tracked**: removed from `.gitignore`; oxfmt formats it — `make fmt-check`
@@ -205,6 +210,30 @@ install` post-step; `external.rs` no longer contains Vue3 logic
     template files does not always trigger re-embed on incremental `cargo build` — the rendered
     project silently misses new files. Fix: `touch build.rs` (or `cargo clean`) to bust the cache
     before rendering/testing newly-added templates.
+13. **`new` echoes equivalent command**: after an interactive run, `equivalent_command()` in
+    `new.rs` prints the matching non-interactive command from `ProjectParams`, including only flags
+    valid for the chosen language/framework. Keep it in sync when adding flags.
+14. **`self-update` up-to-date short-circuit**: `self_update` 0.42's pinned-tag path skips its own
+    current-vs-target check, so `run_blocking` compares `is_same_version(current, latest)` and exits
+    early unless `--force`.
+15. **FastAPI test scaffold + Makefile**: FastAPI ships `tests/__init__.py`, `conftest.py` with
+    `httpx.AsyncClient` + `ASGITransport` app fixture, and `test_health.py` (`GET /health` → 200),
+    plus install/run/dev/test/fmt/lint/check/clean Makefile targets; `dev` sets `SERVER__RELOAD=true`.
+16. **`--with-build` override protection**: `FrameworkSpec.has_own_makefile` is true for FastApi,
+    McpServerPython, and Go McpServer. `render_build_tooling` skips the generic
+    `templates/build/<lang>/Makefile.tmpl` with `tracing::warn!`, but still renders Dockerfile.
+17. **FastAPI settings source priority**: `settings.py` uses pydantic-settings native
+    `TomlConfigSettingsSource` in `settings_customise_sources()` (env > TOML > defaults), matching
+    mcp-python; no manual `tomllib.load()`.
+18. **Framework `uv.lock` policy**: FastAPI and mcp-python no longer gitignore `uv.lock` so framework
+    projects commit reproducible locks; pure-Python library templates keep their own policy.
+19. **Python version pre-check**: `env-check` validates Python ≥3.12 via
+    `EnvironmentChecker::check_python_version()`, blocking generation like Go's ≥1.24 check.
+20. **uv version parsing**: `get_uv_version()` uses `parse_uv_version()` to extract the pure semver
+    token, stripping both the `uv ` prefix and musl/`uv --version` ` (arch-triple)` suffix so
+    generated `.pre-commit-config.yaml` `rev:` values are valid git refs.
+21. **Version defaults centralized**: `constants::defaults` owns `UV_VERSION`, `RUFF_VERSION`,
+    `PYTHON_MIN_VERSION`, and `RUST_VERSION`; avoid scattered hardcoded version fallbacks.
 
 ## COMMANDS
 
@@ -218,7 +247,7 @@ make release-upx    # Release + UPX compression
 make fmt            # Format code (rustfmt + oxfmt for YAML/JSON/Markdown)
 make fmt-check      # Check formatting (CI gate — also checks AGENTS.md now)
 make lint           # Clippy with -D warnings
-make test           # cargo test (50 lib + 110 bin + 9 integration)
+make test           # cargo test (67 lib + 134 bin + 18 integration)
 make ci             # fmt-check + lint + test
 
 # Cross-compile
