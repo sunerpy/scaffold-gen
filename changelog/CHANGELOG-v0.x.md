@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/sunerpy/scaffold-gen/compare/v0.8.0...v0.9.0) (2026-07-06)
+
+
+### Features
+
+* **python:** harden FastAPI/mcp-python generators and centralize versioning ([#24](https://github.com/sunerpy/scaffold-gen/issues/24)) ([bdbbfb2](https://github.com/sunerpy/scaffold-gen/commit/bdbbfb2e9da393ffb7237456bd2203284fb7df3a))
+
 ## [0.8.0](https://github.com/sunerpy/scaffold-gen/compare/v0.7.1...v0.8.0) (2026-07-01)
 
 
