@@ -5,6 +5,7 @@ pub mod external;
 pub mod framework;
 pub mod gin_options;
 pub mod language;
+pub mod mcp_auth_context;
 pub mod mcp_options;
 pub mod orchestrator;
 pub mod project;
@@ -19,5 +20,6 @@ pub mod registry;
 // 编排器
 pub use auth_options::AuthMode;
 pub use gin_options::GinProjectOptions;
+pub use mcp_auth_context::McpPythonAuthContext;
 pub use mcp_options::McpBackend;
 pub use orchestrator::GeneratorOrchestrator;

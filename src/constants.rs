@@ -135,7 +135,13 @@ impl std::fmt::Display for Framework {
 // 默认值常量 - 用于各种工具和语言的默认版本配置
 pub mod defaults {
     /// Rust 默认版本
-    pub const RUST_VERSION: &str = "1.75";
+    pub const RUST_VERSION: &str = "1.88";
+    /// uv 默认版本（Python 项目包管理器）
+    pub const UV_VERSION: &str = "0.9.1";
+    /// ruff 默认版本（Python linter/formatter）
+    pub const RUFF_VERSION: &str = "0.12.1";
+    /// Python 最低支持版本
+    pub const PYTHON_MIN_VERSION: &str = "3.12";
 }
 
 /// 字符串转换工具函数

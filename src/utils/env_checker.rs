@@ -121,6 +121,20 @@ impl EnvironmentChecker {
         }
     }
 
+    /// Check if the Python version meets the minimum requirement (>= 3.12)
+    pub async fn check_python_version(&self) -> Result<bool> {
+        let version = self.get_python_version().await?;
+        let parts: Vec<u32> = version.split('.').filter_map(|s| s.parse().ok()).collect();
+
+        if parts.len() >= 2 && (parts[0] > 3 || (parts[0] == 3 && parts[1] >= 12)) {
+            Ok(true)
+        } else {
+            Err(anyhow!(
+                "Python version {version} is not supported. Minimum required: 3.12"
+            ))
+        }
+    }
+
     /// 检查uv工具是否可用
     pub async fn check_uv(&self) -> Result<bool> {
         match which("uv") {
@@ -139,7 +153,7 @@ impl EnvironmentChecker {
         }
     }
 
-    /// 获取uv版本字符串
+    /// 获取uv版本字符串（纯版本号，剥离前缀和后缀）
     pub async fn get_uv_version(&self) -> Result<String> {
         let output = Command::new("uv").arg("--version").output()?;
 
@@ -148,7 +162,11 @@ impl EnvironmentChecker {
         }
 
         let version_str = String::from_utf8_lossy(&output.stdout);
-        Ok(version_str.trim().to_string())
+        let trimmed = version_str.trim();
+
+        // parse_uv_version handles extraction of pure version token
+        parse_uv_version(trimmed)
+            .ok_or_else(|| anyhow!("Unable to parse uv version from: {trimmed}"))
     }
 
     /// 检查 Cargo 是否可用
@@ -202,5 +220,58 @@ impl EnvironmentChecker {
             },
             Err(_) => Ok(false),
         }
+    }
+}
+
+/// Extract pure version token from uv --version output.
+///
+/// Input examples:
+/// - "uv 0.9.1" → "0.9.1"
+/// - "uv 0.11.8 (x86_64-unknown-linux-musl)" → "0.11.8"
+///
+/// Strategy: split by whitespace, take token at index 1 (after "uv").
+/// Returns None if insufficient tokens.
+fn parse_uv_version(raw: &str) -> Option<String> {
+    raw.split_whitespace().nth(1).map(|s| s.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_uv_version_official_release() {
+        let input = "uv 0.9.1";
+        assert_eq!(parse_uv_version(input), Some("0.9.1".to_string()));
+    }
+
+    #[test]
+    fn test_parse_uv_version_musl_with_arch() {
+        let input = "uv 0.11.8 (x86_64-unknown-linux-musl)";
+        assert_eq!(parse_uv_version(input), Some("0.11.8".to_string()));
+    }
+
+    #[test]
+    fn test_parse_uv_version_multi_space() {
+        let input = "uv  0.12.0  (aarch64-apple-darwin)";
+        assert_eq!(parse_uv_version(input), Some("0.12.0".to_string()));
+    }
+
+    #[test]
+    fn test_parse_uv_version_no_prefix() {
+        let input = "0.10.5";
+        assert_eq!(parse_uv_version(input), None);
+    }
+
+    #[test]
+    fn test_parse_uv_version_insufficient_tokens() {
+        let input = "uv";
+        assert_eq!(parse_uv_version(input), None);
+    }
+
+    #[test]
+    fn test_parse_uv_version_empty() {
+        let input = "";
+        assert_eq!(parse_uv_version(input), None);
     }
 }

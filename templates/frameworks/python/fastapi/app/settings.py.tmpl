@@ -1,18 +1,27 @@
 """<<project_name>> 配置加载 (config loader).
 
 读取顺序 / Load order (later overrides earlier):
-  1. config.toml  ([server], [app], [log] 段)
-  2. .env / 系统环境变量 (SERVER__HOST, SERVER__PORT, APP__LOG_LEVEL ...)
+  1. 字段默认值 / field defaults
+  2. config.toml  ([server], [app], [log] 段)
+  3. .env 文件 / .env file
+  4. 系统环境变量 (SERVER__HOST, SERVER__PORT, APP__LOG_LEVEL ...)
+
+即：环境变量 > .env > config.toml > 默认值。环境变量以 `__` 分层覆盖 config.toml。
+i.e. env vars > .env > config.toml > defaults. Env vars override config.toml.
 
 ★ 普通用户无需修改本文件 ★ —— 改 host/port 请改 config.toml 或 .env。
 You normally never edit this file — change host/port in config.toml or .env.
 """
 
-import tomllib
 from pathlib import Path
 
 from pydantic import BaseModel
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    TomlConfigSettingsSource,
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 CONFIG_FILE = BASE_DIR / "config.toml"
@@ -23,7 +32,7 @@ class ServerConfig(BaseModel):
 
     host: str = "<<default_host>>"
     port: int = <<default_port>>
-    reload: bool = True
+    reload: bool = False
 
 
 class AppConfig(BaseModel):
@@ -67,13 +76,6 @@ class LogConfig(BaseModel):
     compress: bool = True
 
 
-def _load_toml() -> dict:
-    if CONFIG_FILE.exists():
-        with open(CONFIG_FILE, "rb") as f:
-            return tomllib.load(f)
-    return {}
-
-
 class Settings(BaseSettings):
     """全局配置 (global settings). 环境变量以 `__` 分层覆盖 config.toml。"""
 
@@ -81,16 +83,35 @@ class Settings(BaseSettings):
         env_file=".env",
         env_nested_delimiter="__",
         extra="ignore",
+        toml_file=CONFIG_FILE,
     )
 
     server: ServerConfig = ServerConfig()
     app: AppConfig = AppConfig()
     log: LogConfig = LogConfig()
 
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """优先级 (高→低) / priority (high→low): init > env > .env > config.toml > defaults."""
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            TomlConfigSettingsSource(settings_cls),
+            file_secret_settings,
+        )
+
 
 def load_settings() -> Settings:
-    """从 config.toml + 环境变量构建配置实例."""
-    return Settings(**_load_toml())
+    """从 config.toml + .env + 环境变量构建配置实例 (env 覆盖 toml)."""
+    return Settings()
 
 
 settings = load_settings()

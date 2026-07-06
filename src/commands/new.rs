@@ -373,6 +373,8 @@ impl NewCommand {
                 enable_proto_gen: params.enable_proto_gen,
                 enable_error_gen: params.enable_error_gen,
                 enable_build: params.enable_build,
+                host: Some(params.host.clone()),
+                port: Some(params.port),
                 gin_options,
                 mcp_backend: params.mcp_backend,
                 auth_mode: params.auth_mode,

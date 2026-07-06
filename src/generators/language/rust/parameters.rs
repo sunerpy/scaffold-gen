@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
+use crate::constants::defaults;
 use crate::generators::core::{BaseParams, InheritableParams};
 
 /// Rust语言级别参数 - 继承自BaseParams
@@ -9,7 +10,7 @@ use crate::generators::core::{BaseParams, InheritableParams};
 pub struct RustParams {
     /// 基础参数
     pub base: BaseParams,
-    /// Rust版本 (如 "1.75")
+    /// Rust版本 (如 "1.88")
     pub rust_version: Option<String>,
     /// Cargo版本
     pub cargo_version: Option<String>,
@@ -22,13 +23,13 @@ pub struct RustParams {
 impl Default for RustParams {
     fn default() -> Self {
         let base = BaseParams {
-            language_version: Some("1.75".to_string()),
+            language_version: Some(defaults::RUST_VERSION.to_string()),
             ..Default::default()
         };
 
         Self {
             base,
-            rust_version: Some("1.75".to_string()),
+            rust_version: Some(defaults::RUST_VERSION.to_string()),
             cargo_version: None,
             enable_proto_gen: false,
             enable_error_gen: false,
@@ -72,7 +73,7 @@ impl RustParams {
 
         Self {
             base,
-            rust_version: Some("1.75".to_string()),
+            rust_version: Some(defaults::RUST_VERSION.to_string()),
             cargo_version: None,
             enable_proto_gen: false,
             enable_error_gen: false,
