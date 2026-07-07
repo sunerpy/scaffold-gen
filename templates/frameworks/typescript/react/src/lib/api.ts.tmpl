@@ -1,13 +1,9 @@
 // API base URL is sourced from .env (import.meta.env.VITE_API_BASE_URL).
 // Edit the value in .env — never hard-code it here.
-export const API_BASE_URL: string =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 // Thin fetch wrapper that prefixes every call with the configured base URL.
-export async function apiFetch(
-  path: string,
-  init?: RequestInit
-): Promise<Response> {
+export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const url = path.startsWith('http')
     ? path
     : `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
