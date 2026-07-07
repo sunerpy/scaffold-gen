@@ -211,8 +211,14 @@ install` post-step; `external.rs` no longer contains Vue3 logic
     project silently misses new files. Fix: `touch build.rs` (or `cargo clean`) to bust the cache
     before rendering/testing newly-added templates.
 13. **`new` echoes equivalent command**: after an interactive run, `equivalent_command()` in
-    `new.rs` prints the matching non-interactive command from `ProjectParams`, including only flags
-    valid for the chosen language/framework. Keep it in sync when adding flags.
+    `new.rs` prints the matching non-interactive command from `ProjectParams`. Principle: every
+    flag that could re-trigger a prompt is emitted **unconditionally**, even when its value equals
+    the default — `--framework none` (pure-language Python/Rust) and `--auth none` (mcp-python) are
+    always printed — so the echoed command reruns with ZERO interaction (`</dev/null`). It still
+    omits flags that are meaningless for the chosen language/framework (`--host`/`--port` only when
+    networked; `--swagger` only Gin; `--proto-gen`/`--error-gen` only Rust; `--auth` only
+    mcp-python). Do NOT gate a prompt-driving flag on `!= default`. Keep it in sync when adding
+    flags.
 14. **`self-update` up-to-date short-circuit**: `self_update` 0.42's pinned-tag path skips its own
     current-vs-target check, so `run_blocking` compares `is_same_version(current, latest)` and exits
     early unless `--force`.
