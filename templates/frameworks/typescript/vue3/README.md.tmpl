@@ -3,6 +3,7 @@
 这是一份由 `scafgen` 生成的现代 Vue 3 前端应用骨架。
 
 ## 技术栈 (Tech Stack)
+
 - **Framework:** Vue 3 (Composition API / `<script setup>`)
 - **Build Tool:** Vite
 - **Language:** TypeScript
@@ -11,22 +12,26 @@
 - **State Management:** Pinia 2
 
 ## 环境要求 (Prerequisites)
+
 - Node.js (>= 18.x)
-- pnpm (>= 8.x) - *推荐使用的包管理器*
+- pnpm (>= 8.x) - _推荐使用的包管理器_
 
 ## 开发流程 (Development)
 
 1. **安装依赖 (Install Dependencies):**
+
    ```bash
    pnpm install
    ```
 
 2. **启动本地开发服务器 (Start Dev Server):**
+
    ```bash
    pnpm dev
    ```
 
 3. **构建生产版本 (Build for Production):**
+
    ```bash
    pnpm build
    ```
@@ -47,19 +52,20 @@ cp .env.example .env
 
 `vite.config.ts` 通过 Vite 的 `loadEnv` 读取以下键来配置开发服务器：
 
-| 键 (Key)                 | 作用 (Purpose)                                                       | 默认值 (Default)         |
-| ------------------------ | -------------------------------------------------------------------- | ------------------------ |
-| `VITE_DEV_HOST`          | 开发服务器监听地址（`0.0.0.0` 对外暴露 / `127.0.0.1` 仅本机）        | `0.0.0.0`                |
-| `VITE_DEV_PORT`          | 开发服务器端口                                                       | `5173`                   |
-| `VITE_DEV_ALLOWED_HOSTS` | 允许访问的 Host 列表（逗号分隔；填 `all` 放行任意 Host）             | `localhost,127.0.0.1`    |
-| `VITE_API_BASE_URL`      | 应用调用的后端 API 地址，注入客户端 `import.meta.env.VITE_API_BASE_URL` | `http://localhost:8000`  |
-| `VITE_DEV_PROXY_TARGET`  | 可选：非空时把 `/api` 反向代理到该地址（绕过 CORS），留空禁用         | （空 / empty）           |
+| 键 (Key)                 | 作用 (Purpose)                                                          | 默认值 (Default)        |
+| ------------------------ | ----------------------------------------------------------------------- | ----------------------- |
+| `VITE_DEV_HOST`          | 开发服务器监听地址（`0.0.0.0` 对外暴露 / `127.0.0.1` 仅本机）           | `0.0.0.0`               |
+| `VITE_DEV_PORT`          | 开发服务器端口                                                          | `5173`                  |
+| `VITE_DEV_ALLOWED_HOSTS` | 允许访问的 Host 列表（逗号分隔；填 `all` 放行任意 Host）                | `localhost,127.0.0.1`   |
+| `VITE_API_BASE_URL`      | 应用调用的后端 API 地址，注入客户端 `import.meta.env.VITE_API_BASE_URL` | `http://localhost:8000` |
+| `VITE_DEV_PROXY_TARGET`  | 可选：非空时把 `/api` 反向代理到该地址（绕过 CORS），留空禁用           | （空 / empty）          |
 
 - `pnpm dev` 会绑定到 `VITE_DEV_HOST:VITE_DEV_PORT`，并按 `VITE_DEV_ALLOWED_HOSTS` 放行。
 - `VITE_API_BASE_URL` 已在 `src/lib/api.ts` 中读取并由 `apiFetch()` 使用，在 `HomeView` 中展示当前值；客户端可见的 `VITE_` 变量类型定义在 `env.d.ts`。
 - `.env.local` / `.env.*.local` 已被 `.gitignore` 忽略（个人覆盖），而 `.env` / `.env.example` 默认跟踪，保证克隆即可运行。
 
 ## 项目结构 (Project Structure)
+
 - `src/views/` - 页面组件。路由的顶层入口。
 - `src/components/` - 可复用的 UI 组件。
 - `src/stores/` - Pinia 状态管理模块。

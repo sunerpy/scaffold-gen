@@ -23,24 +23,20 @@ export default defineConfig(({ mode }) => {
 
   // Optional /api dev proxy: enabled only when VITE_DEV_PROXY_TARGET is non-empty.
   const proxyTarget = env.VITE_DEV_PROXY_TARGET?.trim()
-  const proxy = proxyTarget
-    ? { '/api': { target: proxyTarget, changeOrigin: true } }
-    : undefined
+  const proxy = proxyTarget ? { '/api': { target: proxyTarget, changeOrigin: true } } : undefined
 
   return {
-    plugins: [
-      vue(),
-    ],
+    plugins: [vue()],
     resolve: {
       alias: {
-        '@': fileURLToPath(new URL('./src', import.meta.url))
-      }
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
+      },
     },
     server: {
       host,
       port,
       allowedHosts,
-      proxy
-    }
+      proxy,
+    },
   }
 })
