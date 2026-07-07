@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.3](https://github.com/sunerpy/scaffold-gen/compare/v0.10.2...v0.10.3) (2026-07-07)
+
+
+### Bug Fixes
+
+* **new:** 等价命令无条件输出会触发交互的 flag,保证复跑零交互 ([#34](https://github.com/sunerpy/scaffold-gen/issues/34)) ([3af6a58](https://github.com/sunerpy/scaffold-gen/commit/3af6a58053061f0ba986958c113442f9e1c28f38))
+
 ## [0.10.2](https://github.com/sunerpy/scaffold-gen/compare/v0.10.1...v0.10.2) (2026-07-07)
 
 
