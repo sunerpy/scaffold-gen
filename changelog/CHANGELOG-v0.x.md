@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/sunerpy/scaffold-gen/compare/v0.9.0...v0.10.0) (2026-07-07)
+
+
+### Features
+
+* **react:** 将 React 迁移为内嵌离线生成(镜像 Vue3) ([#27](https://github.com/sunerpy/scaffold-gen/issues/27)) ([48efbfb](https://github.com/sunerpy/scaffold-gen/commit/48efbfb1502ebafc792035b9d339fb7ed77671f7))
+
 ## [0.9.0](https://github.com/sunerpy/scaffold-gen/compare/v0.8.0...v0.9.0) (2026-07-06)
 
 
