@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/sunerpy/scaffold-gen/compare/v0.10.1...v0.10.2) (2026-07-07)
+
+
+### Bug Fixes
+
+* **mcp-python:** 统一 uvicorn 日志到 structlog 并消除 make test 的 authlib 告警 ([#31](https://github.com/sunerpy/scaffold-gen/issues/31)) ([14ebbbe](https://github.com/sunerpy/scaffold-gen/commit/14ebbbe5842b03ac126eb8cd442f72c7e29ed7c5))
+
 ## [0.10.1](https://github.com/sunerpy/scaffold-gen/compare/v0.10.0...v0.10.1) (2026-07-07)
 
 
