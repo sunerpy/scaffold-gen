@@ -19,9 +19,32 @@
 ═══════════════════════════════════════════════════════════════════════════
 """
 
+import contextlib
 import json
+import warnings
 
-import pytest_asyncio
+# 静音第三方 fastmcp 内部触发的 authlib.jose 弃用告警（非项目代码），保持 `make test` 输出干净。
+# pytest 不经过 main.py，且 pyproject.toml 的 filterwarnings 单独不够：authlib.deprecate 在导入时
+# 执行一次性 simplefilter("always", AuthlibDeprecationWarning)，把一条 "always" 过滤器插到过滤器
+# 列表最前，按首个匹配生效会抢在 pyproject 的 "ignore" 之前，导致告警照常打印。因此必须先导入
+# authlib 一次“用掉”这次 simplefilter（模块随后被缓存不再重复），再以精确类别把它静音，最后才
+# `from app.server import mcp`（它会触发 `import fastmcp` → `from authlib.jose import ...`）。
+# official backend 无 authlib，导入失败跳过即可。绝不做全局屏蔽，本项目自身告警仍可见。
+# Silence the third-party authlib.jose deprecation warning fired inside fastmcp (not our code) so
+# `make test` stays clean. pytest bypasses main.py, and pyproject.toml's filterwarnings alone is not
+# enough: importing authlib.deprecate runs a one-shot simplefilter("always",
+# AuthlibDeprecationWarning) that jams an "always" filter to the FRONT of the list, winning
+# first-match over pyproject's "ignore" so the warning still prints. So import authlib once to SPEND
+# that one-shot (the module is then cached), silence it by exact category, THEN
+# `from app.server import mcp` (which triggers `import fastmcp` → `from authlib.jose import ...`).
+# The official backend has no authlib — skip. NEVER a blanket ignore — the app's own warnings show.
+with contextlib.suppress(ImportError):
+    from authlib.deprecate import AuthlibDeprecationWarning
+
+    warnings.filterwarnings("ignore", category=AuthlibDeprecationWarning)
+warnings.filterwarnings("ignore", message=r".*authlib\.jose.*", category=DeprecationWarning)
+
+import pytest_asyncio  # noqa: E402
 
 <%if mcp_backend_is_official-%>
 # ── 后端：official (modelcontextprotocol/python-sdk v1) ──────────────────────
