@@ -1513,3 +1513,119 @@ fn test_with_build_does_not_overwrite_framework_makefile() {
         "Framework Makefile should NOT have docker-build target (it's MCP-specific):\n{framework_makefile}"
     );
 }
+
+#[test]
+fn react_embedded_generation_renders_without_external_tools() {
+    // Given: ReactParams -> 完整模板上下文（镜像 vue3_embedded_generation_renders_without_external_tools）
+    let params = scaffold_gen::generators::framework::react::ReactParams::from_project_name(
+        "test-react-embedded".to_string(),
+    );
+    let context = params.to_template_context();
+
+    let temp_dir = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+
+    // When: 走 live 渲染路径（process_embedded_template_directory），不触发 pnpm/网络
+    processor
+        .process_embedded_template_directory(
+            "frameworks/typescript/react",
+            temp_dir.path(),
+            context,
+        )
+        .expect("render react embedded templates");
+
+    let files = collect_relative_files(temp_dir.path());
+
+    // Then(属性 5): 关键文件齐备
+    for expected in [
+        "package.json",
+        "tsconfig.json",
+        "vite.config.ts",
+        "index.html",
+        "env.d.ts",
+        ".env",
+        ".env.example",
+        ".gitignore",
+        "README.md",
+        "src/main.tsx",
+        "src/App.tsx",
+        "src/router/index.tsx",
+        "src/store/counter.ts",
+        "src/pages/HomePage.tsx",
+        "src/pages/AboutPage.tsx",
+        "src/lib/api.ts",
+    ] {
+        assert!(
+            files.iter().any(|f| f == expected),
+            "expected {expected}, got: {files:?}"
+        );
+    }
+
+    // Then(属性 3): .tmpl 后缀已剥离
+    assert!(
+        !files.iter().any(|f| f.ends_with(".tmpl")),
+        "no .tmpl files should remain, got: {files:?}"
+    );
+
+    // Then(属性 4): project_name 被替换进 package.json 与 README.md
+    let package_json =
+        fs::read_to_string(temp_dir.path().join("package.json")).expect("read package.json");
+    assert!(
+        package_json.contains("\"name\": \"test-react-embedded\""),
+        "package.json must contain substituted project name:\n{package_json}"
+    );
+    let readme = fs::read_to_string(temp_dir.path().join("README.md")).expect("read README.md");
+    assert!(
+        readme.contains("# test-react-embedded"),
+        "README.md must contain substituted project name heading:\n{readme}"
+    );
+
+    // Then(属性 6): .env 驱动契约
+    // vite.config.ts 通过 loadEnv 读取 VITE_DEV_HOST/PORT 并配置 allowedHosts。
+    let vite_config =
+        fs::read_to_string(temp_dir.path().join("vite.config.ts")).expect("read vite.config.ts");
+    for marker in ["loadEnv", "allowedHosts", "VITE_DEV_HOST", "VITE_DEV_PORT"] {
+        assert!(
+            vite_config.contains(marker),
+            "vite.config.ts must reference {marker}:\n{vite_config}"
+        );
+    }
+    // .env 含 dev-server 键 + 客户端 API 地址。
+    let dotenv = fs::read_to_string(temp_dir.path().join(".env")).expect("read .env");
+    for key in [
+        "VITE_DEV_HOST",
+        "VITE_DEV_PORT",
+        "VITE_DEV_ALLOWED_HOSTS",
+        "VITE_API_BASE_URL",
+    ] {
+        assert!(dotenv.contains(key), ".env must contain {key}:\n{dotenv}");
+    }
+    // env.d.ts 为客户端声明 API 地址类型。
+    let env_d_ts = fs::read_to_string(temp_dir.path().join("env.d.ts")).expect("read env.d.ts");
+    assert!(
+        env_d_ts.contains("VITE_API_BASE_URL"),
+        "env.d.ts must type VITE_API_BASE_URL:\n{env_d_ts}"
+    );
+    // API 地址确被使用（非死配置）。
+    let api_lib =
+        fs::read_to_string(temp_dir.path().join("src/lib/api.ts")).expect("read src/lib/api.ts");
+    assert!(
+        api_lib.contains("import.meta.env.VITE_API_BASE_URL"),
+        "src/lib/api.ts must reference import.meta.env.VITE_API_BASE_URL:\n{api_lib}"
+    );
+
+    // Then(属性 2): 无残留自定义分隔符 `<<` / `>>`
+    // React JSX 用 `{...}`（与 minijinja `<<>>` 不冲突），故可像 Vue3 测试那样施加同样严格的断言。
+    for rel in &files {
+        let content = fs::read_to_string(temp_dir.path().join(rel))
+            .unwrap_or_else(|_| panic!("read generated file {rel}"));
+        assert!(
+            !content.contains("<<"),
+            "file {rel} still contains unrendered `<<`"
+        );
+        assert!(
+            !content.contains(">>"),
+            "file {rel} still contains unrendered `>>`"
+        );
+    }
+}

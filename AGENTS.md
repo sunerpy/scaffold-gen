@@ -1,6 +1,6 @@
 # SCAFFOLD-GEN KNOWLEDGE BASE
 
-**Version:** v0.9.0 **Updated:** 2026-07-06 **Branch:** main
+**Version:** v0.9.0 **Updated:** 2026-07-07 **Branch:** main
 
 ## OVERVIEW
 
@@ -35,7 +35,7 @@ scaffold-gen/
 │   │   ├── registry.rs      # FrameworkSpec, GenKind enum, resolve(), all_specs()
 │   │   ├── orchestrator.rs  # GeneratorOrchestrator, GenerationRequest, generate() pipeline,
 │   │   │                    #   render_build_tooling(), build_tooling_context() — ~665 LOC
-│   │   ├── external.rs      # ExternalAsync path: Tauri / React (Vue3 moved to embedded)
+│   │   ├── external.rs      # ExternalAsync path: Tauri only (Vue3/React now embedded)
 │   │   ├── gin_options.rs   # GinProjectOptions struct + builders
 │   │   ├── mcp_auth_context.rs # McpPythonAuthContext auth template keys
 │   │   ├── core/            # Generator/ProjectGenerator traits, BaseParams, TemplateProcessor,
@@ -62,7 +62,7 @@ scaffold-gen/
 │       ├── SKILL.md         # Embedded agent skill (include_str! into src/skill/embed.rs)
 │       └── evals/evals.json # Eval test prompts (skill-creator loop artifact)
 ├── tests/
-│   └── generation.rs        # Integration tests (public API, 18 tests)
+│   └── generation.rs        # Integration tests (public API, 19 tests)
 ├── Makefile                 # Primary task runner
 └── Cargo.toml               # Edition 2024, binary: scafgen, version: 0.9.0
 ```
@@ -94,7 +94,7 @@ GenKind dispatch (`registry.rs` REGISTRY):
 | None            | Rust       | EmbeddedAsync | cargo init + proto/error-gen opts                                              |
 | Tauri           | Rust       | ExternalAsync | pnpm create-tauri-app shell-out                                                |
 | Vue3            | TypeScript | EmbeddedAsync | Full Vite+Vue3+TS+Tailwind, .env-driven                                        |
-| React           | TypeScript | ExternalAsync | pnpm create vite shell-out                                                     |
+| React           | TypeScript | EmbeddedAsync | Full Vite+React+TS+Tailwind, .env-driven                                       |
 
 Go/TypeScript + `Framework::None` → no pure-language path (error: "language requires a framework").
 
@@ -115,7 +115,7 @@ Go/TypeScript + `Framework::None` → no pure-language path (error: "language re
 | Generation pipeline order  | `src/generators/orchestrator.rs`              | `generate()` → kind dispatch → `render_build_tooling`  |
 | `--with-build` step        | `orchestrator.rs::render_build_tooling`       | Runs after framework/language; `Language::build_dir()` |
 | Build template content     | `templates/build/<lang>/`                     | Makefile.tmpl + Dockerfile.tmpl per language           |
-| External shell-out logic   | `src/generators/external.rs`                  | Tauri / React only (Vue3 is now embedded)              |
+| External shell-out logic   | `src/generators/external.rs`                  | Tauri only; React logic removed (now embedded)         |
 | Manage agent skill install | `src/skill/` + `src/commands/skill.rs`        | Embedded `skills/scaffold-gen/SKILL.md`; hash update   |
 | Output verbosity / logging | `src/logging.rs`                              | Verbosity enum, tracing init                           |
 | Framework-language mapping | `constants.rs::frameworks_for_language()`     | Single source of truth for the `list` command          |
@@ -188,7 +188,7 @@ All tracing/diagnostics → **stderr**.
    confirmation
 4. **Go-Zero unimplemented**: `Framework::GoZero` resolves to `GenKind::Unimplemented` — returns a
    clear error; no generator struct exists; enum variant kept for CLI discoverability
-5. **Tests: 219 total**: 67 lib + 134 bin inline + 18 integration in `tests/generation.rs`; `make
+5. **Tests: 220 total**: 67 lib + 134 bin inline + 19 integration in `tests/generation.rs`; `make
 test` covers all
 6. **Vue3 is EmbeddedAsync**: moved from ExternalAsync — full offline scaffold, optional `pnpm
 install` post-step; `external.rs` no longer contains Vue3 logic
@@ -234,6 +234,10 @@ install` post-step; `external.rs` no longer contains Vue3 logic
     generated `.pre-commit-config.yaml` `rev:` values are valid git refs.
 21. **Version defaults centralized**: `constants::defaults` owns `UV_VERSION`, `RUFF_VERSION`,
     `PYTHON_MIN_VERSION`, and `RUST_VERSION`; avoid scattered hardcoded version fallbacks.
+22. **React is EmbeddedAsync**: migrated from ExternalAsync — full offline scaffold
+    (Vite+React+TS+Tailwind v3, react-router + zustand, .env-driven), optional `pnpm install`
+    post-step; `external.rs` no longer contains React logic; `framework/react/` keeps only
+    `mod.rs` + `parameters.rs` (no generator)
 
 ## COMMANDS
 
@@ -247,7 +251,7 @@ make release-upx    # Release + UPX compression
 make fmt            # Format code (rustfmt + oxfmt for YAML/JSON/Markdown)
 make fmt-check      # Check formatting (CI gate — also checks AGENTS.md now)
 make lint           # Clippy with -D warnings
-make test           # cargo test (67 lib + 134 bin + 18 integration)
+make test           # cargo test (67 lib + 134 bin + 19 integration)
 make ci             # fmt-check + lint + test
 
 # Cross-compile

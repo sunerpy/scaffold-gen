@@ -44,9 +44,10 @@
 | Rust       | CLI App    | ✅                          |
 | Rust       | Tauri      | ✅                          |
 | TypeScript | Vue 3      | ✅（离线内嵌脚手架）        |
-| TypeScript | React      | ✅                          |
+| TypeScript | React      | ✅（离线内嵌脚手架）        |
 | Python     | Basic      | ✅                          |
 | Python     | FastAPI    | ✅（配置驱动 API）          |
+| Python     | MCP Server | ✅（FastMCP / 官方 SDK）    |
 
 ## 安装
 
@@ -99,6 +100,8 @@ scafgen new my-vue-app    --framework vue3
 scafgen new my-react-app  --framework react
 scafgen new my-api        --framework fastapi --language python
 scafgen new my-mcp        --framework mcp-server --language go
+scafgen new my-mcp-py     --framework mcp-python --language python
+scafgen new my-mcp-py     --framework mcp-python --language python --mcp-backend official
 
 # 同时生成 Makefile + Dockerfile（本地构建 / 容器化）
 scafgen new my-gin-app --framework gin --with-build
@@ -128,7 +131,7 @@ scafgen -v new my-project   # 详细：显示调试输出
 - `scafgen new --help` —— 查看可用 flag 和框架。
 - `scafgen --version` —— 打印版本。
 
-支持的框架：`gin`、`go-zero`、`mcp-server`、`tauri`、`vue3`、`react`、`fastapi`。
+支持的框架：`gin`、`go-zero`、`mcp-server`、`tauri`、`vue3`、`react`、`fastapi`、`mcp-python`。
 
 诊断信息和错误输出到 stderr；失败时以非零退出码退出。
 

@@ -1,14 +1,13 @@
-//! 外部脚手架生成路径（Tauri / Vue3 / React）—— 会 shell 到 pnpm / create-tauri-app。
+//! 外部脚手架生成路径（Tauri）—— 会 shell 到 create-tauri-app / pnpm。
 //!
 //! 从 `orchestrator.rs` 拆出：这些方法都属于 `GeneratorOrchestrator`，
 //! 通过 `generate_external` 按框架分派进来。`print_external_completion`
-//! 是三者共享的完成提示尾段。
+//! 是完成提示尾段（Tauri 使用）。
 
 use anyhow::{Context, Result};
 use std::path::Path;
 
 use crate::generators::core::Generator;
-use crate::generators::framework::react::{ReactGenerator, ReactParams};
 use crate::generators::framework::tauri::{TauriGenerator, TauriParams};
 use crate::generators::orchestrator::{GenerationRequest, GeneratorOrchestrator};
 use crate::generators::project::ProjectParams;
@@ -87,73 +86,9 @@ impl GeneratorOrchestrator {
 
         Ok(())
     }
-
-    /// 生成完整的React项目
-    pub(super) async fn generate_react_project(
-        &mut self,
-        request: &GenerationRequest<'_>,
-    ) -> Result<()> {
-        let project_name = &request.project_name;
-        let output_path = request.output_path;
-        let enable_precommit = request.enable_precommit;
-
-        tracing::info!("Starting React project generation: {project_name}");
-
-        // 1. 环境预检查
-        tracing::debug!("🔍 Checking environment prerequisites...");
-
-        // 检查 pnpm
-        if !ReactGenerator::check_pnpm()? {
-            return Err(anyhow::anyhow!(
-                "pnpm is not installed. Please install pnpm first:\n  npm install -g pnpm\n  or visit: https://pnpm.io/installation"
-            ));
-        }
-        tracing::debug!("  ✅ pnpm: Available");
-
-        // 2. 删除已存在的目录（如果存在）
-        if output_path.exists() {
-            std::fs::remove_dir_all(output_path).context("Failed to remove existing directory")?;
-        }
-
-        // 3. 使用 pnpm create vite 创建项目
-        ReactGenerator::create_react_project(project_name, output_path)?;
-
-        // 4. 安装前端依赖
-        ReactGenerator::install_dependencies(output_path)?;
-
-        // 5. 安装 Tailwind CSS
-        ReactGenerator::install_tailwind(output_path)?;
-
-        // 6. 安装 React Router
-        ReactGenerator::install_router(output_path)?;
-
-        // 7. 安装状态管理库 (默认使用 zustand)
-        ReactGenerator::install_state_management(output_path, "zustand")?;
-
-        // 8. 创建项目参数
-        let project_params = ProjectParams::new(project_name.clone())
-            .with_license(request.license.clone())
-            .with_git(true)
-            .with_precommit(enable_precommit)
-            .with_description(request.spec.description(project_name));
-
-        // 9. 创建 React 参数
-        let _react_params = ReactParams::from_project_name(project_name.clone())
-            .with_project(project_params.clone())
-            .with_precommit(enable_precommit);
-
-        // 10. 项目级别生成 - 生成 LICENSE 等
-        self.project_generator
-            .generate(project_params, output_path)
-            .context("Failed to generate project files")?;
-
-        print_external_completion("React", output_path, project_name, request.spec.next_steps);
-
-        Ok(())
-    }
 }
 
-/// 外部脚手架框架的完成提示 —— 取代 Tauri/Vue3/React 各自复制的 4 行尾段。
+/// 外部脚手架框架的完成提示 —— Tauri 生成结束后打印的 4 行尾段。
 fn print_external_completion(
     label: &str,
     output_path: &Path,

@@ -8,9 +8,9 @@ use crate::constants::{Framework, Language};
 pub enum GenKind {
     /// 同步生成（Gin）：通过 `GinProjectOptions` 读取 host/port/swagger/precommit/license。
     GinSync,
-    /// 异步、纯语言的内嵌模板生成（Python / 纯 Rust）。
+    /// 异步、内嵌模板生成（Python / 纯 Rust / Go McpServer / Vue3 / React）。
     EmbeddedAsync,
-    /// 异步、外部脚手架生成（Tauri / Vue3 / React，会 shell 到 pnpm/create-tauri-app）。
+    /// 异步、外部脚手架生成（Tauri，会 shell 到 create-tauri-app）。
     ExternalAsync,
     /// 尚未实现（GoZero）。
     Unimplemented,
@@ -131,7 +131,7 @@ const REGISTRY: &[FrameworkSpec] = &[
     FrameworkSpec {
         framework: Framework::React,
         language: Language::TypeScript,
-        kind: GenKind::ExternalAsync,
+        kind: GenKind::EmbeddedAsync,
         description_template: "A React frontend application: {name}",
         accepts_proto_error_gen: false,
         next_steps: &[

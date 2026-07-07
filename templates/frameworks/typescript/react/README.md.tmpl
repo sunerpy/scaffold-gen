@@ -1,92 +1,102 @@
 # <<project_name>>
 
-一个基于 **React + TypeScript + Vite** 的前端应用，由
-[scaffold-gen](https://github.com/sunerpy/scaffold-gen) 生成。
+一份由 `scafgen`（[scaffold-gen](https://github.com/sunerpy/scaffold-gen)）生成的现代 **React + TypeScript + Vite** 前端应用骨架。
 
----
+> 本项目由 scaffold-gen **内嵌模板离线生成**：不联网、不依赖 `pnpm create vite` 等外部脚手架，结果字节级可复现。生成时若检测到 `pnpm` 会自动执行一次 `pnpm install`；未检测到 `pnpm` 则会提示你手动安装，产物依旧完整可用。
 
-## 必要说明 (What is this)
+## 技术栈 (Tech Stack)
 
-这是一个 React 前端脚手架，通过 `pnpm create vite` 生成基础结构，在此之上集成了
-Tailwind CSS、React Router 以及 Zustand 状态管理。
-
-```
-<<project_name>>/
-├── src/
-│   ├── main.tsx           # 应用入口
-│   ├── App.tsx            # 根组件
-│   ├── components/        # ★ 组件目录
-│   ├── pages/             # ★ 页面目录
-│   ├── store/             # ★ 状态管理（Zustand）
-│   └── router/            # ★ 路由配置（React Router）
-├── public/                # 静态资源
-├── package.json           # 依赖（pnpm 管理）
-├── vite.config.ts         # Vite 配置
-├── tailwind.config.ts     # Tailwind CSS 配置
-└── tsconfig.json          # TypeScript 配置
-```
-
----
+- **Framework:** React 18 (Function Components + Hooks)
+- **Build Tool:** Vite 5
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS (v3, `darkMode: 'class'`)
+- **Routing:** React Router 6 (`createBrowserRouter`)
+- **State Management:** Zustand
 
 ## 必要工具 (Requirements)
 
 - **Node.js 18+**
 - **pnpm**（安装：`npm install -g pnpm`，或参见 https://pnpm.io/installation）
 
----
-
 ## 使用方法 (Usage)
 
 ```bash
-# 1. 安装依赖
+# 1. 安装依赖（生成时若检测到 pnpm 已自动执行；无 pnpm 时请手动运行）
 pnpm install
 
 # 2. 启动开发服务器（热重载）
 pnpm dev
 
-# 3. 生产构建
+# 3. 生产构建（输出到 dist/）
 pnpm build
 
 # 4. 预览生产构建
 pnpm preview
 ```
 
----
+## .env 驱动配置 (Configuration)
 
-## 开发流程 (Development)
-
-### 新增页面
-
-1. 在 `src/pages/` 下创建新页面组件（如 `AboutPage.tsx`）。
-2. 在 `src/router/` 里注册路由。
-
-### 新增状态
-
-在 `src/store/` 下用 Zustand 创建新的 store：
-
-```tsx
-import { create } from 'zustand'
-
-interface CountStore {
-  count: number
-  increment: () => void
-}
-
-export const useCountStore = create<CountStore>((set) => ({
-  count: 0,
-  increment: () => set((s) => ({ count: s.count + 1 })),
-}))
-```
-
-### 常用命令
+开发服务器与 API 地址全部由 `.env` 驱动，**改配置不用改代码**。脚手架已自带一份可直接运行的 `.env`（安全的 localhost 默认值），另有带注释的 `.env.example` 作为参考：
 
 ```bash
-pnpm lint       # ESLint 检查
-pnpm type-check # TypeScript 类型检查
-pnpm build      # 生产构建（输出到 dist/）
+# 直接编辑 .env，或从示例复制一份
+cp .env.example .env
 ```
 
----
+`vite.config.ts` 通过 Vite 的 `loadEnv` 读取以下键来配置开发服务器：
+
+| 键 (Key)                 | 作用 (Purpose)                                                         | 默认值 (Default)        |
+| ------------------------ | ---------------------------------------------------------------------- | ----------------------- |
+| `VITE_DEV_HOST`          | 开发服务器监听地址（`0.0.0.0` 对外暴露 / `127.0.0.1` 仅本机）           | `0.0.0.0`               |
+| `VITE_DEV_PORT`          | 开发服务器端口                                                         | `5173`                  |
+| `VITE_DEV_ALLOWED_HOSTS` | 允许访问的 Host 列表（逗号分隔；填 `all` 放行任意 Host）                | `localhost,127.0.0.1`   |
+| `VITE_API_BASE_URL`      | 应用调用的后端 API 地址，注入客户端 `import.meta.env.VITE_API_BASE_URL` | `http://localhost:8000` |
+| `VITE_DEV_PROXY_TARGET`  | 可选：非空时把 `/api` 反向代理到该地址（绕过 CORS），留空禁用           | （空 / empty）          |
+
+- `pnpm dev` 会绑定到 `VITE_DEV_HOST:VITE_DEV_PORT`，并按 `VITE_DEV_ALLOWED_HOSTS` 放行；`VITE_DEV_ALLOWED_HOSTS=all` 放行任意 Host。
+- `VITE_API_BASE_URL` 已在 `src/lib/api.ts` 中读取并由 `apiFetch()` 使用，`HomePage` 会展示当前值；客户端可见的 `VITE_` 变量类型定义在 `env.d.ts`。
+- `.env.local` / `.env.*.local` 已被 `.gitignore` 忽略（个人覆盖），而 `.env` / `.env.example` 默认跟踪，保证克隆即可运行。
+
+## 项目结构 (Project Structure)
+
+下面的结构与脚手架实际生成的产物一致：
+
+```
+<<project_name>>/
+├── index.html              # HTML 入口（挂载点 + 加载 /src/main.tsx）
+├── package.json            # 依赖与脚本（pnpm 管理，版本已锁定）
+├── vite.config.ts          # Vite 配置（读取 .env：host/port/allowedHosts/proxy）
+├── tailwind.config.ts      # Tailwind CSS v3 配置（darkMode: 'class'）
+├── postcss.config.js       # PostCSS（tailwindcss + autoprefixer）
+├── tsconfig.json           # TypeScript 配置（应用）
+├── tsconfig.node.json      # TypeScript 配置（vite.config 用）
+├── env.d.ts                # Vite 客户端环境变量类型声明（VITE_API_BASE_URL）
+├── .env                    # 本地开发配置（可直接运行，被 git 跟踪）
+├── .env.example            # 配置示例（带注释的参考版）
+├── .gitignore              # 忽略 .env.local / .env.*.local、node_modules、dist 等
+└── src/
+    ├── main.tsx            # 应用入口（createRoot + RouterProvider）
+    ├── App.tsx             # 根布局组件（导航 + <Outlet /> + 暗色切换）
+    ├── router/
+    │   └── index.tsx       # 路由配置（createBrowserRouter，React Router）
+    ├── store/
+    │   └── counter.ts      # 状态管理（Zustand，单数目录）
+    ├── pages/
+    │   ├── HomePage.tsx    # 首页（展示 API_BASE_URL + counter）
+    │   └── AboutPage.tsx   # 关于页
+    ├── lib/
+    │   └── api.ts          # API 封装（读取 import.meta.env.VITE_API_BASE_URL）
+    ├── hooks/
+    │   └── useDarkMode.ts  # 暗色模式 Hook（切换 documentElement 的 .dark 类）
+    ├── components/
+    │   └── Skeleton.tsx    # 骨架屏组件（依赖 utils/cn）
+    ├── styles/
+    │   └── index.css       # 全局样式（Tailwind 指令 + .dark 变体 + primary 色）
+    └── utils/
+        └── cn.ts           # className 合并工具（clsx + tailwind-merge）
+```
+
+> React 命名约定：使用 `src/hooks/`（非 `composables/`）、`src/store/`（单数）、`src/pages/`（非 `views/`）、`src/styles/index.css`（非 `main.css`）。
 
 ## 构建与容器化 (Makefile + Docker)
 
@@ -127,9 +137,3 @@ codegraph install   # 安装并自动接入 opencode / Claude / Kiro / Cursor �
 ```
 
 重启编辑器 / Agent 工具后即自动接入 MCP，Agent 会自动调用 CodeGraph 检索，并在文件变更时自动增量同步（无需手动 sync/explore）。
-
----
-
-## License
-
-<<license>>
