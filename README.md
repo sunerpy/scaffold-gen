@@ -45,7 +45,7 @@ defaults, a LICENSE, and an initialized git repo.
 | Rust       | CLI App    | ✅                             |
 | Rust       | Tauri      | ✅                             |
 | TypeScript | Vue 3      | ✅ (offline embedded scaffold) |
-| TypeScript | React      | ✅                             |
+| TypeScript | React      | ✅ (offline embedded scaffold) |
 | Python     | Basic      | ✅                             |
 | Python     | FastAPI    | ✅ (config-driven API)         |
 | Python     | MCP Server | ✅ (FastMCP / official SDK)    |

@@ -12,7 +12,7 @@ generators/
 ├── registry.rs          # FrameworkSpec + GenKind enum + resolve() + all_specs()
 ├── orchestrator.rs      # GeneratorOrchestrator + GenerationRequest + generate() pipeline
 │                        #   + render_build_tooling() + build_tooling_context() — ~665 LOC
-├── external.rs          # ExternalAsync path: Tauri / React (pub(super) impl block)
+├── external.rs          # ExternalAsync path: Tauri only (pub(super) impl block)
 ├── gin_options.rs       # GinProjectOptions struct + builders
 ├── core/
 │   ├── generator.rs     # Generator trait + ProjectGenerator trait
@@ -37,8 +37,8 @@ new.rs::generate_project()
        └─ orchestrator.generate(GenerationRequest { spec, ... }).await
             └─ match spec.kind
                  GinSync       -> generate_gin_project()     (sync, reads GinProjectOptions)
-                 EmbeddedAsync -> generate_embedded()        (Python/Rust/Vue3/McpServer)
-                 ExternalAsync -> generate_external()        (Tauri / React pnpm shell-out)
+                 EmbeddedAsync -> generate_embedded()        (Python/Rust/Vue3/React/McpServer)
+                 ExternalAsync -> generate_external()        (Tauri create-tauri-app shell-out)
                  Unimplemented -> Err("GoZero 项目生成尚未实现")
             └─ if enable_build: render_build_tooling()       (--with-build post-step)
 ```
@@ -52,8 +52,8 @@ new.rs::generate_project()
 | ------------- | --------------------------------------------------- | ---------------------------------------------------- |
 | GinSync       | Gin                                                 | Sync; reads `GinProjectOptions` for all options      |
 | EmbeddedAsync | McpServer, FastApi, McpServerPython, None(Py/Rust), | Fully offline; templates embedded in binary          |
-|               | Vue3                                                | Vue3: optional `pnpm install` post-step              |
-| ExternalAsync | Tauri, React                                        | Shell-out to pnpm/create-tauri-app; in `external.rs` |
+|               | Vue3, React                                         | Vue3/React: optional `pnpm install` post-step        |
+| ExternalAsync | Tauri                                               | Shell-out to create-tauri-app; in `external.rs`      |
 | Unimplemented | GoZero                                              | Returns error; enum variant kept for discoverability |
 
 ## EXECUTION ORDER (EmbeddedAsync)
@@ -62,8 +62,8 @@ new.rs::generate_project()
 2. **Project** — LICENSE, `.gitignore`, `git init`, pre-commit (`run_project_step`)
 3. **Build tooling** — if `enable_build`: `render_build_tooling` renders `templates/build/<lang>/`
 
-External frameworks (Tauri/React) handle their own sequence inside `generate_tauri/react_project`
-in `external.rs`, then call `run_project_step` for the project tail.
+The external framework (Tauri) handles its own sequence inside `generate_tauri_project`
+in `external.rs`, then calls `run_project_step` for the project tail.
 
 GinSync has its own full sequence in `generate_gin_project`: framework → go mod → project →
 `gin_generator.post_process` (swag init, go mod tidy).
@@ -83,22 +83,22 @@ GinSync has its own full sequence in `generate_gin_project`: framework → go mo
 
 ## WHERE TO LOOK
 
-| Task                       | Location                                     | Notes                                          |
-| -------------------------- | -------------------------------------------- | ---------------------------------------------- |
-| Add/remove a framework     | `constants.rs` enum + `registry.rs` REGISTRY | See "Adding a framework" below                 |
-| Change dispatch strategy   | `registry.rs` `GenKind` + orchestrator       |                                                |
-| Add CLI flag to `new`      | `src/main.rs` + `src/commands/new.rs`        | Prompts in `prompts.rs`                        |
-| Modify template rendering  | `src/template_engine.rs`                     | minijinja custom `<<>>` delimiters             |
-| Add template helper/filter | `src/template_engine.rs`                     | `register_helper()` / `register_filter()`      |
-| Check tool availability    | `src/utils/toolchain.rs`                     | `tool_available()` for PATH probes             |
-| Adjust embedded generation | `orchestrator.rs::generate_embedded`         | Branch by language/framework                   |
-| External shell-out logic   | `external.rs`                                | Tauri / React pnpm bodies only (Vue3 NOT here) |
-| Gin-specific options       | `gin_options.rs`                             | `GinProjectOptions` struct                     |
-| Template context keys      | `core/context.rs`                            | `build_base_context()` — 31 keys + aliases     |
-| Prompts / interactive flow | `src/commands/prompts.rs`                    | All `inquire` Select/Text/Confirm calls        |
-| Environment pre-check      | `src/commands/env_check.rs`                  | Per-language Git/Go/uv/Cargo/Node/pnpm probes  |
-| `--with-build` rendering   | `orchestrator.rs::render_build_tooling`      | `Language::build_dir()` → `build/<lang>/`      |
-| Build template content     | `templates/build/<lang>/`                    | Makefile.tmpl + Dockerfile.tmpl per language   |
+| Task                       | Location                                     | Notes                                         |
+| -------------------------- | -------------------------------------------- | --------------------------------------------- |
+| Add/remove a framework     | `constants.rs` enum + `registry.rs` REGISTRY | See "Adding a framework" below                |
+| Change dispatch strategy   | `registry.rs` `GenKind` + orchestrator       |                                               |
+| Add CLI flag to `new`      | `src/main.rs` + `src/commands/new.rs`        | Prompts in `prompts.rs`                       |
+| Modify template rendering  | `src/template_engine.rs`                     | minijinja custom `<<>>` delimiters            |
+| Add template helper/filter | `src/template_engine.rs`                     | `register_helper()` / `register_filter()`     |
+| Check tool availability    | `src/utils/toolchain.rs`                     | `tool_available()` for PATH probes            |
+| Adjust embedded generation | `orchestrator.rs::generate_embedded`         | Branch by language/framework                  |
+| External shell-out logic   | `external.rs`                                | Tauri body only (Vue3/React now embedded)     |
+| Gin-specific options       | `gin_options.rs`                             | `GinProjectOptions` struct                    |
+| Template context keys      | `core/context.rs`                            | `build_base_context()` — 31 keys + aliases    |
+| Prompts / interactive flow | `src/commands/prompts.rs`                    | All `inquire` Select/Text/Confirm calls       |
+| Environment pre-check      | `src/commands/env_check.rs`                  | Per-language Git/Go/uv/Cargo/Node/pnpm probes |
+| `--with-build` rendering   | `orchestrator.rs::render_build_tooling`      | `Language::build_dir()` → `build/<lang>/`     |
+| Build template content     | `templates/build/<lang>/`                    | Makefile.tmpl + Dockerfile.tmpl per language  |
 
 ## TRAIT HIERARCHY (current)
 
@@ -176,7 +176,9 @@ Framework params embed:
 
 ## CONVENTIONS
 
-- Each generator module: `mod.rs` + `generator.rs` + `parameters.rs`
+- Each generator module: `mod.rs` + `generator.rs` + `parameters.rs` — except pure-template
+  frameworks (vue3/react), which omit `generator.rs` and render via
+  `orchestrator::generate_<fw>_embedded` + `TemplateProcessor`
 - Async for generators that call external tools; sync for pure-template generators
 - `post_process()` for shell commands after file generation (Gin only currently)
 - `format!("{var}")` NOT `format!("{}", var)` — project-wide rule
@@ -212,6 +214,16 @@ Vue3 is `GenKind::EmbeddedAsync` (moved from ExternalAsync). `generate_vue3_embe
 if pnpm is on PATH (non-fatal warn on failure). Generated project is `.env`-driven via Vite's
 `loadEnv`: `VITE_DEV_HOST`, `VITE_DEV_PORT`, `VITE_DEV_ALLOWED_HOSTS`, `VITE_API_BASE_URL`,
 `VITE_DEV_PROXY_TARGET`. `external.rs` contains NO Vue3 logic.
+
+## REACT — EMBEDDED (.ENV-DRIVEN)
+
+React is `GenKind::EmbeddedAsync` (migrated from ExternalAsync). `generate_react_embedded` in
+`orchestrator.rs` renders `templates/frameworks/typescript/react/`, then attempts `pnpm install`
+if pnpm is on PATH (non-fatal warn on failure). Generated project is `.env`-driven via Vite's
+`loadEnv`: `VITE_DEV_HOST`, `VITE_DEV_PORT`, `VITE_DEV_ALLOWED_HOSTS`, `VITE_API_BASE_URL`,
+`VITE_DEV_PROXY_TARGET`. Stack: React 18 + Vite 5 + Tailwind v3 + react-router + zustand.
+`external.rs` contains NO React logic; `framework/react/` keeps only `mod.rs` + `parameters.rs`
+(no generator — symmetric with Vue3).
 
 ## MCP SERVER SCAFFOLD (GO)
 

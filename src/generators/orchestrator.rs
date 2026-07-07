@@ -377,6 +377,10 @@ impl GeneratorOrchestrator {
                 self.generate_vue3_embedded(project_name.clone(), output_path)
                     .await?;
             }
+            Language::TypeScript if request.spec.framework == Framework::React => {
+                self.generate_react_embedded(project_name.clone(), output_path)
+                    .await?;
+            }
             Language::Go if request.spec.framework == Framework::McpServer => {
                 self.generate_mcp_server_embedded(
                     project_name.clone(),
@@ -411,11 +415,10 @@ impl GeneratorOrchestrator {
         Ok(())
     }
 
-    /// 异步外部脚手架生成（Tauri / Vue3 / React）。
+    /// 异步外部脚手架生成（Tauri）。
     async fn generate_external(&mut self, request: &GenerationRequest<'_>) -> Result<()> {
         match request.spec.framework {
             Framework::Tauri => self.generate_tauri_project(request).await,
-            Framework::React => self.generate_react_project(request).await,
             _ => Err(anyhow::anyhow!(
                 "Framework {:?} is not an external scaffolder",
                 request.spec.framework
@@ -680,6 +683,55 @@ impl GeneratorOrchestrator {
             .context("Failed to generate Vue3 files")?;
 
         tracing::info!("Vue3 structure generated");
+
+        if crate::utils::toolchain::tool_available("pnpm") {
+            tracing::info!("📦 Installing frontend dependencies...");
+            let outcome = crate::utils::toolchain::ExternalCommand::new("pnpm")
+                .arg("install")
+                .current_dir(output_path)
+                .run()
+                .context("Failed to execute pnpm install")?;
+
+            if outcome.success() {
+                tracing::info!("✅ Dependencies installed successfully");
+            } else {
+                tracing::warn!("⚠️ Warning: pnpm install failed: {}", outcome.stderr());
+            }
+        } else {
+            tracing::warn!(
+                "⚠️ Warning: pnpm is not installed. Please run `pnpm install` manually in the project directory."
+            );
+        }
+
+        Ok(())
+    }
+
+    async fn generate_react_embedded(
+        &mut self,
+        project_name: String,
+        output_path: &Path,
+    ) -> Result<()> {
+        tracing::info!("Starting React project generation: {project_name}");
+
+        let react_params = crate::generators::framework::react::ReactParams::from_project_name(
+            project_name.clone(),
+        );
+
+        let template_path = "frameworks/typescript/react";
+        if !crate::template_engine::embedded_template_dir_exists(template_path) {
+            return Err(anyhow::anyhow!(
+                "React embedded templates not found at: {template_path}"
+            ));
+        }
+
+        let context = react_params.to_template_context();
+        let mut template_processor = TemplateProcessor::new()?;
+
+        template_processor
+            .process_embedded_template_directory(template_path, output_path, context)
+            .context("Failed to generate React files")?;
+
+        tracing::info!("React structure generated");
 
         if crate::utils::toolchain::tool_available("pnpm") {
             tracing::info!("📦 Installing frontend dependencies...");

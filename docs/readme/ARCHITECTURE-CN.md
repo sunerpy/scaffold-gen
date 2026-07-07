@@ -47,10 +47,14 @@ scaffold-gen 采用三层生成器架构与分层模板系统。本文档详细�
 生成框架特定的代码结构：
 
 - **GinGenerator** — Gin web 框架项目结构
-- **GoZeroGenerator** — Go-Zero 微服务框架结构
 - **TauriGenerator** — Tauri 桌面应用结构
-- **Vue3Generator** — Vue 3 前端项目结构
-- **ReactGenerator** — React 前端项目结构
+
+Vue 3 与 React 为内嵌模板框架（`GenKind::EmbeddedAsync`），无独立 generator 结构，
+由 `orchestrator::generate_vue3_embedded` / `generate_react_embedded` 离线渲染
+`templates/frameworks/typescript/{vue3,react}/`。
+
+Go-Zero 对应 `GenKind::Unimplemented`，仅保留枚举变体以便 CLI 报出清晰错误，
+无独立 generator 结构。
 
 生成顺序为 Framework → Language → Project，由
 [`src/generators/orchestrator.rs`](../../src/generators/orchestrator.rs) 中的编排器协调。

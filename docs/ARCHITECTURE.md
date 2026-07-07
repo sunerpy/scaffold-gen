@@ -48,10 +48,15 @@ Sets up the language-specific environment:
 Generates framework-specific code structure:
 
 - **GinGenerator** — Gin web framework project structure
-- **GoZeroGenerator** — Go-Zero microservice framework structure
 - **TauriGenerator** — Tauri desktop application structure
-- **Vue3Generator** — Vue 3 frontend project structure
-- **ReactGenerator** — React frontend project structure
+
+Vue 3 and React are embedded-template frameworks (`GenKind::EmbeddedAsync`) with no
+dedicated generator struct; they are rendered offline by
+`orchestrator::generate_vue3_embedded` / `generate_react_embedded` from
+`templates/frameworks/typescript/{vue3,react}/`.
+
+Go-Zero resolves to `GenKind::Unimplemented`; the enum variant is kept only so the
+CLI can emit a clear error, and it has no generator struct.
 
 The generation order is Framework → Language → Project, coordinated by the
 orchestrator in [`src/generators/orchestrator.rs`](../src/generators/orchestrator.rs).
