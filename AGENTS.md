@@ -238,6 +238,13 @@ install` post-step; `external.rs` no longer contains Vue3 logic
     (Vite+React+TS+Tailwind v3, react-router + zustand, .env-driven), optional `pnpm install`
     post-step; `external.rs` no longer contains React logic; `framework/react/` keeps only
     `mod.rs` + `parameters.rs` (no generator)
+23. **mcp-python auth mode**: `McpServerPython` also takes `--auth none|jwt|azure-ad` (`AuthMode`
+    in `generators/auth_options.rs`, default `none`). `none` renders ZERO auth code (byte-identical
+    to no-auth). `jwt` = unified JWT/JWKS resource-server validation (ADFS/Entra/Okta/OIDC);
+    `azure-ad` = turnkey Entra preset (tenant-derived JWKS/issuer, dual v1+v2 issuer, JWKS warm-up).
+    `McpPythonAuthContext` (`mcp_auth_context.rs`) injects 5 keys after `to_template_context()`:
+    `mcp_backend`, `mcp_backend_is_official`, `auth_mode`, `auth_enabled`, `auth_is_azure_ad`.
+    The generated `whoami` tool returns identity from the verified token only (never a caller arg).
 
 ## COMMANDS
 
