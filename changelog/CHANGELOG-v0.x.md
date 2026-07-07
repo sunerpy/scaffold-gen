@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/sunerpy/scaffold-gen/compare/v0.10.0...v0.10.1) (2026-07-07)
+
+
+### Bug Fixes
+
+* **frontend:** 补齐 React/Vue3 模板的 eslint + prettier 依赖与配置 ([#29](https://github.com/sunerpy/scaffold-gen/issues/29)) ([9c9b24e](https://github.com/sunerpy/scaffold-gen/commit/9c9b24e9fa198f37d752c1b8aa6d1795a7b2a086))
+
 ## [0.10.0](https://github.com/sunerpy/scaffold-gen/compare/v0.9.0...v0.10.0) (2026-07-07)
 
 
