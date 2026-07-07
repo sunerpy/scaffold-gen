@@ -234,12 +234,15 @@ impl NewCommand {
 
     /// 根据交互式流程解析出的 `ProjectParams` 构造等价的非交互命令行。
     ///
-    /// 仅输出对所选语言/框架有意义的 flag（镜像 `configure_*` 的同款条件）：
-    /// - `--framework` 在 `None`（纯语言路径）时省略；
-    /// - `--host`/`--port` 仅在需要网络的组合（Go，或 FastApi/McpServer）时输出；
-    /// - `--swagger` 仅 Gin；`--proto-gen`/`--error-gen` 仅 Rust(Tauri|None)。
+    /// 原则:凡是交互中可能触发 prompt 的 flag 都**无条件**输出——即便其值等于默认值
+    /// (如 `--framework none` / `--auth none`)——以保证回显命令 `</dev/null` 复跑零交互。
+    /// 仅输出对所选语言/框架有意义的 flag(镜像 `configure_*` 的同款条件):
+    /// - `--framework` 始终输出(纯语言路径输出 `--framework none`);
+    /// - `--auth` 仅 mcp-python 时输出,含 `--auth none`;
+    /// - `--host`/`--port` 仅在需要网络的组合(Go,或 FastApi/McpServer)时输出;
+    /// - `--swagger` 仅 Gin;`--proto-gen`/`--error-gen` 仅 Rust(Tauri|None)。
     ///
-    /// flag 顺序稳定（便于测试与阅读），输出可直接重新运行。
+    /// flag 顺序稳定(便于测试与阅读),输出可直接重新运行。
     pub(super) fn equivalent_command(&self, params: &ProjectParams) -> String {
         let mut parts: Vec<String> = vec![
             "scafgen".to_string(),
@@ -259,11 +262,9 @@ impl NewCommand {
         parts.push("--language".to_string());
         parts.push(params.language.build_dir().to_string());
 
-        if params.framework != Framework::None {
-            parts.push("--framework".to_string());
-            // parser 接受小写；Gin 的 as_str() 是 "Gin"，统一小写后仍可解析
-            parts.push(params.framework.as_str().to_lowercase());
-        }
+        parts.push("--framework".to_string());
+        // parser 接受小写；Gin 的 as_str() 是 "Gin"，统一小写后仍可解析
+        parts.push(params.framework.as_str().to_lowercase());
 
         // host/port 仅对需要网络的组合有意义（镜像 configure_network_settings）
         let needs_network = matches!(params.language, Language::Go)
@@ -306,7 +307,7 @@ impl NewCommand {
             parts.push(params.mcp_backend.as_str().to_string());
         }
 
-        if params.framework == Framework::McpServerPython && params.auth_mode != AuthMode::None {
+        if params.framework == Framework::McpServerPython {
             parts.push("--auth".to_string());
             parts.push(params.auth_mode.as_str().to_string());
         }
@@ -440,7 +441,7 @@ mod tests {
     }
 
     #[test]
-    fn rust_none_omits_framework_network_and_includes_rust_tool_flags() {
+    fn rust_none_emits_framework_none_network_omitted_rust_tool_flags_present() {
         let params = ProjectParams {
             language: Language::Rust,
             framework: Framework::None,
@@ -460,10 +461,10 @@ mod tests {
         let cmd = command_for(&params);
         assert_eq!(
             cmd,
-            "scafgen new mylib -p /tmp/work --language rust --precommit false \
+            "scafgen new mylib -p /tmp/work --language rust --framework none --precommit false \
              --license MIT --proto-gen false --error-gen false --with-build false"
         );
-        assert!(!cmd.contains("--framework"));
+        assert!(cmd.contains("--framework none"));
         assert!(!cmd.contains("--host"));
         assert!(!cmd.contains("--port"));
     }
@@ -517,7 +518,7 @@ mod tests {
         let cmd = command_for(&params);
         assert_eq!(
             cmd,
-            "scafgen new plain --language python --precommit true \
+            "scafgen new plain --language python --framework none --precommit true \
              --license MIT --with-build false"
         );
         assert!(!cmd.contains("-p "));
@@ -546,10 +547,10 @@ mod tests {
             cmd,
             "scafgen new mcpsrv -p /tmp/work --language python --framework mcp-python \
              --host 0.0.0.0 --port 8000 --precommit false --license MIT \
-             --with-build false --mcp-backend official"
+             --with-build false --mcp-backend official --auth none"
         );
         assert!(cmd.contains("--mcp-backend official"));
-        assert!(!cmd.contains("--auth"));
+        assert!(cmd.contains("--auth none"));
     }
 
     #[test]
@@ -607,5 +608,122 @@ mod tests {
         assert_eq!(quote_if_needed("MIT"), "MIT");
         assert_eq!(quote_if_needed("./my app"), "'./my app'");
         assert_eq!(quote_if_needed("plain/path"), "plain/path");
+    }
+
+    fn params_lf(language: Language, framework: Framework, auth_mode: AuthMode) -> ProjectParams {
+        ProjectParams {
+            language,
+            framework,
+            project_path: PathBuf::from("/tmp/work/proj"),
+            host: "0.0.0.0".to_string(),
+            port: 8000,
+            enable_precommit: false,
+            license: "MIT".to_string(),
+            enable_swagger: false,
+            enable_proto_gen: false,
+            enable_error_gen: false,
+            enable_build: false,
+            mcp_backend: McpBackend::Fastmcp,
+            auth_mode,
+        }
+    }
+
+    #[test]
+    fn mcp_python_auth_none_emits_auth_none() {
+        let params = params_lf(Language::Python, Framework::McpServerPython, AuthMode::None);
+        let cmd = command_for(&params);
+        assert!(
+            cmd.contains("--auth none"),
+            "mcp-python auth=none must emit `--auth none`, got: {cmd}"
+        );
+    }
+
+    #[test]
+    fn mcp_python_auth_jwt_emits_auth_jwt() {
+        let params = params_lf(Language::Python, Framework::McpServerPython, AuthMode::Jwt);
+        let cmd = command_for(&params);
+        assert!(
+            cmd.contains("--auth jwt"),
+            "mcp-python auth=jwt must emit `--auth jwt`, got: {cmd}"
+        );
+    }
+
+    #[test]
+    fn mcp_python_auth_azure_ad_emits_auth_azure_ad() {
+        let params = params_lf(
+            Language::Python,
+            Framework::McpServerPython,
+            AuthMode::AzureAd,
+        );
+        let cmd = command_for(&params);
+        assert!(
+            cmd.contains("--auth azure-ad"),
+            "mcp-python auth=azure-ad must emit `--auth azure-ad`, got: {cmd}"
+        );
+    }
+
+    #[test]
+    fn python_none_emits_framework_none() {
+        let params = params_lf(Language::Python, Framework::None, AuthMode::None);
+        let cmd = command_for(&params);
+        assert!(
+            cmd.contains("--framework none"),
+            "python framework=None must emit `--framework none`, got: {cmd}"
+        );
+    }
+
+    #[test]
+    fn rust_none_emits_framework_none() {
+        let params = params_lf(Language::Rust, Framework::None, AuthMode::None);
+        let cmd = command_for(&params);
+        assert!(
+            cmd.contains("--framework none"),
+            "rust framework=None must emit `--framework none`, got: {cmd}"
+        );
+    }
+
+    #[test]
+    fn rust_tauri_emits_framework_tauri() {
+        let params = params_lf(Language::Rust, Framework::Tauri, AuthMode::None);
+        let cmd = command_for(&params);
+        assert!(
+            cmd.contains("--framework tauri"),
+            "rust tauri must emit `--framework tauri`, got: {cmd}"
+        );
+    }
+
+    #[test]
+    fn framework_flags_emitted_for_all_concrete_frameworks() {
+        let cases = [
+            (Language::Go, Framework::Gin, "--framework gin"),
+            (Language::Go, Framework::McpServer, "--framework mcp-server"),
+            (Language::Python, Framework::FastApi, "--framework fastapi"),
+            (
+                Language::Python,
+                Framework::McpServerPython,
+                "--framework mcp-python",
+            ),
+            (Language::Rust, Framework::Tauri, "--framework tauri"),
+            (Language::TypeScript, Framework::Vue3, "--framework vue3"),
+            (Language::TypeScript, Framework::React, "--framework react"),
+        ];
+        for (language, framework, expected) in cases {
+            let params = params_lf(language, framework, AuthMode::None);
+            let cmd = command_for(&params);
+            assert!(
+                cmd.contains(expected),
+                "{language}/{framework:?} must emit `{expected}`, got: {cmd}"
+            );
+        }
+    }
+
+    #[test]
+    fn framework_none_parses_round_trip() {
+        assert_eq!(Framework::parse_from_str("none"), Some(Framework::None));
+    }
+
+    #[test]
+    fn auth_none_parses_round_trip() {
+        assert_eq!(AuthMode::parse_from_str("none"), Some(AuthMode::None));
     }
 }
