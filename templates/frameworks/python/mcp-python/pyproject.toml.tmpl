@@ -38,3 +38,12 @@ quote-style = "double"
 asyncio_mode = "auto"
 pythonpath = ["."]
 testpaths = ["tests"]
+# 精确忽略第三方 fastmcp 内部触发的 authlib.jose 弃用告警（非项目代码）；
+# pytest 不经过 main.py 的运行时静音，故在此单独过滤。不要用宽泛的
+# ignore::DeprecationWarning——那会掩盖项目自身的告警。official backend 无 authlib，匹配不到即不生效。
+# Narrowly ignore the authlib.jose deprecation warning fired inside third-party fastmcp
+# (not our code); pytest bypasses main.py's runtime silencing so filter it here. Do NOT use a
+# blanket ignore::DeprecationWarning — that would hide the app's own warnings. No-op on official.
+filterwarnings = [
+    "ignore:.*authlib\\.jose.*:DeprecationWarning",
+]

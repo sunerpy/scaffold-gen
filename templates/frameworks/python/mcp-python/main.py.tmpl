@@ -105,6 +105,15 @@ def main() -> None:
         "host": settings.server.host,
         "port": settings.server.port,
         "reload": settings.server.reload,
+        # 禁用 uvicorn 自带的 dictConfig，使其 uvicorn/uvicorn.error/uvicorn.access logger
+        # 老实 propagate 到已被 init_logging 配好的 structlog root handler；否则 uvicorn.run()
+        # 会重新应用自己的默认 logging 配置，覆盖 init_logging 的 clear()+propagate 设置，
+        # 打印裸 "INFO:     ..." 行与 structlog 格式混杂。
+        # Disable uvicorn's built-in dictConfig so its uvicorn/uvicorn.error/uvicorn.access
+        # loggers propagate to the structlog root handler already configured by init_logging;
+        # otherwise uvicorn.run() re-applies its own default logging config, overriding
+        # init_logging's clear()+propagate and printing bare "INFO:     ..." lines.
+        "log_config": None,
     }
     if settings.server.reload:
         # reload 调优参数仅在开启 reload 时有意义；reload 关闭时若仍传入，
