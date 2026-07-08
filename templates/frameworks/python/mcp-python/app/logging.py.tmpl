@@ -76,12 +76,25 @@ def _cleanup_old_log_files(base_path: Path, max_age_days: int) -> None:
             candidate.unlink(missing_ok=True)
 
 
+def _local_tz_timestamp(_: object, __: str, event_dict: dict) -> dict:
+    """本地时区可读时间戳（带 offset，版本无关）.
+
+    datetime.now().astimezone() 恒为 tz-aware，%z 在任何 structlog 版本下都非空，
+    因此不依赖 TimeStamper 的版本行为，规避 structlog 24.4.0 custom-fmt local 路径
+    naive datetime 导致 %z 为空的风险。
+    A local-timezone, human-readable timestamp with a non-empty offset, independent
+    of the structlog version — astimezone() is always tz-aware, so %z is never empty.
+    """
+    event_dict["timestamp"] = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S%z")
+    return event_dict
+
+
 def _build_shared_processors(*, show_line: bool) -> list:
     """构建 console / json 共享的处理器链."""
     processors: list = [
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
-        structlog.processors.TimeStamper(fmt="iso"),
+        _local_tz_timestamp,
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
     ]

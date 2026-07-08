@@ -269,6 +269,18 @@ install` post-step; `external.rs` no longer contains Vue3 logic
     "use up" its one-time `simplefilter("always", ...)` import side effect, then re-silences it
     (the pyproject filterwarnings alone isn't enough — authlib's `always` filter wins the race).
     The official backend has no authlib dependency and is unaffected.
+26. **mcp-python log timestamp unification across reload workers (v0.10.5)**: `app/logging.py`'s
+    `_build_shared_processors` uses a custom `_local_tz_timestamp` processor
+    (`datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S%z")`) instead of
+    `TimeStamper(fmt="iso")`, so console + file-JSON timestamps are human-readable LOCAL time WITH a
+    timezone offset (`2026-07-08 17:54:00+0800`), version-independent (astimezone() is always
+    tz-aware, so `%z` is never empty — sidesteps structlog 24.4.0's naive-datetime empty-offset
+    behavior). Root fix for the "two timestamp formats under `make dev`" bug: `init_logging` was only
+    called in `main.py`'s `main()`, so uvicorn's reload-WORKER subprocess (which imports
+    `app.server:asgi_app` without going through `main()`) never configured structlog — tool loggers
+    fell back to ConsoleRenderer's built-in naive local timestamp. `app/server.py` now calls
+    `init_logging(settings.log)` at module level (idempotent) so any process importing it — including
+    the reload worker — gets identical structlog formatting. Tool logs and framework logs now match.
 
 ## COMMANDS
 
