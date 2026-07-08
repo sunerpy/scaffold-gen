@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.5](https://github.com/sunerpy/scaffold-gen/compare/v0.10.4...v0.10.5) (2026-07-08)
+
+
+### Bug Fixes
+
+* **mcp-python:** 统一日志时间戳为本地带时区,覆盖 reload worker 子进程 ([#39](https://github.com/sunerpy/scaffold-gen/issues/39)) ([11179e5](https://github.com/sunerpy/scaffold-gen/commit/11179e5e92374bd1bff379dd3fb66d73aeb0a271))
+
 ## [0.10.4](https://github.com/sunerpy/scaffold-gen/compare/v0.10.3...v0.10.4) (2026-07-08)
 
 
