@@ -39,8 +39,9 @@ if settings.auth.enabled:
     )
     if _missing:
         raise RuntimeError(
-            "[auth] azure-ad 已启用但 tenant_id / resource_app_id / resource_server_url 未配置完整。"
-            " [auth] azure-ad enabled but tenant_id/resource_app_id/resource_server_url are not all set."
+            "[auth] azure-ad 已启用但 tenant_id / resource_app_id / resource_server_url"
+            " 未配置完整。 [auth] azure-ad enabled but"
+            " tenant_id/resource_app_id/resource_server_url are not all set."
         )
 <%- else %>
     _missing = (
@@ -114,8 +115,9 @@ if settings.auth.enabled:
     )
     if _missing:
         raise RuntimeError(
-            "[auth] azure-ad 已启用但 tenant_id / resource_app_id / resource_server_url 未配置完整。"
-            " [auth] azure-ad enabled but tenant_id/resource_app_id/resource_server_url are not all set."
+            "[auth] azure-ad 已启用但 tenant_id / resource_app_id / resource_server_url"
+            " 未配置完整。 [auth] azure-ad enabled but"
+            " tenant_id/resource_app_id/resource_server_url are not all set."
         )
 <%- else %>
     _missing = (
@@ -139,7 +141,8 @@ if settings.auth.enabled:
 <%- if auth_is_azure_ad %>
     # 注意：fastmcp 的 JWTVerifier 不支持多 issuer，只校验上面派生的单个 v2 issuer
     # (login.microsoftonline.com/{tenant}/v2.0)。Entra v1 (sts.windows.net) 签发的 token
-    # 需改用 official 后端 (JwksTokenVerifier 支持 extra_issuers)。JWKS 缓存由 JWTVerifier 内部处理。
+    # 需改用 official 后端 (JwksTokenVerifier 支持 extra_issuers)。
+    # JWKS 缓存由 JWTVerifier 内部处理。
     # NOTE: fastmcp's JWTVerifier validates ONLY the single derived v2 issuer; v1-issued
     # tokens require the official backend. JWKS caching is handled internally by JWTVerifier.
 <%- endif %>
