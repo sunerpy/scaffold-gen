@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.4](https://github.com/sunerpy/scaffold-gen/compare/v0.10.3...v0.10.4) (2026-07-08)
+
+
+### Bug Fixes
+
+* **mcp-python:** 生成项目开箱通过 ruff check(消除 E501/E402/I001) ([#37](https://github.com/sunerpy/scaffold-gen/issues/37)) ([5e16c4a](https://github.com/sunerpy/scaffold-gen/commit/5e16c4a7bc8cebc47181bad815d604ad95864227))
+
 ## [0.10.3](https://github.com/sunerpy/scaffold-gen/compare/v0.10.2...v0.10.3) (2026-07-07)
 
 
