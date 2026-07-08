@@ -23,10 +23,28 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from app.logging import get_logger
+from app.logging import get_logger, init_logging
 from app.mcp_instance import mcp
 from app.settings import settings
 from app.tools import register_tools
+
+# 模块级初始化日志：覆盖 uvicorn reload worker 子进程路径。
+# `make dev`（reload 开启）时，uvicorn 起 reload worker 子进程直接 import 本模块
+# (app.server:asgi_app)，不经 main()，因此 main() 里的 init_logging 不会在该子进程执行，
+# structlog 从未 configure，tool 的 get_logger().info(...) 会走 ConsoleRenderer 内建
+# fallback 时间戳（本地、无时区），与框架日志格式分叉。此处模块级调用一次 init_logging
+# 保证任何 import 本模块的进程都统一 configure。init_logging 幂等（basicConfig force=True
+# + structlog.configure 只是重配，无副作用），与 main() 的 init 并存无冲突；且它只写 logs/
+# （已被 main.py 的 _RELOAD_EXCLUDES 排除），不新增 reload 监听路径，无死循环风险。
+# Module-level logging init to cover the uvicorn reload-worker subprocess. With reload on,
+# the worker imports this module (app.server:asgi_app) directly — not via main() — so main()'s
+# init_logging never runs there and structlog stays unconfigured, making tool logs fall back to
+# ConsoleRenderer's built-in (local, tz-less) timestamp and diverge from framework logs. Calling
+# init_logging here once configures structlog in any process importing this module. It is
+# idempotent (basicConfig force=True + structlog.configure just reconfigure) and coexists with
+# main()'s init; it only writes logs/ (excluded by main.py's _RELOAD_EXCLUDES), adding no reload
+# watch path, so there is no reload loop.
+init_logging(settings.log)
 
 logger = get_logger(__name__)
 
