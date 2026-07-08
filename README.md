@@ -34,6 +34,7 @@ defaults, a LICENSE, and an initialized git repo.
 - **Embedded templates** — everything ships inside the binary; no runtime file dependencies.
 - **Environment validation** — checks required toolchains (Go ≥ 1.24, Rust ≥ 1.88, Python ≥ 3.12) before generating.
 - **Structured logging** — quiet (`-q`) / verbose (`-v`) global flags; output via `tracing` to stderr.
+- **Lint/format ready out of the box** — generated Vue3/React projects ship eslint (v9 flat config) + prettier already configured, so `pnpm lint` / `pnpm format` work immediately with no setup.
 
 ## Supported Frameworks
 
@@ -103,10 +104,17 @@ scafgen new my-api        --framework fastapi --language python
 scafgen new my-mcp        --framework mcp-server --language go
 scafgen new my-mcp-py     --framework mcp-python --language python
 scafgen new my-mcp-py     --framework mcp-python --language python --mcp-backend official
+scafgen new my-mcp-py     --framework mcp-python --language python --auth jwt
 
 # Add a Makefile + Dockerfile for local build / containerization
 scafgen new my-gin-app --framework gin --with-build
+```
 
+`mcp-python` also takes `--auth none|jwt|azure-ad` (default `none`): `none` renders zero auth
+code, `jwt` adds unified JWT/JWKS resource-server validation (ADFS/Entra/Okta/OIDC), and
+`azure-ad` is a turnkey Entra preset.
+
+```sh
 # Install the agent skill, then restart your AI agent to auto-bootstrap projects
 scafgen skill install              # install into all detected agents (global)
 scafgen skill status               # report per-agent install state

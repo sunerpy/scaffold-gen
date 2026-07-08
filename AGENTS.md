@@ -1,6 +1,6 @@
 # SCAFFOLD-GEN KNOWLEDGE BASE
 
-**Version:** v0.9.0 **Updated:** 2026-07-07 **Branch:** main
+**Version:** v0.10.3 **Updated:** 2026-07-08 **Branch:** main
 
 ## OVERVIEW
 
@@ -188,7 +188,7 @@ All tracing/diagnostics → **stderr**.
    confirmation
 4. **Go-Zero unimplemented**: `Framework::GoZero` resolves to `GenKind::Unimplemented` — returns a
    clear error; no generator struct exists; enum variant kept for CLI discoverability
-5. **Tests: 220 total**: 67 lib + 134 bin inline + 19 integration in `tests/generation.rs`; `make
+5. **Tests: 229 total**: 67 lib + 143 bin inline + 19 integration in `tests/generation.rs`; `make
 test` covers all
 6. **Vue3 is EmbeddedAsync**: moved from ExternalAsync — full offline scaffold, optional `pnpm
 install` post-step; `external.rs` no longer contains Vue3 logic
@@ -251,6 +251,24 @@ install` post-step; `external.rs` no longer contains Vue3 logic
     `McpPythonAuthContext` (`mcp_auth_context.rs`) injects 5 keys after `to_template_context()`:
     `mcp_backend`, `mcp_backend_is_official`, `auth_mode`, `auth_enabled`, `auth_is_azure_ad`.
     The generated `whoami` tool returns identity from the verified token only (never a caller arg).
+24. **Frontend lint/format work out of the box (v0.10.1)**: React and Vue3 templates now ship
+    eslint (v9 flat config) + prettier deps and config (`eslint.config.js`, `.prettierrc.json`,
+    `.prettierignore`); `package.json`'s `lint`/`format` scripts work immediately (`pnpm lint`/
+    `pnpm format`, and `make lint`/`make check` after `--with-build`, no longer fail on missing
+    deps). The lint script drops the v9-deprecated `--ext`; `tailwind.config` uses ESM `import`
+    (not `require`); template source files are pre-formatted to match `.prettierrc`, so a fresh
+    generated project's `prettier --check` exits 0 out of the box. React uses typescript-eslint +
+    react-hooks/react-refresh; Vue3 uses eslint-plugin-vue + @vue/eslint-config-typescript +
+    @vue/eslint-config-prettier.
+25. **mcp-python logging unification + authlib warning silencing (v0.10.2)**: the generated
+    mcp-python project's `main.py` passes `log_config=None` to `uvicorn.run`, so uvicorn/
+    uvicorn.error logs route through the same structlog format as the docket/mcp libraries — no
+    more bare `INFO:`-prefixed lines. `make test` (fastmcp backend) also silences the third-party
+    `authlib.jose` deprecation warning: `pyproject.toml`'s `[tool.pytest.ini_options]` gets a
+    precise `filterwarnings` entry, and `conftest.py` imports authlib before `import app.server` to
+    "use up" its one-time `simplefilter("always", ...)` import side effect, then re-silences it
+    (the pyproject filterwarnings alone isn't enough — authlib's `always` filter wins the race).
+    The official backend has no authlib dependency and is unaffected.
 
 ## COMMANDS
 
@@ -264,7 +282,7 @@ make release-upx    # Release + UPX compression
 make fmt            # Format code (rustfmt + oxfmt for YAML/JSON/Markdown)
 make fmt-check      # Check formatting (CI gate — also checks AGENTS.md now)
 make lint           # Clippy with -D warnings
-make test           # cargo test (67 lib + 134 bin + 19 integration)
+make test           # cargo test (67 lib + 143 bin + 19 integration)
 make ci             # fmt-check + lint + test
 
 # Cross-compile
