@@ -31,6 +31,16 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+# 这两个测试文件的模块级 import 故意排在顶部的 authlib 告警静音块之后：必须先
+# filterwarnings 再 `import app.server`（它触发 `import fastmcp` → `from authlib.jose`），
+# 否则 authlib 的一次性 simplefilter("always", ...) 会抢先让告警照常打印。此处的延迟
+# import 是该静音契约的一部分，E402 属误报，用 per-file-ignores 精确豁免（不放宽全局规则）。
+# These two test files intentionally import after the top-of-file authlib warning-silencing
+# block: filterwarnings MUST run before `import app.server`, so E402 is a false positive here.
+[tool.ruff.lint.per-file-ignores]
+"tests/conftest.py" = ["E402"]
+"tests/test_auth.py" = ["E402"]
+
 [tool.ruff.format]
 quote-style = "double"
 
