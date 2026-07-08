@@ -33,6 +33,7 @@
 - **内嵌模板** —— 所有模板编译进二进制，运行时无外部文件依赖。
 - **环境验证** —— 生成前检查所需工具链（Go ≥ 1.24、Rust ≥ 1.88、Python ≥ 3.12）。
 - **结构化日志** —— 静默（`-q`）/ 详细（`-v`）全局开关；输出经 `tracing` 写入 stderr。
+- **开箱即用的 lint/format** —— 生成的 Vue3/React 项目已配好 eslint（v9 flat config）+ prettier，无需额外配置即可直接 `pnpm lint` / `pnpm format`。
 
 ## 支持的框架
 
@@ -102,10 +103,17 @@ scafgen new my-api        --framework fastapi --language python
 scafgen new my-mcp        --framework mcp-server --language go
 scafgen new my-mcp-py     --framework mcp-python --language python
 scafgen new my-mcp-py     --framework mcp-python --language python --mcp-backend official
+scafgen new my-mcp-py     --framework mcp-python --language python --auth jwt
 
 # 同时生成 Makefile + Dockerfile（本地构建 / 容器化）
 scafgen new my-gin-app --framework gin --with-build
+```
 
+`mcp-python` 还支持 `--auth none|jwt|azure-ad`（默认 `none`）：`none` 不生成任何鉴权代码，
+`jwt` 提供统一的 JWT/JWKS 资源服务器校验（ADFS/Entra/Okta/OIDC），`azure-ad` 则是开箱即用的
+Entra 预设。
+
+```sh
 # 安装 agent skill，然后重启 AI agent 即可自动通过 scafgen 引导新项目
 scafgen skill install              # 安装到所有检测到的 agent（全局）
 scafgen skill status               # 查看各 agent 安装状态

@@ -69,9 +69,10 @@ and a `timeout` so a missing flag fails fast instead of blocking the session:
 ```bash
 timeout 120 scafgen new <name> \
   --language <go|rust|python|typescript> \
-  --framework <gin|mcp-server|fastapi|tauri|vue3|react|none> \
+  --framework <gin|mcp-server|fastapi|mcp-python|tauri|vue3|react|none> \
   [--host <host> --port <port>] \
   [--proto-gen <true|false> --error-gen <true|false>] \
+  [--mcp-backend <fastmcp|official> --auth <none|jwt|azure-ad>] \
   --precommit <true|false> \
   --license <MIT|Apache-2.0|GPL-3.0|BSD-3-Clause|None> \
   --with-build <true|false> </dev/null
@@ -87,7 +88,11 @@ Notes:
   them on a Rust run triggers the `Failed to configure proto-gen` prompt. They do not
   apply to other languages — leave them off for Go/Python/TypeScript.
 - Omit `--host`/`--port` for non-server projects; pass them for the server frameworks
-  (`gin`, `mcp-server`, `fastapi`).
+  (`gin`, `mcp-server`, `fastapi`, `mcp-python`).
+- **`mcp-python` also takes `--mcp-backend fastmcp|official`** (default `fastmcp`) and
+  `--auth none|jwt|azure-ad` (default `none`). `none` generates zero auth code; `jwt` adds
+  unified JWT/JWKS resource-server validation; `azure-ad` is a turnkey Entra preset. Both
+  flags are optional — omitting them keeps the defaults, no prompt is triggered.
 - `--with-build true` additionally emits a Makefile (build/run/test/fmt/lint/check/
   docker-build) and a multi-stage Dockerfile — pure Make automation, no CI files.
 - **Reuse the printed equivalent command.** On success `scafgen` prints the exact
@@ -123,6 +128,11 @@ timeout 120 scafgen new <name> --language go --framework gin \
 timeout 120 scafgen new <name> --language go --framework mcp-server \
   --host 0.0.0.0 --port <port> --precommit false --license MIT --with-build false </dev/null
 
+# Python + MCP server (server → host/port; optional --mcp-backend / --auth)
+timeout 120 scafgen new <name> --language python --framework mcp-python \
+  --host 0.0.0.0 --port <port> --mcp-backend fastmcp --auth none \
+  --precommit false --license MIT --with-build false </dev/null
+
 # TypeScript + Vue3 / React frontend (no host/port; may run pnpm install)
 timeout 180 scafgen new <name> --language typescript --framework vue3 \
   --precommit false --license MIT --with-build false </dev/null
@@ -137,11 +147,18 @@ config-driven, so you change runtime settings in config files, not code:
 - **FastAPI** — edit `config.toml` for host/port; add endpoints under `app/routes/`
   (auto-discovered, no wiring needed). Run `uv sync && uv run python main.py`.
 - **Vue3** — edit `.env` for `VITE_DEV_HOST`/`VITE_DEV_PORT`/`VITE_DEV_ALLOWED_HOSTS`/`VITE_API_BASE_URL`; add
-  views/stores/components under `src/`. Run `pnpm install && pnpm dev`.
+  views/stores/components under `src/`. Run `pnpm install && pnpm dev`. eslint + prettier are
+  already configured, so `pnpm lint` / `pnpm format` work with no extra setup (same for React).
 - **Go gin** — config-driven server; add handlers/routes in the generated layout.
 - **Go MCP server** — `config.toml`-driven; define tools in proto (constrained by
   protoc-gen-jsonschema), regenerate with `make generate`, implement handlers under
   `internal/tools/`. Serves streamable-HTTP + SSE.
+- **Python MCP server (mcp-python)** — `config.toml`-driven (`[server]`/`[mcp]`/`[log]`); add
+  tools as new files under `app/tools/` (auto-discovered via `register_tools(mcp)`, no manual
+  wiring). Backend chosen at generation time via `--mcp-backend fastmcp|official`. If
+  `--auth` was set to `jwt`/`azure-ad`, auth code is already wired — the `whoami` tool returns
+  identity from the verified token. Run `uv sync && make test && uv run python main.py`;
+  `make test` uses an in-memory client, no live server needed.
 - **Rust / pure-language** — standard cargo/uv layout; implement in `src/`/`app/`.
 
 Then implement the user's actual feature inside those marked locations.
@@ -151,12 +168,14 @@ Then implement the user's actual feature inside those marked locations.
 | Language   | Frameworks (`--framework`)                     |
 | ---------- | ---------------------------------------------- |
 | Go         | `gin`, `mcp-server` (go-zero: planned)         |
-| Python     | `none` (pure), `fastapi`                       |
+| Python     | `none` (pure), `fastapi`, `mcp-python`         |
 | Rust       | `none` (pure), `tauri` (both need proto/error) |
 | TypeScript | `vue3`, `react`                                |
 
 Always pass a concrete `--framework` (use `none` for pure Python/Rust). Rust runs
-(`none` or `tauri`) additionally require `--proto-gen` + `--error-gen`.
+(`none` or `tauri`) additionally require `--proto-gen` + `--error-gen`. `mcp-python` runs
+additionally accept `--mcp-backend fastmcp|official` (default `fastmcp`) and
+`--auth none|jwt|azure-ad` (default `none`).
 
 Authoritative list: `scafgen list`.
 
