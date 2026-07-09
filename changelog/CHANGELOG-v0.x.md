@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.7](https://github.com/sunerpy/scaffold-gen/compare/v0.10.6...v0.10.7) (2026-07-09)
+
+
+### Bug Fixes
+
+* **self-update:** 读取 GITHUB_TOKEN 认证并对限流给可操作提示 ([#43](https://github.com/sunerpy/scaffold-gen/issues/43)) ([a0c555d](https://github.com/sunerpy/scaffold-gen/commit/a0c555deae31be6417f55960fc8b21fe239b366d))
+
 ## [0.10.6](https://github.com/sunerpy/scaffold-gen/compare/v0.10.5...v0.10.6) (2026-07-09)
 
 
