@@ -281,6 +281,16 @@ install` post-step; `external.rs` no longer contains Vue3 logic
     fell back to ConsoleRenderer's built-in naive local timestamp. `app/server.py` now calls
     `init_logging(settings.log)` at module level (idempotent) so any process importing it — including
     the reload worker — gets identical structlog formatting. Tool logs and framework logs now match.
+27. **mcp-python streamable_http transport-noise silencing (v0.10.6)**: `app/logging.py`'s
+    `_NOISY_LOGGERS` now includes `mcp.server.streamable_http` (alongside
+    httpx/httpcore/urllib3/asyncio/uvicorn.access), so the `:202-204` loop drops it to `WARNING` —
+    silencing the per-call INFO transport-lifecycle noise (`Terminating session: None`, emitted by
+    the third-party `mcp` library after every stateless short-connection tool call). `session: None`
+    is expected stateless behavior, not a bug. It deliberately does NOT silence
+    `mcp.server.lowlevel.server` (keeps `Processing request of type CallToolRequest`) nor `app.*`
+    (business tool logs like `Adding numbers`); real `mcp.server.streamable_http` WARNING/ERROR still
+    surface so connection issues aren't masked. Both fastmcp and official backends share this logging
+    module, so the fix applies to both.
 
 ## COMMANDS
 
