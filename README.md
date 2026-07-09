@@ -129,6 +129,12 @@ scafgen -v new my-project   # verbose: debug output
 
 Run `scafgen new --help` for the full option list.
 
+`scafgen self-update [--check] [--force] [--tag <tag>]` checks the latest GitHub release and
+updates the binary in place. It's subject to GitHub's anonymous API rate limit (60 req/hr per
+IP); set `GITHUB_TOKEN` (falls back to `GH_TOKEN`) — e.g. `export GITHUB_TOKEN=$(gh auth token)`
+— to raise that to 5000 req/hr. `scafgen self-update` picks up `GITHUB_TOKEN`/`GH_TOKEN`
+automatically, no extra flags needed.
+
 ## Using with an LLM
 
 Install first via the [Install](#install) section, then drive the tool with these commands:
