@@ -128,6 +128,11 @@ scafgen -v new my-project   # 详细：显示调试输出
 
 运行 `scafgen new --help` 查看完整选项列表。
 
+`scafgen self-update [--check] [--force] [--tag <tag>]` 会检查最新的 GitHub release 并原地更新
+二进制文件。该命令受 GitHub 匿名 API 限流影响（每个 IP 60 次/小时）；设置 `GITHUB_TOKEN`（未设置
+时回退到 `GH_TOKEN`）——例如 `export GITHUB_TOKEN=$(gh auth token)`——可将限额提升到 5000 次/小时。
+`scafgen self-update` 会自动读取 `GITHUB_TOKEN`/`GH_TOKEN`，无需额外传参。
+
 ## 配合 LLM 使用
 
 先按 [安装](#安装) 章节完成安装，然后用以下命令驱动工具：

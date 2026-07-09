@@ -60,6 +60,23 @@ fn release_version_to_tag(version: &str) -> String {
     }
 }
 
+/// Resolve a GitHub auth token from the two accepted environment sources,
+/// following the gh CLI convention: `GITHUB_TOKEN` takes precedence, falling
+/// back to `GH_TOKEN`. A value that is empty (or whitespace-only after trim) is
+/// treated as unset. Returns `None` when neither yields a usable token.
+///
+/// Kept a **pure function** (takes the already-read `Option<&str>` values, never
+/// touches the global process environment) so it is unit-testable without env
+/// mutation. `build_updater` reads the real env vars and passes them in.
+fn resolve_auth_token(github: Option<&str>, gh: Option<&str>) -> Option<String> {
+    github
+        .into_iter()
+        .chain(gh)
+        .map(str::trim)
+        .find(|t| !t.is_empty())
+        .map(str::to_owned)
+}
+
 fn build_updater(
     current: &str,
     force: bool,
@@ -76,9 +93,43 @@ fn build_updater(
     if let Some(tag) = target_tag {
         builder.target_version_tag(tag);
     }
+    // Feed an auth token to the GitHub backend so requests count against the
+    // authenticated 5000/hr quota instead of the anonymous 60/hr limit (the
+    // shared-egress-IP rate limit that surfaces as HTTP 403). `self_update`
+    // 0.42 exposes `.auth_token()` but never reads env itself, so wire it here.
+    // The token is only read from the environment — never logged, never
+    // persisted — and does not affect `show_download_progress`.
+    let github_token = std::env::var("GITHUB_TOKEN").ok();
+    let gh_token = std::env::var("GH_TOKEN").ok();
+    if let Some(token) = resolve_auth_token(github_token.as_deref(), gh_token.as_deref()) {
+        builder.auth_token(&token);
+    }
     builder
         .build()
         .context("configuring the self-update backend")
+}
+
+/// Query the latest GitHub release, attaching an **actionable** error context
+/// on failure. The bare `get_latest_release()` failure is most often GitHub API
+/// rate limiting (anonymous 60/hr), which `self_update` 0.42 surfaces without a
+/// structured status code — so rather than brittly matching "403"/"rate limit"
+/// strings we uniformly enrich the context with recovery guidance. Shared by
+/// both the `--check` and the update (latest-resolution) paths so the two never
+/// drift. Returns the same `Release` type as `get_latest_release()`, keeping
+/// callers' `.version` field usage unchanged.
+fn latest_release(
+    updater: &dyn self_update::update::ReleaseUpdate,
+) -> Result<self_update::update::Release> {
+    updater.get_latest_release().context(
+        "querying the latest GitHub release failed. \
+         This is often GitHub API rate limiting (anonymous requests are capped at 60/hour). \
+         查询最新 GitHub Release 失败，通常是 GitHub API 速率限制（匿名请求每小时仅 60 次）。\n\
+         Fixes / 解决办法:\n\
+         - Set GITHUB_TOKEN to raise the quota to 5000/hour, e.g. \
+         `export GITHUB_TOKEN=$(gh auth token)` 设置 GITHUB_TOKEN 提高配额；\n\
+         - retry later 稍后重试；\n\
+         - or upgrade manually via `cargo install scaffold-gen --force` 或用 cargo 手动升级。",
+    )
 }
 
 fn run_blocking(check: bool, force: bool, tag: Option<String>) -> Result<()> {
@@ -92,9 +143,7 @@ fn run_blocking(check: bool, force: bool, tag: Option<String>) -> Result<()> {
         // still reported here. `bump_is_greater` is only a message heuristic —
         // it must never block the actual update path below.
         let updater = build_updater(current, force, None)?;
-        let latest = updater
-            .get_latest_release()
-            .context("querying the latest GitHub release")?;
+        let latest = latest_release(updater.as_ref())?;
         if self_update::version::bump_is_greater(current, &latest.version).unwrap_or(false) {
             tracing::info!("{BIN_NAME} {current} -> {} available", latest.version);
             tracing::info!("run `{BIN_NAME} self-update` to install it");
@@ -114,9 +163,7 @@ fn run_blocking(check: bool, force: bool, tag: Option<String>) -> Result<()> {
         None => {
             // A lightweight probe updater purely to query `/releases/latest`.
             let probe = build_updater(current, force, None)?;
-            let latest = probe
-                .get_latest_release()
-                .context("querying the latest GitHub release")?;
+            let latest = latest_release(probe.as_ref())?;
             // `latest.version` has the `v` stripped; restore the tag form.
             release_version_to_tag(&latest.version)
         }
@@ -144,7 +191,7 @@ fn run_blocking(check: bool, force: bool, tag: Option<String>) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_same_version, release_version_to_tag};
+    use super::{is_same_version, release_version_to_tag, resolve_auth_token};
 
     // Network-free: these only assert the pure helpers that the `tag = None`
     // path relies on. The latest-resolution itself
@@ -195,5 +242,41 @@ mod tests {
     #[test]
     fn different_patch_is_not_equal() {
         assert!(!is_same_version("0.7.0", "0.7.1"));
+    }
+
+    #[test]
+    fn auth_token_prefers_github_over_gh() {
+        assert_eq!(
+            resolve_auth_token(Some("x"), Some("y")),
+            Some("x".to_owned())
+        );
+    }
+
+    #[test]
+    fn auth_token_falls_back_to_gh() {
+        assert_eq!(resolve_auth_token(None, Some("y")), Some("y".to_owned()));
+    }
+
+    #[test]
+    fn auth_token_uses_github_when_gh_absent() {
+        assert_eq!(resolve_auth_token(Some("x"), None), Some("x".to_owned()));
+    }
+
+    #[test]
+    fn auth_token_none_when_both_absent() {
+        assert_eq!(resolve_auth_token(None, None), None);
+    }
+
+    #[test]
+    fn auth_token_skips_empty_github_and_uses_gh() {
+        assert_eq!(
+            resolve_auth_token(Some(""), Some("y")),
+            Some("y".to_owned())
+        );
+    }
+
+    #[test]
+    fn auth_token_whitespace_only_is_treated_as_unset() {
+        assert_eq!(resolve_auth_token(Some("  "), None), None);
     }
 }

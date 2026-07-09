@@ -1,6 +1,6 @@
 # SCAFFOLD-GEN KNOWLEDGE BASE
 
-**Version:** v0.10.3 **Updated:** 2026-07-08 **Branch:** main
+**Version:** v0.10.7 **Updated:** 2026-07-09 **Branch:** main
 
 ## OVERVIEW
 
@@ -291,6 +291,15 @@ install` post-step; `external.rs` no longer contains Vue3 logic
     (business tool logs like `Adding numbers`); real `mcp.server.streamable_http` WARNING/ERROR still
     surface so connection issues aren't masked. Both fastmcp and official backends share this logging
     module, so the fix applies to both.
+28. **self-update GitHub API auth (v0.10.7)**: `self-update` now reads `GITHUB_TOKEN`/`GH_TOKEN`
+    (gh CLI convention, `GITHUB_TOKEN` preferred) to make authenticated GitHub API requests,
+    raising the anonymous 60/hour limit to 5000/hour and sidestepping shared-IP rate limiting.
+    `self_update` 0.42 has `.auth_token()` but doesn't auto-read the env, so `build_updater`
+    (`self_update.rs`) calls `resolve_auth_token` to read the env var and inject it. On rate
+    limit / query failure the error message now gives actionable guidance (GITHUB_TOKEN / retry
+    later / `cargo install scaffold-gen --force`), instead of the generic "querying the latest
+    GitHub release" error. The token is only ever read from env — never written to disk or
+    logged.
 
 ## COMMANDS
 
