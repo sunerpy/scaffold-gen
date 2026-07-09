@@ -35,12 +35,14 @@ from app.settings import LogConfig
 _DEFAULT_LOG_FILE = "<<package_name>>.log"
 
 # 噪声库 → WARNING (noisy loggers suppressed to WARNING)
+# mcp.server.streamable_http 是传输生命周期噪音（每次调用后的 Terminating session）
 _NOISY_LOGGERS = (
     "httpx",
     "httpcore",
     "urllib3",
     "asyncio",
     "uvicorn.access",
+    "mcp.server.streamable_http",
 )
 
 
