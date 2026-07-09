@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.6](https://github.com/sunerpy/scaffold-gen/compare/v0.10.5...v0.10.6) (2026-07-09)
+
+
+### Bug Fixes
+
+* **mcp-python:** 静默 streamable_http 传输层 INFO 噪音(Terminating session) ([#41](https://github.com/sunerpy/scaffold-gen/issues/41)) ([5e2cbec](https://github.com/sunerpy/scaffold-gen/commit/5e2cbec7d1a14e16bb2ed544417814ccf5db726e))
+
 ## [0.10.5](https://github.com/sunerpy/scaffold-gen/compare/v0.10.4...v0.10.5) (2026-07-08)
 
 
