@@ -66,9 +66,43 @@ jobs:
             echo "version=${{ steps.release.outputs.version }}" >> "$GITHUB_OUTPUT"
           fi
 
+  verify:
+    name: Verify (fmt/lint/test)
+    needs: release-please
+    if: needs.release-please.outputs.build_artifacts == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install oxfmt
+        run: npm install -g oxfmt
+
+      - name: Check code formatting
+        run: make fmt-check
+
+      - name: Run linter
+        run: make lint
+
+      - name: Run tests
+        run: make test
+
   build-binaries:
     name: Build ${{ matrix.target }}
-    needs: release-please
+    needs: [release-please, verify]
     if: needs.release-please.outputs.build_artifacts == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -160,7 +194,7 @@ jobs:
 
   publish-crate:
     name: Publish to crates.io
-    needs: release-please
+    needs: [release-please, verify]
     if: needs.release-please.outputs.build_artifacts == 'true' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
