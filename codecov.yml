@@ -7,11 +7,11 @@ coverage:
   status:
     project:
       default:
-        target: 76%
+        target: 80%
         threshold: 1%
     patch:
       default:
-        target: 76%
+        target: 80%
         threshold: 1%
 ignore:
   - "src/commands/prompts.rs"
