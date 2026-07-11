@@ -264,6 +264,103 @@ mod tests {
     }
 
     #[test]
+    fn process_template_file_renders_single_embedded_template() {
+        // Given: 单个嵌入模板文件路径 + 临时输出文件
+        let tmp = tempfile::tempdir().expect("create tempdir");
+        let mut processor = TemplateProcessor::new().expect("create processor");
+        let out = tmp.path().join("nested").join("main.py");
+        let mut context = ctx("single-file-app");
+        context.insert("package_name".to_string(), json!("single_file_app"));
+
+        // When: 按路径渲染 languages/python/main.py.tmpl
+        processor
+            .process_template_file(Path::new("languages/python/main.py.tmpl"), &out, context)
+            .expect("render single template file");
+
+        // Then: 输出文件被创建（父目录自动建立），内容含替换后的 project_name，无残留分隔符
+        let content = fs::read_to_string(&out).expect("read rendered file");
+        assert!(content.contains("single-file-app"));
+        assert!(!content.contains("<<"));
+    }
+
+    #[test]
+    fn get_template_path_joins_relative_onto_root() {
+        let processor = TemplateProcessor::new().expect("create processor");
+        let path = processor
+            .get_template_path("languages/python/main.py.tmpl")
+            .expect("resolve template path");
+        assert!(path.ends_with("languages/python/main.py.tmpl"));
+    }
+
+    #[test]
+    fn render_template_content_substitutes_variable() {
+        let mut processor = TemplateProcessor::new().expect("create processor");
+        let context = ctx("render-probe");
+        let out = processor
+            .render_template_content("name = <<project_name>>", context)
+            .expect("render content");
+        assert_eq!(out, "name = render-probe");
+    }
+
+    #[test]
+    fn template_exists_reports_presence() {
+        let processor = TemplateProcessor::new().expect("create processor");
+        assert!(processor.template_exists("languages/python/main.py.tmpl"));
+        assert!(!processor.template_exists("languages/python/definitely-missing.tmpl"));
+    }
+
+    #[test]
+    fn process_embedded_template_directory_copies_non_template_files_verbatim() {
+        // Given: 一个只含非 .tmpl 文件的嵌入目录（tauri capabilities/default.json）
+        let tmp = tempfile::tempdir().expect("create tempdir");
+        let mut processor = TemplateProcessor::new().expect("create processor");
+
+        // When: 处理该目录 —— 非 .tmpl 文件应原样复制
+        processor
+            .process_embedded_template_directory(
+                "frameworks/rust/tauri/src-tauri/capabilities",
+                tmp.path(),
+                HashMap::new(),
+            )
+            .expect("copy non-template files");
+
+        // Then: default.json 被复制，且内容与嵌入源逐字节一致
+        let copied = fs::read_to_string(tmp.path().join("default.json")).expect("read copied file");
+        let source = crate::template_engine::get_embedded_template_content(
+            "frameworks/rust/tauri/src-tauri/capabilities/default.json",
+        )
+        .expect("embedded source present");
+        assert_eq!(copied, source);
+    }
+
+    #[test]
+    fn process_embedded_template_directory_creates_nested_directory_structure() {
+        // Given: gin 模板含嵌套目录（如 handlers/、routers/）
+        let tmp = tempfile::tempdir().expect("create tempdir");
+        let mut processor = TemplateProcessor::new().expect("create processor");
+        let mut context = ctx("nested-gin");
+        context.insert("project_name_pascal".to_string(), json!("NestedGin"));
+        context.insert("host".to_string(), json!("127.0.0.1"));
+        context.insert("default_host".to_string(), json!("127.0.0.1"));
+        context.insert("port".to_string(), json!(8080));
+        context.insert("default_port".to_string(), json!(8080));
+        context.insert("go_version".to_string(), json!("1.24"));
+        context.insert("enable_swagger".to_string(), json!(false));
+
+        // When
+        processor
+            .process_embedded_template_directory("frameworks/go/gin", tmp.path(), context)
+            .expect("render gin templates");
+
+        // Then: 至少一个生成文件位于子目录中（相对路径含 '/'），证明嵌套结构被保留
+        let files = collect_relative_files(tmp.path());
+        assert!(
+            files.iter().any(|f| f.contains('/')),
+            "expected at least one file in a nested directory, got: {files:?}"
+        );
+    }
+
+    #[test]
     fn process_embedded_template_directory_renders_gin_framework() {
         // Given: gin 模板仅依赖 BaseParams 提供的变量
         let tmp = tempfile::tempdir().expect("create tempdir");

@@ -166,3 +166,77 @@ impl TauriParams {
         self.enable_error_gen
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::generators::core::Parameters;
+
+    #[test]
+    fn default_sets_tauri_specific_fields() {
+        let p = TauriParams::default();
+        assert_eq!(p.base.default_host, Some("localhost".to_string()));
+        assert_eq!(p.base.default_port, Some(1420));
+        assert_eq!(p.frontend_framework, "vue");
+        assert!(p.enable_dark_mode);
+        assert!(p.enable_skeleton);
+        assert_eq!(p.window_width, 800);
+        assert_eq!(p.window_height, 600);
+        assert_eq!(p.identifier, "com.example.app");
+        assert!(!p.enable_proto_gen);
+        assert!(!p.enable_error_gen);
+    }
+
+    #[test]
+    fn from_project_name_derives_identifier_stripping_separators() {
+        let p = TauriParams::from_project_name("My-Cool_App".to_string());
+        assert_eq!(p.base.project_name, "My-Cool_App");
+        assert_eq!(p.base.default_host, Some("localhost".to_string()));
+        assert_eq!(p.base.default_port, Some(1420));
+        assert_eq!(p.identifier, "com.mycoolapp.app");
+        assert_eq!(p.rust.base.project_name, "My-Cool_App");
+    }
+
+    #[test]
+    fn with_project_replaces_project_params() {
+        let project = ProjectParams::from_project_name("proj".to_string());
+        let p = TauriParams::from_project_name("s".to_string()).with_project(project);
+        assert_eq!(p.project.base.project_name, "proj");
+    }
+
+    #[test]
+    fn precommit_proto_error_builders_and_accessors_round_trip() {
+        let p = TauriParams::from_project_name("s".to_string())
+            .with_precommit(true)
+            .with_proto_gen(true)
+            .with_error_gen(true);
+        assert!(p.enable_precommit());
+        assert!(p.enable_proto_gen());
+        assert!(p.enable_error_gen());
+    }
+
+    #[test]
+    fn extended_template_context_carries_tauri_keys() {
+        let p = TauriParams::from_project_name("app".to_string())
+            .with_proto_gen(true)
+            .with_error_gen(false);
+        let ctx = p.extended_template_context();
+        assert_eq!(ctx["frontend_framework"], Value::String("vue".to_string()));
+        assert_eq!(ctx["enable_dark_mode"], Value::Bool(true));
+        assert_eq!(ctx["enable_skeleton"], Value::Bool(true));
+        assert_eq!(ctx["window_width"], Value::Number(800.into()));
+        assert_eq!(ctx["window_height"], Value::Number(600.into()));
+        assert_eq!(ctx["identifier"], Value::String("com.app.app".to_string()));
+        assert_eq!(ctx["enable_proto_gen"], Value::Bool(true));
+        assert_eq!(ctx["enable_error_gen"], Value::Bool(false));
+    }
+
+    #[test]
+    fn inheritable_params_merge_base_and_extended_context() {
+        let p = TauriParams::from_project_name("merged".to_string());
+        assert_eq!(p.base_params().project_name, "merged");
+        let ctx = p.to_template_context();
+        assert_eq!(ctx["project_name"], serde_json::json!("merged"));
+        assert_eq!(ctx["frontend_framework"], serde_json::json!("vue"));
+    }
+}
