@@ -3,6 +3,7 @@
 > 用一个交互式 CLI 为 Go、Rust、Python、TypeScript 生成可直接构建的项目脚手架。
 
 [![CI](https://github.com/sunerpy/scaffold-gen/actions/workflows/ci.yml/badge.svg)](https://github.com/sunerpy/scaffold-gen/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/sunerpy/scaffold-gen/branch/main/graph/badge.svg)](https://codecov.io/gh/sunerpy/scaffold-gen)
 [![Release](https://img.shields.io/github/v/release/sunerpy/scaffold-gen)](https://github.com/sunerpy/scaffold-gen/releases)
 [![Crates.io](https://img.shields.io/crates/v/scaffold-gen.svg)](https://crates.io/crates/scaffold-gen)
 [![License](https://img.shields.io/crates/l/scaffold-gen.svg)](../../LICENSE)

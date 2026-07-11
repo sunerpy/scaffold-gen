@@ -69,3 +69,41 @@ jobs:
 
       - name: Verify binary
         run: ./dist/scafgen --version
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Coverage gate
+        run: make coverage-gate
+
+      - name: Coverage exclusion parity
+        run: make coverage-parity
+
+      - name: Generate lcov report
+        run: make coverage-lcov
+
+      - name: Upload coverage to Codecov
+        if: ${{ !env.ACT }}
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./lcov.info
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
