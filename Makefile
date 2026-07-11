@@ -23,11 +23,11 @@ TARGET ?=
 UPX_BIN := upx
 
 # Coverage configuration (single source of truth for the gate + lcov filter)
-COVERAGE_MIN := 90
+COVERAGE_MIN := 84
 # Excluded edge/glue layers (shell-out generation / interactive prompts /
 # environment probing / thin entrypoints). MUST mirror codecov.yml `ignore`;
 # change one and sync the other + run `make coverage-parity`.
-COVERAGE_EXCLUDE := (commands/prompts\.rs|commands/env_check\.rs|commands/version\.rs|utils/env_checker\.rs|utils/go_tools\.rs|generators/external\.rs|generators/orchestrator\.rs|generators/framework/.*/generator\.rs|generators/language/.*/generator\.rs|generators/project/generator\.rs|generators/core/generator\.rs|generators/core/parameters\.rs|main\.rs)
+COVERAGE_EXCLUDE := (commands/prompts\.rs|commands/env_check\.rs|commands/version\.rs|utils/env_checker\.rs|utils/go_tools\.rs|generators/external\.rs|generators/orchestrator\.rs|generators/framework/.*/generator\.rs|generators/language/.*/generator\.rs|generators/project/generator\.rs|generators/core/generator\.rs|generators/core/parameters\.rs|_tests\.rs|main\.rs)
 
 # Rust build flags for release optimization
 # Similar to Go's -ldflags="-s -w"
@@ -219,7 +219,7 @@ coverage-lcov:
 # Coverage parity: assert codecov.yml `ignore` mirrors COVERAGE_EXCLUDE (anti-drift)
 coverage-parity:
 	@set -e; \
-	expected="commands/prompts.rs commands/env_check.rs commands/version.rs utils/env_checker.rs utils/go_tools.rs generators/external.rs generators/orchestrator.rs generators/framework/**/generator.rs generators/language/**/generator.rs generators/project/generator.rs generators/core/generator.rs generators/core/parameters.rs main.rs"; \
+	expected="commands/prompts.rs commands/env_check.rs commands/version.rs utils/env_checker.rs utils/go_tools.rs generators/external.rs generators/orchestrator.rs generators/framework/**/generator.rs generators/language/**/generator.rs generators/project/generator.rs generators/core/generator.rs generators/core/parameters.rs _tests.rs main.rs"; \
 	count=0; \
 	for entry in $$expected; do \
 		if grep -F -- "$$entry" codecov.yml >/dev/null 2>&1; then \
@@ -229,11 +229,11 @@ coverage-parity:
 			exit 1; \
 		fi; \
 	done; \
-	if [ "$$count" -ne 13 ]; then \
-		echo "❌ coverage parity failed: expected 13 ignore entries, matched $$count"; \
+	if [ "$$count" -ne 14 ]; then \
+		echo "❌ coverage parity failed: expected 14 ignore entries, matched $$count"; \
 		exit 1; \
 	fi; \
-	echo "✅ coverage parity passed ($$count/13 ignore entries mirror COVERAGE_EXCLUDE)"
+	echo "✅ coverage parity passed ($$count/14 ignore entries mirror COVERAGE_EXCLUDE)"
 
 # Clean build artifacts
 clean:

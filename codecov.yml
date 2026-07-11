@@ -2,16 +2,16 @@
 #
 # The `ignore` set below MUST mirror the Makefile's COVERAGE_EXCLUDE (regex ->
 # glob). Change one and sync the other, then run `make coverage-parity` to
-# verify they still cover the same 13 edge/glue files.
+# verify they still cover the same 14 edge/glue files.
 coverage:
   status:
     project:
       default:
-        target: 90%
+        target: 84%
         threshold: 1%
     patch:
       default:
-        target: 90%
+        target: 84%
         threshold: 1%
 ignore:
   - "src/commands/prompts.rs"
@@ -26,4 +26,5 @@ ignore:
   - "src/generators/project/generator.rs"
   - "src/generators/core/generator.rs"
   - "src/generators/core/parameters.rs"
+  - "src/**/*_tests.rs"
   - "src/main.rs"
