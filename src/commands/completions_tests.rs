@@ -47,12 +47,22 @@ fn fish_and_powershell_and_elvish_completions_are_non_empty() {
     }
 }
 
-fn ctx_env(home: &str, xdg: Option<&str>, local: Option<&str>) -> Vec<(&'static str, String)> {
+// 进程级环境是全局共享的；任何改写 HOME/XDG 的测试都必须串行，避免并行竞争。
+// 该锁在整个 bin test crate 内共享（skill_tests 也引用它），是唯一的 HOME 改写门。
+pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+type EnvGuard = (
+    Vec<(&'static str, String)>,
+    std::sync::MutexGuard<'static, ()>,
+);
+
+fn ctx_env(home: &str, xdg: Option<&str>, local: Option<&str>) -> EnvGuard {
+    let guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut saved = Vec::new();
     for key in ["HOME", "USERPROFILE", "XDG_DATA_HOME", "LOCALAPPDATA"] {
         saved.push((key, std::env::var(key).unwrap_or_default()));
     }
-    // SAFETY: 测试串行改写进程环境后立即读取并复原，仅本测试可见。
+    // SAFETY: 持有 ENV_LOCK 串行改写进程环境后立即读取并复原，仅本测试可见。
     unsafe {
         std::env::set_var("HOME", home);
         std::env::remove_var("USERPROFILE");
@@ -65,11 +75,12 @@ fn ctx_env(home: &str, xdg: Option<&str>, local: Option<&str>) -> Vec<(&'static 
             None => std::env::remove_var("LOCALAPPDATA"),
         }
     }
-    saved
+    (saved, guard)
 }
 
-fn restore_env(saved: Vec<(&'static str, String)>) {
-    // SAFETY: 复原测试前保存的环境变量，串行执行。
+fn restore_env(guard: EnvGuard) {
+    let (saved, _lock) = guard;
+    // SAFETY: 仍持有 ENV_LOCK，复原测试前保存的环境变量后释放锁。
     unsafe {
         for (key, val) in saved {
             if val.is_empty() {
@@ -164,4 +175,41 @@ fn write_completion_file_creates_parent_and_writes_bytes() {
     write_completion_file(&target, b"# completion\n").expect("writes file + parents");
     assert_eq!(std::fs::read(&target).unwrap(), b"# completion\n");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn execute_print_mode_writes_script_to_stdout_without_error() {
+    let mut cmd = sample_cmd();
+    execute(Shell::Bash, false, &mut cmd).expect("print completion to stdout");
+}
+
+#[test]
+fn post_install_hint_covers_every_shell_arm() {
+    let target = PathBuf::from("/tmp/scafgen/completion");
+    for shell in [
+        Shell::Zsh,
+        Shell::Elvish,
+        Shell::PowerShell,
+        Shell::Bash,
+        Shell::Fish,
+    ] {
+        post_install_hint(shell, &target);
+    }
+}
+
+#[test]
+fn install_script_installs_into_resolved_target() {
+    let saved = ctx_env(
+        &std::env::temp_dir()
+            .join(format!("scafgen-install-{}", std::process::id()))
+            .to_string_lossy(),
+        None,
+        None,
+    );
+    let mut cmd = sample_cmd();
+    install_script(Shell::Fish, &mut cmd).expect("install to resolved fish target");
+    let expected = completion_target(Shell::Fish).expect("fish target resolves");
+    assert!(expected.exists(), "completion written to {expected:?}");
+    let _ = std::fs::remove_file(&expected);
+    restore_env(saved);
 }

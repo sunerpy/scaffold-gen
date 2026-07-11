@@ -86,4 +86,13 @@ mod tests {
         assert_eq!(Verbosity::Normal.default_directive(), "info");
         assert_eq!(Verbosity::Verbose.default_directive(), "debug");
     }
+
+    #[test]
+    fn init_is_idempotent_and_never_panics() {
+        // try_init 幂等：进程内可能已有全局订阅器，二次调用返回 Err 被吞掉，
+        // 覆盖 init() 的 filter 构建 + fmt 订阅器构建路径而不 panic。
+        init(Verbosity::Normal);
+        init(Verbosity::Verbose);
+        init(Verbosity::Quiet);
+    }
 }

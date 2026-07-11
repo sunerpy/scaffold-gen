@@ -578,3 +578,82 @@ fn project_name_with_spaces_is_quoted_in_command() {
     let out = cmd.equivalent_command(&params);
     assert!(out.starts_with("scafgen new 'my project'"));
 }
+
+use std::os::unix::fs::PermissionsExt;
+
+fn params_in_dir(language: Language, framework: Framework, dir: &std::path::Path) -> ProjectParams {
+    ProjectParams {
+        language,
+        framework,
+        project_path: dir.join("proj"),
+        host: "0.0.0.0".to_string(),
+        port: 8000,
+        enable_precommit: false,
+        license: "MIT".to_string(),
+        enable_swagger: false,
+        enable_proto_gen: false,
+        enable_error_gen: false,
+        enable_build: false,
+        mcp_backend: McpBackend::Fastmcp,
+        auth_mode: AuthMode::None,
+    }
+}
+
+#[tokio::test]
+async fn generate_project_rejects_framework_not_valid_for_language() {
+    // Go 的合法框架不含 Tauri，且 Tauri != None → 命中「不支持的框架」错误分支。
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let params = params_in_dir(Language::Go, Framework::Tauri, tmp.path());
+    let cmd = NewCommand::new("proj".into(), None);
+    let err = cmd.generate_project(params).await.unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("is not supported for") && msg.contains("Available frameworks"),
+        "expected unsupported-framework error, got: {msg}"
+    );
+}
+
+#[tokio::test]
+async fn generate_project_go_none_requires_framework() {
+    // Go + None：跳过第一个错误，resolve(Go, None) 无纯语言规格 → 「requires a framework」。
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let params = params_in_dir(Language::Go, Framework::None, tmp.path());
+    let cmd = NewCommand::new("proj".into(), None);
+    let err = cmd.generate_project(params).await.unwrap_err();
+    assert!(
+        err.to_string().contains("requires a framework"),
+        "expected requires-a-framework error, got: {err}"
+    );
+}
+
+#[tokio::test]
+async fn generate_project_typescript_none_requires_framework() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let params = params_in_dir(Language::TypeScript, Framework::None, tmp.path());
+    let cmd = NewCommand::new("proj".into(), None);
+    let err = cmd.generate_project(params).await.unwrap_err();
+    assert!(err.to_string().contains("requires a framework"));
+}
+
+#[tokio::test]
+async fn generate_project_creates_dir_before_orchestration() {
+    // Gin+Go 校验通过、resolve 成功、create_dir_all 建目录后进入编排。用一个
+    // 不可写父目录（在只读的 tempdir 下）逼 create_dir_all 失败，命中 353-358
+    // 的 with_context 错误分支，而不触及任何外部工具链（uv/cargo/git）。
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let readonly = tmp.path().join("ro");
+    std::fs::create_dir(&readonly).expect("mk ro dir");
+    let mut perms = std::fs::metadata(&readonly).unwrap().permissions();
+    perms.set_mode(0o500);
+    std::fs::set_permissions(&readonly, perms).expect("chmod ro");
+
+    let mut params = params_in_dir(Language::Go, Framework::Gin, tmp.path());
+    params.project_path = readonly.join("blocked/proj");
+    let cmd = NewCommand::new("proj".into(), None);
+    let err = cmd.generate_project(params).await.unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("Failed to create project directory"),
+        "expected create-dir failure, got: {err}"
+    );
+}
