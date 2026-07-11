@@ -191,7 +191,7 @@ fn run_blocking(check: bool, force: bool, tag: Option<String>) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_same_version, release_version_to_tag, resolve_auth_token};
+    use super::{is_same_version, release_version_to_tag, resolve_auth_token, strip_v};
 
     // Network-free: these only assert the pure helpers that the `tag = None`
     // path relies on. The latest-resolution itself
@@ -278,5 +278,37 @@ mod tests {
     #[test]
     fn auth_token_whitespace_only_is_treated_as_unset() {
         assert_eq!(resolve_auth_token(Some("  "), None), None);
+    }
+
+    #[test]
+    fn strip_v_removes_single_leading_v_only() {
+        assert_eq!(strip_v("v1.2.3"), "1.2.3");
+        assert_eq!(strip_v("1.2.3"), "1.2.3");
+        assert_eq!(strip_v("vv1.0"), "v1.0");
+        assert_eq!(strip_v(""), "");
+        assert_eq!(strip_v("v"), "");
+    }
+
+    #[test]
+    fn release_version_to_tag_bare_zero_version() {
+        assert_eq!(release_version_to_tag("0.0.0"), "v0.0.0");
+    }
+
+    #[test]
+    fn is_same_version_both_prefixed_equal() {
+        assert!(is_same_version("v1.0.0", "v1.0.0"));
+    }
+
+    #[test]
+    fn is_same_version_major_differs() {
+        assert!(!is_same_version("1.0.0", "2.0.0"));
+    }
+
+    #[test]
+    fn auth_token_trims_surrounding_whitespace() {
+        assert_eq!(
+            resolve_auth_token(Some("  tok  "), None),
+            Some("tok".to_owned())
+        );
     }
 }
