@@ -78,3 +78,50 @@ impl ReactParams {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::generators::core::Parameters;
+
+    fn assert_react_defaults(params: &ReactParams) {
+        assert_eq!(params.node_version, "20");
+        assert!(params.enable_typescript);
+        assert!(params.enable_tailwind);
+        assert!(params.enable_router);
+        assert_eq!(params.state_management, "zustand");
+        assert!(params.enable_eslint);
+        assert!(params.enable_prettier);
+        assert_eq!(params.package_manager, "pnpm");
+        assert_eq!(params.base.default_host, Some("localhost".to_string()));
+        assert_eq!(params.base.default_port, Some(5173));
+    }
+
+    #[test]
+    fn default_sets_react_field_defaults() {
+        let params = ReactParams::default();
+        assert_react_defaults(&params);
+        assert_eq!(params.base.project_name, "");
+    }
+
+    #[test]
+    fn from_project_name_sets_name_and_defaults() {
+        let params = ReactParams::from_project_name("my-react-app".to_string());
+        assert_react_defaults(&params);
+        assert_eq!(params.base.project_name, "my-react-app");
+        assert_eq!(params.project.base.project_name, "my-react-app");
+    }
+
+    #[test]
+    fn to_template_context_carries_project_name_host_and_port() {
+        let params = ReactParams::from_project_name("my-react-app".to_string());
+        let ctx = params.to_template_context();
+
+        assert_eq!(ctx["project_name"], serde_json::json!("my-react-app"));
+        assert_eq!(ctx["host"], serde_json::json!("127.0.0.1"));
+        assert_eq!(ctx["default_host"], serde_json::json!("127.0.0.1"));
+        assert_eq!(ctx["port"], serde_json::json!(8080));
+        assert_eq!(ctx["default_port"], serde_json::json!(8080));
+        assert_eq!(ctx["license"], serde_json::json!("MIT"));
+    }
+}

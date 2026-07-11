@@ -23,7 +23,7 @@ TARGET ?=
 UPX_BIN := upx
 
 # Coverage configuration (single source of truth for the gate + lcov filter)
-COVERAGE_MIN := 65
+COVERAGE_MIN := 76
 # Excluded edge/glue layers (shell-out generation / interactive prompts /
 # environment probing / thin entrypoints). MUST mirror codecov.yml `ignore`;
 # change one and sync the other + run `make coverage-parity`.
