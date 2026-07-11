@@ -311,4 +311,19 @@ mod tests {
             Some("tok".to_owned())
         );
     }
+
+    use super::build_updater;
+
+    #[test]
+    fn build_updater_constructs_without_tag() {
+        let updater = build_updater("0.1.0", false, None).expect("builds latest-updater");
+        assert_eq!(updater.bin_name(), super::BIN_NAME);
+        assert_eq!(updater.current_version(), "0.1.0");
+    }
+
+    #[test]
+    fn build_updater_constructs_with_pinned_tag() {
+        let updater = build_updater("0.1.0", true, Some("v0.9.9")).expect("builds pinned-updater");
+        assert_eq!(updater.target_version(), Some("v0.9.9".to_owned()));
+    }
 }

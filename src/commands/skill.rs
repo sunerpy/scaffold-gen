@@ -159,30 +159,5 @@ fn report_status(agent: AgentId, loc: Location, status: SkillStatus) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn resolve_targets_empty_is_all_four() {
-        let all = resolve_targets(&[]).unwrap();
-        assert_eq!(all, skill::ALL_AGENTS.to_vec());
-    }
-
-    #[test]
-    fn resolve_targets_subset_dedupes_and_orders() {
-        let got = resolve_targets(&[
-            "claude".to_string(),
-            "opencode".to_string(),
-            "claude".to_string(),
-        ])
-        .unwrap();
-        // 稳定顺序：opencode 在 claude 之前。
-        assert_eq!(got, vec![AgentId::Opencode, AgentId::Claude]);
-    }
-
-    #[test]
-    fn resolve_targets_unknown_errors() {
-        let err = resolve_targets(&["nope".to_string()]).unwrap_err();
-        assert!(err.to_string().contains("unknown --target 'nope'"));
-    }
-}
+#[path = "skill_tests.rs"]
+mod tests;

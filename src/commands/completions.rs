@@ -125,4 +125,4 @@ fn completion_target(shell: Shell) -> Option<PathBuf> {
 
 #[cfg(test)]
 #[path = "completions_tests.rs"]
-mod tests;
+pub(crate) mod tests;

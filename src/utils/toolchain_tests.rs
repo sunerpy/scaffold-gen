@@ -74,3 +74,18 @@ fn builder_records_cwd_and_args() {
     assert_eq!(cmd.args, ["mod", "tidy"]);
     assert_eq!(cmd.cwd, Some(PathBuf::from("/some/dir")));
 }
+
+#[test]
+fn run_captures_output_of_a_real_command() {
+    // cargo 必然存在（正在运行本测试）；走完整 output() 成功路径并捕获 stdout。
+    let outcome = ExternalCommand::new("cargo")
+        .arg("--version")
+        .run()
+        .expect("cargo --version runs");
+    assert!(outcome.success(), "cargo --version exits 0");
+    assert!(
+        outcome.stdout().contains("cargo"),
+        "stdout captured: {}",
+        outcome.stdout()
+    );
+}

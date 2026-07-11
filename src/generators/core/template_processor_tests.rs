@@ -212,6 +212,105 @@ fn process_embedded_template_directory_creates_nested_directory_structure() {
 }
 
 #[test]
+fn process_embedded_template_directory_errors_when_output_uncreatable() {
+    use std::os::unix::fs::PermissionsExt;
+    // 只读输出根：渲染成功但写文件失败，命中写入错误的 with_context 分支。
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let readonly = tmp.path().join("ro");
+    fs::create_dir(&readonly).unwrap();
+    let mut perms = fs::metadata(&readonly).unwrap().permissions();
+    perms.set_mode(0o500);
+    fs::set_permissions(&readonly, perms).unwrap();
+
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    let mut context = ctx("blocked");
+    context.insert("python_version".to_string(), json!("3.12"));
+    context.insert("package_name".to_string(), json!("blocked"));
+    context.insert("uv_version".to_string(), json!("0.9.1"));
+    context.insert("ruff_version".to_string(), json!("0.12.1"));
+    let err = processor
+        .process_embedded_template_directory("languages/python", &readonly, context)
+        .unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Failed to write rendered file") || msg.contains("Failed to create directory"),
+        "expected write/create error under read-only output, got: {msg}"
+    );
+}
+
+#[test]
+fn process_embedded_template_directory_missing_path_yields_no_files() {
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    processor
+        .process_embedded_template_directory("definitely/missing/path", tmp.path(), ctx("x"))
+        .expect("missing prefix filters to empty file set, not an error");
+    assert!(
+        collect_relative_files(tmp.path()).is_empty(),
+        "no files generated for a missing template prefix"
+    );
+}
+
+#[test]
+fn process_template_file_errors_when_output_dir_uncreatable() {
+    use std::os::unix::fs::PermissionsExt;
+    // 只读父目录使 create_dir_all 失败，命中 114-118 的建目录错误分支。
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let readonly = tmp.path().join("ro");
+    fs::create_dir(&readonly).unwrap();
+    let mut perms = fs::metadata(&readonly).unwrap().permissions();
+    perms.set_mode(0o500);
+    fs::set_permissions(&readonly, perms).unwrap();
+
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    let out = readonly.join("blocked/main.py");
+    let mut context = ctx("x");
+    context.insert("package_name".to_string(), json!("x"));
+    let err = processor
+        .process_template_file(Path::new("languages/python/main.py.tmpl"), &out, context)
+        .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("Failed to create output directory"),
+        "expected create-output-dir error, got: {err}"
+    );
+}
+
+#[test]
+fn process_template_file_errors_on_missing_embedded_template() {
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    let out = tmp.path().join("out.txt");
+    let err = processor
+        .process_template_file(Path::new("languages/python/nope.tmpl"), &out, ctx("x"))
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("Failed to render template"),
+        "expected render error, got: {err}"
+    );
+}
+
+#[test]
+fn render_template_content_errors_on_invalid_syntax() {
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    let err = processor
+        .render_template_content("<%if unterminated%>", ctx("x"))
+        .unwrap_err();
+    assert!(!err.to_string().is_empty(), "syntax error surfaces");
+}
+
+#[test]
+fn get_template_path_empty_relative_returns_root() {
+    let processor = TemplateProcessor::new().expect("create processor");
+    let root = processor.get_template_path("").expect("resolve root");
+    assert_eq!(
+        root,
+        PathBuf::new(),
+        "embedded templates root is empty base"
+    );
+}
+
+#[test]
 fn process_embedded_template_directory_renders_gin_framework() {
     // Given: gin 模板仅依赖 BaseParams 提供的变量
     let tmp = tempfile::tempdir().expect("create tempdir");
