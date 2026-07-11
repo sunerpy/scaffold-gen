@@ -202,3 +202,114 @@ impl<T: InheritableParams> Parameters for T {
         context
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_sets_name_and_module_name_and_defaults() {
+        let params = BaseParams::new("acme".to_string());
+        assert_eq!(params.project_name, "acme");
+        assert_eq!(params.module_name, Some("acme".to_string()));
+        assert_eq!(params.project_version, "0.1.0");
+        assert_eq!(params.license, "MIT");
+        assert!(params.enable_git);
+        assert!(!params.enable_precommit);
+        assert_eq!(params.host, Some("127.0.0.1".to_string()));
+        assert_eq!(params.port, Some(8080));
+    }
+
+    #[test]
+    fn default_leaves_name_empty_and_module_none() {
+        let params = BaseParams::default();
+        assert_eq!(params.project_name, "");
+        assert!(params.module_name.is_none());
+        assert_eq!(params.language_version, Some("1.21".to_string()));
+    }
+
+    #[test]
+    fn with_description_author_license_set_fields() {
+        let params = BaseParams::new("svc".to_string())
+            .with_description("a service".to_string())
+            .with_author("alice".to_string())
+            .with_license("Apache-2.0".to_string());
+        assert_eq!(params.project_description, Some("a service".to_string()));
+        assert_eq!(params.author, Some("alice".to_string()));
+        assert_eq!(params.license, "Apache-2.0");
+    }
+
+    #[test]
+    fn with_database_enables_flag_and_sets_type() {
+        let params = BaseParams::new("svc".to_string()).with_database("postgres".to_string());
+        assert!(params.enable_database);
+        assert_eq!(params.database_type, Some("postgres".to_string()));
+    }
+
+    #[test]
+    fn validate_accepts_default_params() {
+        let params = BaseParams::new("valid-name".to_string());
+        assert!(params.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_empty_license() {
+        let mut params = BaseParams::new("svc".to_string());
+        params.license = String::new();
+        assert!(params.validate().is_err());
+    }
+
+    #[test]
+    fn validate_rejects_database_enabled_without_type() {
+        let mut params = BaseParams::new("svc".to_string());
+        params.enable_database = true;
+        params.database_type = None;
+        assert!(params.validate().is_err());
+    }
+
+    #[test]
+    fn validate_accepts_database_enabled_with_type() {
+        let params = BaseParams::new("svc".to_string()).with_database("mysql".to_string());
+        assert!(params.validate().is_ok());
+    }
+
+    #[derive(Clone, Default)]
+    struct Wrapper {
+        base: BaseParams,
+    }
+
+    impl InheritableParams for Wrapper {
+        fn base_params(&self) -> &BaseParams {
+            &self.base
+        }
+        fn extended_template_context(&self) -> HashMap<String, Value> {
+            let mut ctx = HashMap::new();
+            ctx.insert("extra_key".to_string(), Value::Bool(true));
+            ctx.insert(
+                "license".to_string(),
+                Value::String("OVERRIDDEN".to_string()),
+            );
+            ctx
+        }
+    }
+
+    #[test]
+    fn inheritable_blanket_impl_merges_extended_context_over_base() {
+        let wrapper = Wrapper {
+            base: BaseParams::new("wrapped".to_string()),
+        };
+        let ctx = wrapper.to_template_context();
+
+        assert_eq!(ctx["project_name"], serde_json::json!("wrapped"));
+        assert_eq!(ctx["extra_key"], serde_json::json!(true));
+        assert_eq!(ctx["license"], serde_json::json!("OVERRIDDEN"));
+    }
+
+    #[test]
+    fn inheritable_blanket_impl_validate_delegates_to_base() {
+        let mut bad = BaseParams::new("svc".to_string());
+        bad.license = String::new();
+        let wrapper = Wrapper { base: bad };
+        assert!(wrapper.validate().is_err());
+    }
+}
