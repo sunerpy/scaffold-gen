@@ -1,4 +1,4 @@
-.PHONY: all build build-dev build-prod release release-target clean install fmt fmt-rust fmt-oxfmt lint check test ci help upx-binaries install-upx fmt-check fmt-rust-check fmt-oxfmt-check hooks
+.PHONY: all build build-dev build-prod release release-target clean install fmt fmt-rust fmt-oxfmt lint check test ci help upx-binaries install-upx fmt-check fmt-rust-check fmt-oxfmt-check hooks coverage coverage-html coverage-gate coverage-lcov coverage-parity
 
 # Project configuration
 PROJECT_NAME := scaffold-gen
@@ -21,6 +21,13 @@ TARGET ?=
 
 # UPX configuration
 UPX_BIN := upx
+
+# Coverage configuration (single source of truth for the gate + lcov filter)
+COVERAGE_MIN := 65
+# Excluded edge/glue layers (shell-out generation / interactive prompts /
+# environment probing / thin entrypoints). MUST mirror codecov.yml `ignore`;
+# change one and sync the other + run `make coverage-parity`.
+COVERAGE_EXCLUDE := (commands/prompts\.rs|commands/env_check\.rs|commands/version\.rs|utils/env_checker\.rs|utils/go_tools\.rs|generators/external\.rs|generators/orchestrator\.rs|generators/framework/.*/generator\.rs|generators/language/.*/generator\.rs|generators/project/generator\.rs|generators/core/generator\.rs|generators/core/parameters\.rs|main\.rs)
 
 # Rust build flags for release optimization
 # Similar to Go's -ldflags="-s -w"
@@ -187,6 +194,47 @@ else
 	@echo "❌ pre-commit not found: https://pre-commit.com/#install"
 endif
 
+# Coverage: terminal summary over all targets (unfiltered global view)
+coverage:
+	@echo "📊 Computing coverage (all targets, unfiltered)..."
+	$(CARGO) llvm-cov --all-targets
+
+# Coverage: human-readable HTML report
+coverage-html:
+	@echo "📊 Generating HTML coverage report..."
+	$(CARGO) llvm-cov --all-targets --html
+	@echo "✅ HTML report: $(TARGET_DIR)/llvm-cov/html/index.html"
+
+# Coverage gate: filtered line coverage must be >= COVERAGE_MIN (else exit != 0)
+coverage-gate:
+	@echo "🚦 Enforcing coverage gate (filtered line coverage >= $(COVERAGE_MIN)%)..."
+	$(CARGO) llvm-cov --all-targets --ignore-filename-regex '$(COVERAGE_EXCLUDE)' --fail-under-lines $(COVERAGE_MIN)
+
+# Coverage lcov: emit lcov.info for Codecov upload (same ignore set as the gate)
+coverage-lcov:
+	@echo "📤 Generating lcov.info for Codecov..."
+	$(CARGO) llvm-cov --all-targets --ignore-filename-regex '$(COVERAGE_EXCLUDE)' --lcov --output-path lcov.info
+	@echo "✅ lcov.info written"
+
+# Coverage parity: assert codecov.yml `ignore` mirrors COVERAGE_EXCLUDE (anti-drift)
+coverage-parity:
+	@set -e; \
+	expected="commands/prompts.rs commands/env_check.rs commands/version.rs utils/env_checker.rs utils/go_tools.rs generators/external.rs generators/orchestrator.rs generators/framework/**/generator.rs generators/language/**/generator.rs generators/project/generator.rs generators/core/generator.rs generators/core/parameters.rs main.rs"; \
+	count=0; \
+	for entry in $$expected; do \
+		if grep -F -- "$$entry" codecov.yml >/dev/null 2>&1; then \
+			count=$$((count + 1)); \
+		else \
+			echo "❌ coverage parity failed: codecov.yml missing ignore entry '$$entry'"; \
+			exit 1; \
+		fi; \
+	done; \
+	if [ "$$count" -ne 13 ]; then \
+		echo "❌ coverage parity failed: expected 13 ignore entries, matched $$count"; \
+		exit 1; \
+	fi; \
+	echo "✅ coverage parity passed ($$count/13 ignore entries mirror COVERAGE_EXCLUDE)"
+
 # Clean build artifacts
 clean:
 	@echo "🧹 Cleaning build artifacts..."
@@ -230,6 +278,13 @@ help:
 	@echo "    test         - Run tests"
 	@echo "    ci           - Run all CI checks"
 	@echo "    hooks        - Install git pre-commit + pre-push hooks"
+	@echo ""
+	@echo "  Coverage:"
+	@echo "    coverage       - Terminal coverage summary (all targets, unfiltered)"
+	@echo "    coverage-html  - Generate HTML coverage report"
+	@echo "    coverage-gate  - Enforce filtered line coverage >= COVERAGE_MIN ($(COVERAGE_MIN)%)"
+	@echo "    coverage-lcov  - Emit lcov.info for Codecov upload"
+	@echo "    coverage-parity- Assert codecov.yml ignore mirrors COVERAGE_EXCLUDE"
 	@echo ""
 	@echo "  Utilities:"
 	@echo "    clean        - Clean build artifacts"

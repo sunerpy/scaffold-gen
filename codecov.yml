@@ -1,0 +1,29 @@
+# Codecov configuration.
+#
+# The `ignore` set below MUST mirror the Makefile's COVERAGE_EXCLUDE (regex ->
+# glob). Change one and sync the other, then run `make coverage-parity` to
+# verify they still cover the same 13 edge/glue files.
+coverage:
+  status:
+    project:
+      default:
+        target: 65%
+        threshold: 1%
+    patch:
+      default:
+        target: 65%
+        threshold: 1%
+ignore:
+  - "src/commands/prompts.rs"
+  - "src/commands/env_check.rs"
+  - "src/commands/version.rs"
+  - "src/utils/env_checker.rs"
+  - "src/utils/go_tools.rs"
+  - "src/generators/external.rs"
+  - "src/generators/orchestrator.rs"
+  - "src/generators/framework/**/generator.rs"
+  - "src/generators/language/**/generator.rs"
+  - "src/generators/project/generator.rs"
+  - "src/generators/core/generator.rs"
+  - "src/generators/core/parameters.rs"
+  - "src/main.rs"
