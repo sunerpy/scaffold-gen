@@ -347,6 +347,49 @@ mod tests {
     }
 
     #[test]
+    fn render_template_reads_embedded_by_path_and_substitutes() {
+        let eng = engine();
+        let data = ctx(&[("project_name", json!("path-render"))]);
+        let out = eng
+            .render_template(Path::new("languages/python/main.py.tmpl"), &data)
+            .expect("render embedded template by path");
+        assert!(out.contains("path-render"));
+        assert!(!out.contains("<<"));
+    }
+
+    #[test]
+    fn render_template_errors_on_missing_embedded_path() {
+        let eng = engine();
+        let data = HashMap::new();
+        let err = eng
+            .render_template(Path::new("languages/python/nope.tmpl"), &data)
+            .expect_err("missing embedded template should error");
+        let msg = format!("{err:#}");
+        assert!(msg.contains("Failed to read embedded template"));
+    }
+
+    #[test]
+    fn read_embedded_template_ok_and_err() {
+        assert!(read_embedded_template("languages/python/main.py.tmpl").is_ok());
+        let err = read_embedded_template("nonexistent/file.tmpl").expect_err("missing errors");
+        assert!(format!("{err:#}").contains("Embedded template file not found"));
+    }
+
+    #[test]
+    fn to_camel_case_handles_empty_segments() {
+        assert_eq!(to_camel_case("my--project"), "MyProject");
+        assert_eq!(to_camel_case(""), "");
+        assert_eq!(to_camel_case("-lead"), "Lead");
+    }
+
+    #[test]
+    fn get_embedded_template_files_root_returns_all() {
+        let all = get_embedded_template_files("").expect("list all files");
+        assert!(!all.is_empty());
+        assert!(all.iter().any(|f| f == "languages/python/main.py.tmpl"));
+    }
+
+    #[test]
     fn embedded_python_main_template_exists() {
         assert!(embedded_template_exists("languages/python/main.py.tmpl"));
         assert!(!embedded_template_exists("languages/python/nope.tmpl"));

@@ -153,6 +153,35 @@ mod tests {
     }
 
     #[test]
+    fn run_with_cwd_set_still_maps_missing_binary_to_error() {
+        // current_dir 分支被走到（cwd = 一个真实存在的临时目录），但可执行文件不存在 -> Err（不 panic）。
+        let dir = std::env::temp_dir();
+        let result = ExternalCommand::new("definitely-not-a-real-tool-xyz")
+            .arg("version")
+            .current_dir(&dir)
+            .run();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn tool_available_true_for_present_binary() {
+        // 单元测试环境保证有 cargo（由它运行），因此 which 应解析成功。
+        assert!(tool_available("cargo"));
+    }
+
+    #[test]
+    fn command_outcome_accessors_expose_fields() {
+        let outcome = CommandOutcome {
+            success: true,
+            stdout: "out".to_string(),
+            stderr: "err".to_string(),
+        };
+        assert!(outcome.success());
+        assert_eq!(outcome.stdout(), "out");
+        assert_eq!(outcome.stderr(), "err");
+    }
+
+    #[test]
     fn builder_records_cwd_and_args() {
         let cmd = ExternalCommand::new("go")
             .args(["mod", "tidy"])

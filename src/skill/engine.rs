@@ -279,6 +279,30 @@ mod tests {
     }
 
     #[test]
+    fn file_action_verbs_cover_every_variant() {
+        assert_eq!(FileAction::Created.verb(), "created");
+        assert_eq!(FileAction::Updated.verb(), "updated");
+        assert_eq!(FileAction::Unchanged.verb(), "unchanged");
+        assert_eq!(FileAction::Skipped.verb(), "skipped (locally modified)");
+        assert_eq!(FileAction::Removed.verb(), "removed");
+        assert_eq!(FileAction::NotFound.verb(), "not found");
+    }
+
+    #[test]
+    fn skill_status_labels_cover_every_variant() {
+        assert_eq!(SkillStatus::NotInstalled.label(), "not installed");
+        assert_eq!(SkillStatus::UpToDate.label(), "installed (up to date)");
+        assert_eq!(
+            SkillStatus::LocallyModified.label(),
+            "installed (locally modified)"
+        );
+        assert_eq!(
+            SkillStatus::Outdated.label(),
+            "installed (update available)"
+        );
+    }
+
+    #[test]
     fn decide_fresh_install_is_update() {
         assert_eq!(decide(None, None, false), UpdateDecision::Update);
         assert_eq!(decide(None, None, true), UpdateDecision::Update);
