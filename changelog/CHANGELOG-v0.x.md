@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.8](https://github.com/sunerpy/scaffold-gen/compare/v0.10.7...v0.10.8) (2026-07-13)
+
+
+### Bug Fixes
+
+* **skill:** 修正 SKILL.md Gin 模板缺 --swagger 导致 agent 照抄失败 ([#52](https://github.com/sunerpy/scaffold-gen/issues/52)) ([45a0ee4](https://github.com/sunerpy/scaffold-gen/commit/45a0ee492389db7ea0212c213435e3a3141e8a1f))
+
 ## [0.10.7](https://github.com/sunerpy/scaffold-gen/compare/v0.10.6...v0.10.7) (2026-07-09)
 
 
