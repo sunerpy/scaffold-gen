@@ -72,6 +72,7 @@ timeout 120 scafgen new <name> \
   --framework <gin|mcp-server|fastapi|mcp-python|tauri|vue3|react|none> \
   [--host <host> --port <port>] \
   [--proto-gen <true|false> --error-gen <true|false>] \
+  [--swagger <true|false>] \
   [--mcp-backend <fastmcp|official> --auth <none|jwt|azure-ad>] \
   --precommit <true|false> \
   --license <MIT|Apache-2.0|GPL-3.0|BSD-3-Clause|None> \
@@ -87,6 +88,10 @@ Notes:
   `--proto-gen false --error-gen false`). These are Rust-only tool toggles; omitting
   them on a Rust run triggers the `Failed to configure proto-gen` prompt. They do not
   apply to other languages — leave them off for Go/Python/TypeScript.
+- **Gin requires `--swagger <true|false>`** — it's Gin's own required tool toggle,
+  the same shape as Rust's `--proto-gen`/`--error-gen`. Omitting it on a `gin` run
+  triggers the `Failed to configure Swagger` prompt. Only `gin` needs it; leave it
+  off for every other framework.
 - Omit `--host`/`--port` for non-server projects; pass them for the server frameworks
   (`gin`, `mcp-server`, `fastapi`, `mcp-python`).
 - **`mcp-python` also takes `--mcp-backend fastmcp|official`** (default `fastmcp`) and
@@ -120,9 +125,9 @@ timeout 120 scafgen new <name> --language rust --framework none \
 timeout 180 scafgen new <name> --language rust --framework tauri \
   --proto-gen false --error-gen false --precommit false --license MIT --with-build false </dev/null
 
-# Go + Gin web service (server → host/port)
+# Go + Gin web service (server → host/port; NEEDS --swagger)
 timeout 120 scafgen new <name> --language go --framework gin \
-  --host 0.0.0.0 --port <port> --precommit false --license MIT --with-build false </dev/null
+  --host 0.0.0.0 --port <port> --swagger false --precommit false --license MIT --with-build false </dev/null
 
 # Go + MCP server (server → host/port)
 timeout 120 scafgen new <name> --language go --framework mcp-server \
@@ -200,8 +205,14 @@ accuracy and lowers token consumption on the project you just scaffolded.
 - **Rust always needs `--proto-gen` and `--error-gen`** — even for `--framework none`
   or `tauri`. Omitting them triggers `Failed to configure proto-gen`. Use
   `--proto-gen false --error-gen false` unless the user wants those tools.
-- **Validate the combo** — Go and TypeScript require a real framework (no pure-language
-  path); Python/Rust allow `--framework none`. An invalid pair errors clearly.
+- **Gin always needs `--swagger`** — omitting it on a `gin` run triggers
+  `Failed to configure Swagger`. Use `--swagger false` unless the user wants Swagger
+  docs generated. No other framework takes this flag.
+- **Validate the combo** — Go and TypeScript have no pure-language path, so don't pass
+  `--framework none` for them; Python/Rust allow it. Passing `none` for Go/TypeScript
+  does not fail with a clear "requires a framework" message — it errors later with
+  `Failed to get host address`, since `none` skips the network config those languages'
+  generators still expect. Stick to a real framework for Go/TypeScript.
 - **go-zero is not yet implemented** — it returns a clear "not implemented" error;
   don't offer it as a working choice.
 - **Don't hand-edit generated config plumbing** — change host/port/etc. in the
