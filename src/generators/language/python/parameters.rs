@@ -44,6 +44,10 @@ impl InheritableParams for PythonParams {
         if let Some(ref version) = self.base.language_version {
             context.insert("python_version".to_string(), serde_json::json!(version));
         }
+        context.insert(
+            "python_min_version".to_string(),
+            serde_json::json!(defaults::PYTHON_MIN_VERSION),
+        );
 
         // 包名称（将项目名转换为有效的 Python 包名）
         let package_name = self
