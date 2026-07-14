@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::constants::{Framework, Language};
 use crate::generators::McpPythonAuthContext;
@@ -77,6 +77,24 @@ async fn build_python_params(
     Ok(params)
 }
 
+fn rust_format_manifest_path(request: &GenerationRequest<'_>) -> Option<PathBuf> {
+    if request.spec.language != Language::Rust {
+        return None;
+    }
+
+    match request.spec.framework {
+        Framework::None => Some(request.output_path.join("Cargo.toml")),
+        Framework::Tauri => Some(request.output_path.join("src-tauri/Cargo.toml")),
+        Framework::Gin
+        | Framework::GoZero
+        | Framework::McpServer
+        | Framework::FastApi
+        | Framework::McpServerPython
+        | Framework::Vue3
+        | Framework::React => None,
+    }
+}
+
 /// 生成器编排器，负责协调三层架构的生成器
 pub struct GeneratorOrchestrator {
     pub(super) project_generator: ProjectScaffolder,
@@ -123,6 +141,7 @@ impl GeneratorOrchestrator {
         }
 
         self.format_python_project(&request);
+        self.format_rust_project(&request);
 
         Ok(())
     }
@@ -151,6 +170,46 @@ impl GeneratorOrchestrator {
         match cmd.status() {
             Ok(s) if s.success() => tracing::info!("已用 ruff 格式化生成的 Python 代码"),
             _ => tracing::warn!("ruff format 已跳过/失败（非致命）"),
+        }
+    }
+
+    fn format_rust_project(&self, request: &GenerationRequest<'_>) {
+        let Some(manifest_path) = rust_format_manifest_path(request) else {
+            return;
+        };
+        if !manifest_path.is_file() {
+            tracing::warn!(
+                manifest = %manifest_path.display(),
+                "未找到 Rust manifest，跳过自动格式化"
+            );
+            return;
+        }
+        if !crate::utils::toolchain::tool_available("cargo") {
+            tracing::warn!("未找到 cargo，跳过 Rust 自动格式化");
+            return;
+        }
+
+        let mut command = std::process::Command::new("cargo");
+        command.arg("fmt").current_dir(request.output_path);
+        match request.spec.framework {
+            Framework::None => {}
+            Framework::Tauri => {
+                command.arg("--manifest-path").arg(&manifest_path);
+            }
+            Framework::Gin
+            | Framework::GoZero
+            | Framework::McpServer
+            | Framework::FastApi
+            | Framework::McpServerPython
+            | Framework::Vue3
+            | Framework::React => return,
+        }
+
+        match command.status() {
+            Ok(status) if status.success() => {
+                tracing::info!("已用 cargo fmt 格式化生成的 Rust 代码")
+            }
+            _ => tracing::warn!("cargo fmt 已跳过/失败（非致命）"),
         }
     }
 
@@ -280,7 +339,17 @@ impl GeneratorOrchestrator {
                 let mut go_params = GoParams::from_project_name(project_name);
                 go_params.base.host = request.host.clone();
                 go_params.base.port = request.port;
-                go_params.to_template_context()
+                let mut context = go_params.to_template_context();
+                let is_mcp_server = request.spec.framework == Framework::McpServer;
+                context.insert(
+                    "go_main_package".to_string(),
+                    serde_json::json!(if is_mcp_server { "./cmd/server" } else { "." }),
+                );
+                context.insert(
+                    "go_copy_config".to_string(),
+                    serde_json::json!(is_mcp_server),
+                );
+                context
             }
             Language::Python => {
                 let mut python_params = PythonParams::new(project_name);
@@ -920,5 +989,135 @@ mod tests {
         let files = relative_files(tmp.path());
         assert!(files.iter().any(|f| f == "Makefile"), "got: {files:?}");
         assert!(files.iter().any(|f| f == "Dockerfile"), "got: {files:?}");
+    }
+
+    #[test]
+    fn go_mcp_build_tooling_uses_server_package_and_copies_config() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mut orchestrator = GeneratorOrchestrator::new().expect("orchestrator");
+        let request = request_for(
+            Language::Go,
+            Framework::McpServer,
+            "mcp-build",
+            tmp.path(),
+            true,
+        );
+
+        orchestrator
+            .render_build_tooling(&request)
+            .expect("render build tooling");
+
+        let dockerfile =
+            fs::read_to_string(tmp.path().join("Dockerfile")).expect("read Dockerfile");
+        assert!(
+            dockerfile.contains("-o /out/mcp-build ./cmd/server"),
+            "MCP Dockerfile must build ./cmd/server:\n{dockerfile}"
+        );
+        assert!(
+            dockerfile.contains("COPY --from=build /src/config.toml /config.toml"),
+            "MCP Dockerfile must copy config.toml:\n{dockerfile}"
+        );
+    }
+
+    #[test]
+    fn gin_build_dockerfile_remains_byte_identical() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mut orchestrator = GeneratorOrchestrator::new().expect("orchestrator");
+        let request = request_for(Language::Go, Framework::Gin, "gin-build", tmp.path(), true);
+
+        orchestrator
+            .render_build_tooling(&request)
+            .expect("render build tooling");
+
+        let dockerfile =
+            fs::read_to_string(tmp.path().join("Dockerfile")).expect("read Dockerfile");
+        let expected = r#"# Multi-stage build for gin-build — static Go binary into distroless.
+# VERSION is injected into main.version so the binary reports the real tag.
+
+FROM golang:1.21-alpine AS build
+WORKDIR /src
+
+# Cache module downloads first for faster rebuilds.
+COPY go.mod go.sum* ./
+RUN go mod download
+
+COPY . .
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${VERSION}" -o /out/gin-build .
+
+# Distroless static: no shell, no libc, runs as nonroot. For apps making HTTPS
+# calls, swap to gcr.io/distroless/base:nonroot (ships ca-certificates).
+FROM gcr.io/distroless/static:nonroot
+COPY --from=build /out/gin-build /usr/local/bin/gin-build
+ENTRYPOINT ["/usr/local/bin/gin-build"]
+"#;
+        assert_eq!(dockerfile, expected);
+    }
+
+    #[test]
+    fn rust_format_manifest_path_selects_root_or_tauri_manifest() {
+        let pure_tmp = tempfile::tempdir().expect("pure tempdir");
+        let pure_request = request_for(
+            Language::Rust,
+            Framework::None,
+            "pure-rust",
+            pure_tmp.path(),
+            false,
+        );
+        let tauri_tmp = tempfile::tempdir().expect("tauri tempdir");
+        let tauri_request = request_for(
+            Language::Rust,
+            Framework::Tauri,
+            "tauri-rust",
+            tauri_tmp.path(),
+            false,
+        );
+
+        assert_eq!(
+            rust_format_manifest_path(&pure_request),
+            Some(pure_tmp.path().join("Cargo.toml"))
+        );
+        assert_eq!(
+            rust_format_manifest_path(&tauri_request),
+            Some(tauri_tmp.path().join("src-tauri/Cargo.toml"))
+        );
+    }
+
+    #[test]
+    fn format_rust_project_formats_pure_crate_and_skips_missing_tauri_manifest() {
+        let pure_tmp = tempfile::tempdir().expect("pure tempdir");
+        fs::create_dir(pure_tmp.path().join("src")).expect("create src");
+        fs::write(
+            pure_tmp.path().join("Cargo.toml"),
+            "[package]\nname = \"fmt-probe\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .expect("write manifest");
+        fs::write(
+            pure_tmp.path().join("src/lib.rs"),
+            "pub fn values()->[u8;3]{[1,2,3]}\n",
+        )
+        .expect("write source");
+        let pure_request = request_for(
+            Language::Rust,
+            Framework::None,
+            "fmt-probe",
+            pure_tmp.path(),
+            false,
+        );
+        let tauri_tmp = tempfile::tempdir().expect("tauri tempdir");
+        let tauri_request = request_for(
+            Language::Rust,
+            Framework::Tauri,
+            "tauri-probe",
+            tauri_tmp.path(),
+            false,
+        );
+        let orchestrator = GeneratorOrchestrator::new().expect("orchestrator");
+
+        orchestrator.format_rust_project(&pure_request);
+        orchestrator.format_rust_project(&tauri_request);
+
+        let source = fs::read_to_string(pure_tmp.path().join("src/lib.rs")).expect("read source");
+        assert_eq!(source, "pub fn values() -> [u8; 3] {\n    [1, 2, 3]\n}\n");
     }
 }
