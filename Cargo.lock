@@ -1561,7 +1561,7 @@ dependencies = [
 
 [[package]]
 name = "scaffold-gen"
-version = "0.10.9"
+version = "0.10.10"
 dependencies = [
  "anyhow",
  "async-trait",

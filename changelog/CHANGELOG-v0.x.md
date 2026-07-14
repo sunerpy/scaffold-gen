@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.10](https://github.com/sunerpy/scaffold-gen/compare/v0.10.9...v0.10.10) (2026-07-14)
+
+
+### Bug Fixes
+
+* v0.10.10 模板与构建缺陷修复（深度验证） ([#56](https://github.com/sunerpy/scaffold-gen/issues/56)) ([06034b1](https://github.com/sunerpy/scaffold-gen/commit/06034b10a2819e3199329d4a3d336abb1fce4665))
+
 ## [0.10.9](https://github.com/sunerpy/scaffold-gen/compare/v0.10.8...v0.10.9) (2026-07-14)
 
 
