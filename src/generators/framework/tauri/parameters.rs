@@ -97,6 +97,16 @@ impl InheritableParams for TauriParams {
             "enable_error_gen".to_string(),
             Value::Bool(self.enable_error_gen),
         );
+        context.insert(
+            "crate_name".to_string(),
+            Value::String(crate::constants::string_utils::to_crate_ident(
+                &self.base.project_name,
+            )),
+        );
+        context.insert(
+            "project_title".to_string(),
+            Value::String(self.base.project_name.clone()),
+        );
 
         context
     }
@@ -229,6 +239,8 @@ mod tests {
         assert_eq!(ctx["identifier"], Value::String("com.app.app".to_string()));
         assert_eq!(ctx["enable_proto_gen"], Value::Bool(true));
         assert_eq!(ctx["enable_error_gen"], Value::Bool(false));
+        assert_eq!(ctx["crate_name"], Value::String("app".to_string()));
+        assert_eq!(ctx["project_title"], Value::String("app".to_string()));
     }
 
     #[test]

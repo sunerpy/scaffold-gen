@@ -10,12 +10,12 @@
 
 ```
 <<project_name>>/
-├── src/
-│   └── <<package_name>>/
-│       ├── __init__.py
-│       ├── config/          # 配置文件
-│       └── utils/           # 工具函数
-├── tests/                   # 测试文件
+├── main.py                  # 程序入口
+├── common/                  # 通用上下文与文件工具
+├── config/                  # 环境配置文件
+├── core/                    # 设置加载与核心配置
+├── loggers/                 # structlog 日志初始化
+├── utils/                   # 工具模块
 ├── pyproject.toml           # 项目元数据与依赖（uv 管理）
 └── README.md
 ```
@@ -36,18 +36,16 @@
 uv sync
 
 # 2. 运行程序
-uv run python -m <<package_name>>
+uv run python main.py
 ```
 
 ---
 
 ## 开发流程 (Development)
 
-### 运行测试
+### 测试
 
-```bash
-uv run pytest
-```
+基础 Python 模板默认不生成 `tests/`，也不预装 pytest。需要测试时，先添加 pytest 依赖并创建 `tests/` 目录。
 
 ### 代码检查与格式化
 

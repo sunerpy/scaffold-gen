@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "{{project_title}}",
+  "productName": "<<project_title>>",
   "version": "0.1.0",
-  "identifier": "{{identifier}}",
+  "identifier": "<<identifier>>",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "{{project_title}}",
-        "width": {{window_width}},
-        "height": {{window_height}},
+        "title": "<<project_title>>",
+        "width": <<window_width>>,
+        "height": <<window_height>>,
         "minWidth": 800,
         "minHeight": 600,
         "visible": true,
@@ -42,8 +42,8 @@
   },
   "bundle": {
     "category": "DeveloperTool",
-    "shortDescription": "{{project_title}} - Desktop Application",
-    "longDescription": "{{project_title}} is a desktop application built with Tauri.",
+    "shortDescription": "<<project_title>> - Desktop Application",
+    "longDescription": "<<project_title>> is a desktop application built with Tauri.",
     "active": true,
     "targets": "all",
     "icon": [

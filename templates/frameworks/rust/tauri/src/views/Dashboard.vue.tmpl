@@ -1,7 +1,7 @@
 <template>
   <div class="dashboard-container page-container">
     <div class="dashboard-header">
-      <h1 class="dashboard-title">\{{ $t("common.dashboard") }}</h1>
+      <h1 class="dashboard-title">{{ $t("common.dashboard") }}</h1>
       <p class="dashboard-subtitle">
         Overview of your system performance and key metrics. 
         Everything looks good today.
@@ -12,11 +12,11 @@
     <div class="stats-grid">
       <div class="stat-card" v-for="(stat, index) in stats" :key="index">
         <div class="stat-content">
-          <div class="stat-value">\{{ stat.value }}</div>
-          <div class="stat-label">\{{ stat.label }}</div>
+        <div class="stat-value">{{ stat.value }}</div>
+        <div class="stat-label">{{ stat.label }}</div>
           <div class="stat-trend" :class="stat.trend > 0 ? 'positive' : 'negative'">
             <n-icon><TrendingUp v-if="stat.trend > 0" /><TrendingDown v-else /></n-icon>
-            <span>\{{ Math.abs(stat.trend) }}% vs last month</span>
+          <span>{{ Math.abs(stat.trend) }}% vs last month</span>
           </div>
         </div>
         <div class="stat-icon-wrapper">
@@ -32,7 +32,7 @@
     <div class="actions-grid">
       <button class="action-btn" v-for="(action, index) in actions" :key="index">
         <n-icon class="action-icon" size="20"><component :is="action.icon" /></n-icon>
-        <span class="action-label">\{{ action.label }}</span>
+        <span class="action-label">{{ action.label }}</span>
       </button>
     </div>
 
@@ -46,8 +46,8 @@
           <n-icon class="feature-icon-lg" size="48"><component :is="feature.icon" /></n-icon>
         </div>
         <div class="feature-content">
-          <h3 class="feature-title">\{{ feature.title }}</h3>
-          <p class="feature-desc">\{{ feature.desc }}</p>
+        <h3 class="feature-title">{{ feature.title }}</h3>
+        <p class="feature-desc">{{ feature.desc }}</p>
           <div class="feature-footer">
             <n-button type="primary" size="small">
               Try Now <n-icon><ArrowRight /></n-icon>

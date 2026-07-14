@@ -1,8 +1,8 @@
 <template>
   <div class="settings-container page-container">
     <div class="settings-header">
-      <h1 class="settings-title">\{{ $t("settings.title") }}</h1>
-      <p class="settings-subtitle">\{{ $t("settings.subtitle") }}</p>
+      <h1 class="settings-title">{{ $t("settings.title") }}</h1>
+      <p class="settings-subtitle">{{ $t("settings.subtitle") }}</p>
     </div>
 
     <div class="settings-layout">
@@ -15,7 +15,7 @@
           @click="activeTab = tab.id"
         >
           <n-icon :size="18"><component :is="tab.icon" /></n-icon>
-          <span>\{{ tab.label }}</span>
+          <span>{{ tab.label }}</span>
         </button>
       </nav>
 
@@ -25,8 +25,8 @@
         <section v-show="activeTab === 'appearance'" class="settings-section">
           <div class="section-card">
             <div class="section-card-header">
-              <h3 class="section-card-title">\{{ $t("common.theme") }}</h3>
-              <p class="section-card-desc">\{{ $t("settings.themeDesc") }}</p>
+          <h3 class="section-card-title">{{ $t("common.theme") }}</h3>
+          <p class="section-card-desc">{{ $t("settings.themeDesc") }}</p>
             </div>
             <div class="theme-selector">
               <label
@@ -49,7 +49,7 @@
                 </div>
                 <div class="theme-info">
                   <n-icon :size="16"><component :is="option.icon" /></n-icon>
-                  <span>\{{ option.label }}</span>
+              <span>{{ option.label }}</span>
                 </div>
               </label>
             </div>
@@ -58,11 +58,11 @@
           <div class="section-card">
             <div class="setting-row">
               <div class="setting-info">
-                <label class="setting-label">\{{ $t('settings.fontSize') }}</label>
-                <p class="setting-desc">\{{ $t('settings.fontSizeDesc') }}</p>
+          <label class="setting-label">{{ $t('settings.fontSize') }}</label>
+          <p class="setting-desc">{{ $t('settings.fontSizeDesc') }}</p>
               </div>
               <div class="setting-control slider-control">
-                <span class="slider-value">\{{ localSettings.fontSize }}px</span>
+            <span class="slider-value">{{ localSettings.fontSize }}px</span>
                 <n-slider
                   v-model:value="localSettings.fontSize"
                   :min="12"
@@ -79,16 +79,16 @@
         <section v-show="activeTab === 'sidebar'" class="settings-section">
           <div class="section-card">
             <div class="section-card-header">
-              <h3 class="section-card-title">\{{ $t("settings.layout") }}</h3>
-              <p class="section-card-desc">\{{ $t("settings.sidebarWidthDesc") }}</p>
+          <h3 class="section-card-title">{{ $t("settings.layout") }}</h3>
+          <p class="section-card-desc">{{ $t("settings.sidebarWidthDesc") }}</p>
             </div>
 
             <div class="setting-row">
               <div class="setting-info">
-                <label class="setting-label">\{{ $t('settings.sidebarWidth') }}</label>
+          <label class="setting-label">{{ $t('settings.sidebarWidth') }}</label>
               </div>
               <div class="setting-control slider-control">
-                <span class="slider-value">\{{ localSettings.sidebarWidth }}px</span>
+            <span class="slider-value">{{ localSettings.sidebarWidth }}px</span>
                 <n-slider
                   v-model:value="localSettings.sidebarWidth"
                   :min="200"
@@ -101,8 +101,8 @@
 
             <div class="setting-row">
               <div class="setting-info">
-                <label class="setting-label">\{{ $t('settings.pinSidebar') }}</label>
-                <p class="setting-desc">\{{ $t('settings.pinSidebarDesc') }}</p>
+            <label class="setting-label">{{ $t('settings.pinSidebar') }}</label>
+            <p class="setting-desc">{{ $t('settings.pinSidebarDesc') }}</p>
               </div>
               <div class="setting-control">
                 <n-switch v-model:value="localSettings.sidebarPinned" />
@@ -111,8 +111,8 @@
 
             <div class="setting-row">
               <div class="setting-info">
-                <label class="setting-label">\{{ $t('settings.defaultCollapsed') }}</label>
-                <p class="setting-desc">\{{ $t('settings.defaultCollapsedDesc') }}</p>
+            <label class="setting-label">{{ $t('settings.defaultCollapsed') }}</label>
+            <p class="setting-desc">{{ $t('settings.defaultCollapsedDesc') }}</p>
               </div>
               <div class="setting-control">
                 <n-switch v-model:value="localSettings.sidebarCollapsed" />
@@ -121,7 +121,7 @@
 
             <div class="setting-row">
               <div class="setting-info">
-                <label class="setting-label">\{{ $t('common.showSidebar') }}</label>
+            <label class="setting-label">{{ $t('common.showSidebar') }}</label>
               </div>
               <div class="setting-control">
                 <n-button
@@ -130,7 +130,7 @@
                   :disabled="!layoutStore.sidebarHidden"
                   @click="handleShowSidebar"
                 >
-                  \{{ layoutStore.sidebarHidden ? $t("common.showSidebar") : $t("common.visible") }}
+            {{ layoutStore.sidebarHidden ? $t("common.showSidebar") : $t("common.visible") }}
                 </n-button>
               </div>
             </div>
@@ -141,13 +141,13 @@
         <section v-show="activeTab === 'general'" class="settings-section">
           <div class="section-card">
             <div class="section-card-header">
-              <h3 class="section-card-title">\{{ $t("settings.localization") }}</h3>
-              <p class="section-card-desc">\{{ $t("settings.languageDesc") }}</p>
+          <h3 class="section-card-title">{{ $t("settings.localization") }}</h3>
+          <p class="section-card-desc">{{ $t("settings.languageDesc") }}</p>
             </div>
 
             <div class="setting-row">
               <div class="setting-info">
-                <label class="setting-label">\{{ $t('common.language') }}</label>
+          <label class="setting-label">{{ $t('common.language') }}</label>
               </div>
               <div class="setting-control">
                 <n-select 
