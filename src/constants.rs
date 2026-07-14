@@ -202,6 +202,39 @@ pub mod string_utils {
 
         result
     }
+
+    pub fn to_crate_ident(s: &str) -> String {
+        let mut result = String::new();
+        let mut previous_was_underscore = false;
+
+        for ch in s.chars() {
+            let normalized = if ch.is_ascii_alphanumeric() || ch == '_' {
+                ch.to_ascii_lowercase()
+            } else {
+                '_'
+            };
+
+            if normalized == '_' {
+                if !previous_was_underscore {
+                    result.push(normalized);
+                }
+                previous_was_underscore = true;
+            } else {
+                result.push(normalized);
+                previous_was_underscore = false;
+            }
+        }
+
+        if !result
+            .chars()
+            .next()
+            .is_some_and(|ch| ch.is_ascii_alphabetic() || ch == '_')
+        {
+            result.insert(0, '_');
+        }
+
+        result
+    }
 }
 
 #[cfg(test)]
@@ -268,6 +301,13 @@ mod tests {
         assert_eq!(to_snake_case("HelloWorld"), "hello_world");
         assert_eq!(to_snake_case("TestProject"), "test_project");
         assert_eq!(to_snake_case("single"), "single");
+    }
+
+    #[test]
+    fn test_to_crate_ident_sanitizes_project_names() {
+        assert_eq!(to_crate_ident("My-Cool_App"), "my_cool_app");
+        assert_eq!(to_crate_ident("123-app"), "_123_app");
+        assert_eq!(to_crate_ident("my.app"), "my_app");
     }
 
     #[test]

@@ -34,6 +34,9 @@ impl TemplateProcessor {
                 format!("Failed to get embedded template files for: {template_path}")
             })?;
 
+        let precommit_disabled =
+            matches!(context.get("enable_precommit"), Some(Value::Bool(false)));
+
         for template_file in template_files {
             // 获取相对于模板路径的文件路径
             let relative_path = template_file
@@ -46,6 +49,10 @@ impl TemplateProcessor {
             } else {
                 relative_path
             };
+
+            if precommit_disabled && output_relative_path == ".pre-commit-config.yaml" {
+                continue;
+            }
 
             let output_file_path = output_path.join(output_relative_path);
 

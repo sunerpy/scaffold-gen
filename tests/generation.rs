@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::Path;
 
-use scaffold_gen::generators::core::{Parameters, TemplateProcessor};
+use scaffold_gen::generators::core::{Generator, Parameters, TemplateProcessor};
+use scaffold_gen::generators::framework::tauri::{TauriGenerator, TauriParams};
 use scaffold_gen::generators::language::go::GoParams;
 use scaffold_gen::generators::language::python::PythonParams;
 use walkdir::WalkDir;
@@ -19,6 +20,209 @@ fn collect_relative_files(root: &Path) -> Vec<String> {
                 .replace('\\', "/")
         })
         .collect()
+}
+
+fn assert_no_custom_delimiter_residue(root: &Path, files: &[String], label: &str) {
+    for rel in files {
+        let content = fs::read_to_string(root.join(rel))
+            .unwrap_or_else(|_| panic!("[{label}] read generated file {rel}"));
+        for delimiter in ["<<", "%>", "<%"] {
+            assert!(
+                !content.contains(delimiter),
+                "[{label}] file {rel} still contains unrendered `{delimiter}`"
+            );
+        }
+    }
+}
+
+fn render_tauri_templates(
+    project_name: &str,
+    enable_proto_gen: bool,
+    enable_error_gen: bool,
+) -> tempfile::TempDir {
+    let params = TauriParams::from_project_name(project_name.to_string())
+        .with_precommit(false)
+        .with_proto_gen(enable_proto_gen)
+        .with_error_gen(enable_error_gen);
+    let context = params.to_template_context();
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut generator = TauriGenerator::new().expect("create tauri generator");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+
+    generator
+        .render_embedded_templates(
+            &mut processor,
+            "frameworks/rust/tauri",
+            tmp.path(),
+            context,
+            &params,
+        )
+        .expect("render embedded tauri templates");
+
+    tmp
+}
+
+fn assert_no_tauri_generator_placeholder_leaks(root: &Path, files: &[String], label: &str) {
+    let forbidden_patterns = [
+        "{{project_",
+        "{{crate_name}}",
+        "{{author}}",
+        "{{identifier}}",
+        "{{window_",
+        "{{#if",
+        "{{/if}}",
+        "\\{{",
+    ];
+
+    for rel in files {
+        let content = fs::read_to_string(root.join(rel))
+            .unwrap_or_else(|_| panic!("[{label}] read generated file {rel}"));
+        for pattern in forbidden_patterns {
+            assert!(
+                !content.contains(pattern),
+                "[{label}] file {rel} still contains forbidden generator placeholder `{pattern}`"
+            );
+        }
+    }
+}
+
+fn render_python_template_with_precommit(
+    template_path: &str,
+    project_name: &str,
+    enable_precommit: bool,
+) -> tempfile::TempDir {
+    let mut params = PythonParams::new(project_name.to_string());
+    params.base.host = Some("0.0.0.0".to_string());
+    params.base.port = Some(8000);
+    params.base.enable_precommit = enable_precommit;
+
+    let mut context = params.to_template_context();
+    if template_path == "frameworks/python/mcp-python" {
+        context.insert(
+            "mcp_backend".to_string(),
+            serde_json::Value::String("fastmcp".to_string()),
+        );
+        context.insert(
+            "mcp_backend_is_official".to_string(),
+            serde_json::Value::Bool(false),
+        );
+    }
+
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    processor
+        .process_embedded_template_directory(template_path, tmp.path(), context)
+        .unwrap_or_else(|_| panic!("render embedded templates from {template_path}"));
+
+    tmp
+}
+
+#[test]
+fn tauri_embedded_generation_renders_without_generator_placeholder_leaks() {
+    for (label, project_name, enable_proto_gen, enable_error_gen, crate_name) in [
+        (
+            "proto-off-error-on",
+            "tauri-leak-demo",
+            false,
+            true,
+            "tauri_leak_demo",
+        ),
+        (
+            "proto-on-error-off",
+            "tauri-proto-demo",
+            true,
+            false,
+            "tauri_proto_demo",
+        ),
+    ] {
+        // Given: 通过公开 API 构造的真实 TauriParams 与其完整模板上下文。
+        let tmp = render_tauri_templates(project_name, enable_proto_gen, enable_error_gen);
+        let files = collect_relative_files(tmp.path());
+
+        // Then(1): 关键文件存在且 .tmpl 后缀已剥离。
+        for expected in [
+            "index.html",
+            "package.json",
+            "src-tauri/Cargo.toml",
+            "src-tauri/src/lib.rs",
+            "src-tauri/src/main.rs",
+            "src-tauri/tauri.conf.json",
+            "src/views/Dashboard.vue",
+        ] {
+            assert!(
+                files.iter().any(|f| f == expected),
+                "[{label}] expected {expected}, got: {files:?}"
+            );
+        }
+        assert!(
+            !files.iter().any(|f| f.ends_with(".tmpl")),
+            "[{label}] no .tmpl files should remain, got: {files:?}"
+        );
+
+        // Then(2): 禁止生成器占位符与 minijinja 分隔符残留；允许 .vue/.html 的 Vue `{{ }}`。
+        assert_no_tauri_generator_placeholder_leaks(tmp.path(), &files, label);
+        assert_no_custom_delimiter_residue(tmp.path(), &files, label);
+
+        // Then(3): crate_name / project_title / 条件块真实替换。
+        let cargo_toml = fs::read_to_string(tmp.path().join("src-tauri/Cargo.toml"))
+            .unwrap_or_else(|_| panic!("[{label}] read src-tauri/Cargo.toml"));
+        assert!(
+            cargo_toml.contains(&format!("name = \"{crate_name}_lib\"")),
+            "[{label}] Cargo.toml [lib] name must use a valid crate ident:\n{cargo_toml}"
+        );
+
+        let main_rs = fs::read_to_string(tmp.path().join("src-tauri/src/main.rs"))
+            .unwrap_or_else(|_| panic!("[{label}] read src-tauri/src/main.rs"));
+        assert!(
+            main_rs.contains(&format!("{crate_name}_lib::run()")),
+            "[{label}] main.rs must call the sanitized crate lib:\n{main_rs}"
+        );
+
+        let tauri_conf = fs::read_to_string(tmp.path().join("src-tauri/tauri.conf.json"))
+            .unwrap_or_else(|_| panic!("[{label}] read src-tauri/tauri.conf.json"));
+        assert!(
+            tauri_conf.contains(&format!("\"productName\": \"{project_name}\"")),
+            "[{label}] productName must be the real project name:\n{tauri_conf}"
+        );
+
+        let lib_rs = fs::read_to_string(tmp.path().join("src-tauri/src/lib.rs"))
+            .unwrap_or_else(|_| panic!("[{label}] read src-tauri/src/lib.rs"));
+        if enable_proto_gen {
+            assert!(
+                lib_rs.contains("mod protos;"),
+                "[{label}] proto_gen=true must render mod protos;:\n{lib_rs}"
+            );
+        } else {
+            assert!(
+                !lib_rs.contains("mod protos;"),
+                "[{label}] proto_gen=false must not render mod protos;:\n{lib_rs}"
+            );
+        }
+    }
+}
+
+#[test]
+fn python_embedded_templates_honor_precommit_flag() {
+    for (label, template_path) in [
+        ("python-none", "languages/python"),
+        ("fastapi", "frameworks/python/fastapi"),
+        ("mcp-python", "frameworks/python/mcp-python"),
+    ] {
+        // Given/When: 同一模板分别以 enable_precommit=false/true 离线渲染。
+        let without_precommit = render_python_template_with_precommit(template_path, label, false);
+        let without_files = collect_relative_files(without_precommit.path());
+        assert!(
+            !without_files.iter().any(|f| f == ".pre-commit-config.yaml"),
+            "[{label}] enable_precommit=false must skip .pre-commit-config.yaml, got: {without_files:?}"
+        );
+
+        let with_precommit = render_python_template_with_precommit(template_path, label, true);
+        let with_files = collect_relative_files(with_precommit.path());
+        assert!(
+            with_files.iter().any(|f| f == ".pre-commit-config.yaml"),
+            "[{label}] enable_precommit=true must render .pre-commit-config.yaml, got: {with_files:?}"
+        );
+    }
 }
 
 #[test]
@@ -70,6 +274,18 @@ fn python_embedded_generation_renders_without_external_tools() {
     assert!(
         readme.contains("integration-demo"),
         "project_name not substituted into README.md:\n{readme}"
+    );
+    assert!(
+        readme.contains("uv run python main.py"),
+        "README.md must document the real flat-script entrypoint:\n{readme}"
+    );
+    assert!(
+        !readme.contains("uv run python -m") && !readme.contains("uv run pytest"),
+        "README.md must not document missing package/test commands:\n{readme}"
+    );
+    assert!(
+        readme.contains("main.py") && !readme.contains("src/<<package_name>>"),
+        "README.md directory tree must match the flat script layout:\n{readme}"
     );
 
     // Then(4): logger 模板采用 structlog；不再残留旧 logger_state 模块
@@ -221,6 +437,7 @@ fn render_mcp_python(backend: &str) -> tempfile::TempDir {
     let mut params = PythonParams::new("mcp-py-demo".to_string());
     params.base.host = Some("0.0.0.0".to_string());
     params.base.port = Some(8000);
+    params.base.enable_precommit = true;
     let mut context = params.to_template_context();
     context.insert(
         "mcp_backend".to_string(),

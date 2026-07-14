@@ -1,9 +1,9 @@
 mod config;
 mod database;
 mod logger;
-{{#if enable_proto_gen}}
+<% if enable_proto_gen %>
 mod protos;
-{{/if}}
+<% endif %>
 mod system;
 
 use config::init_settings_manager;
@@ -18,8 +18,8 @@ fn adjust_window_for_dpi(window: &tauri::WebviewWindow) {
         let scale_factor = monitor.scale_factor();
 
         if scale_factor > 1.0 {
-            let base_width = {{window_width}}.0;
-            let base_height = {{window_height}}.0;
+            let base_width = <<window_width>>.0;
+            let base_height = <<window_height>>.0;
             let scaled_width = (base_width * scale_factor) as u32;
             let scaled_height = (base_height * scale_factor) as u32;
 

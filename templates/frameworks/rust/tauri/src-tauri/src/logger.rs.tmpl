@@ -5,7 +5,7 @@ use tauri_plugin_log::{Target, TargetKind};
 use crate::config::{AppSettings, SETTINGS_KEY, STORE_FILENAME};
 use tauri_plugin_store::StoreExt;
 
-const APP_NAME: &str = "{{project_name}}";
+const APP_NAME: &str = "<<project_name>>";
 const MAX_LOG_FILE_SIZE: u128 = 2 * 1024 * 1024;
 
 fn load_settings_for_logger(app_handle: &AppHandle) -> AppSettings {
