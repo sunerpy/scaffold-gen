@@ -47,7 +47,7 @@
 
 ## 依赖 (Requirements)
 
-- **Python <<python_version>>+**
+- **Python <<python_min_version>>+**
 - **[uv](https://docs.astral.sh/uv/)** —— 极快的 Python 包管理器（安装：`curl -LsSf https://astral.sh/uv/install.sh | sh`）
 
 ---
@@ -223,11 +223,13 @@ def add(
 # 列出所有已注册的工具
 curl -s http://<<default_host>>:<<default_port>>/mcp \
   -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 
 # 调用 echo 工具（text="hi"，重复 2 次）
 curl -s http://<<default_host>>:<<default_port>>/mcp \
   -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"text":"hi","repeat":2}}}'
 
 # 打开 SSE 事件流（Ctrl+C 退出）
@@ -241,13 +243,28 @@ curl -N http://<<default_host>>:<<default_port>>/sse
 ```python
 import asyncio
 
-from fastmcp import Client
+<%if mcp_backend_is_official%>from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
+
+
+async def main() -> None:
+    async with streamablehttp_client("http://<<default_host>>:<<default_port>>/mcp") as (
+        read_stream,
+        write_stream,
+        _,
+    ):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            result = await session.call_tool("echo", {"text": "hi", "repeat": 2})
+            print(result)
+<%else%>from fastmcp import Client
 
 
 async def main() -> None:
     async with Client("http://<<default_host>>:<<default_port>>/mcp") as c:
         result = await c.call_tool("echo", {"text": "hi", "repeat": 2})
         print(result)
+<%endif%>
 
 
 asyncio.run(main())

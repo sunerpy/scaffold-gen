@@ -50,6 +50,9 @@ jobs:
       - name: Run tests
         run: make test
 
+      - name: Verify Cargo.lock is in sync
+        run: cargo metadata --locked --format-version 1 > /dev/null
+
   build-check:
     name: Build Check
     runs-on: ubuntu-latest

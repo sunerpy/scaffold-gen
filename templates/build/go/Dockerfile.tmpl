@@ -10,11 +10,12 @@ RUN go mod download
 
 COPY . .
 ARG VERSION=dev
-RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${VERSION}" -o /out/<<project_name>> .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${VERSION}" -o /out/<<project_name>> <<go_main_package>>
 
 # Distroless static: no shell, no libc, runs as nonroot. For apps making HTTPS
 # calls, swap to gcr.io/distroless/base:nonroot (ships ca-certificates).
 FROM gcr.io/distroless/static:nonroot
 COPY --from=build /out/<<project_name>> /usr/local/bin/<<project_name>>
-<%if port%>EXPOSE <<port>>
+<%if go_copy_config%>COPY --from=build /src/config.toml /config.toml
+<%endif%><%if port%>EXPOSE <<port>>
 <%endif%>ENTRYPOINT ["/usr/local/bin/<<project_name>>"]

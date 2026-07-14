@@ -599,6 +599,26 @@ fn params_in_dir(language: Language, framework: Framework, dir: &std::path::Path
     }
 }
 
+#[test]
+fn early_validation_rejects_go_without_a_framework() {
+    let err = ensure_combination_supported(Language::Go, Framework::None).unwrap_err();
+
+    assert!(
+        err.to_string().contains("requires a framework"),
+        "expected requires-a-framework error, got: {err}"
+    );
+}
+
+#[test]
+fn early_validation_rejects_unimplemented_go_zero() {
+    let err = ensure_combination_supported(Language::Go, Framework::GoZero).unwrap_err();
+
+    assert!(
+        err.to_string().contains("not implemented"),
+        "expected not-implemented error, got: {err}"
+    );
+}
+
 #[tokio::test]
 async fn generate_project_rejects_framework_not_valid_for_language() {
     // Go 的合法框架不含 Tauri，且 Tauri != None → 命中「不支持的框架」错误分支。

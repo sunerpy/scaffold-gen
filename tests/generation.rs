@@ -117,6 +117,55 @@ fn render_python_template_with_precommit(
     tmp
 }
 
+fn render_python_readme_with_host_version(template_path: &str, backend: Option<&str>) -> String {
+    let mut params =
+        PythonParams::new("python-version-demo".to_string()).with_version("3.14".to_string());
+    params.base.host = Some("0.0.0.0".to_string());
+    params.base.port = Some(8000);
+    let mut context = params.to_template_context();
+    if let Some(backend) = backend {
+        context.insert(
+            "mcp_backend".to_string(),
+            serde_json::Value::String(backend.to_string()),
+        );
+        context.insert(
+            "mcp_backend_is_official".to_string(),
+            serde_json::Value::Bool(backend == "official"),
+        );
+    }
+
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    processor
+        .process_embedded_template_directory(template_path, tmp.path(), context)
+        .unwrap_or_else(|_| panic!("render embedded templates from {template_path}"));
+    fs::read_to_string(tmp.path().join("README.md")).expect("read README.md")
+}
+
+#[test]
+fn python_readmes_use_declared_minimum_instead_of_host_version() {
+    for (label, template_path, backend) in [
+        ("python-none", "languages/python", None),
+        ("fastapi", "frameworks/python/fastapi", None),
+        (
+            "mcp-python",
+            "frameworks/python/mcp-python",
+            Some("fastmcp"),
+        ),
+    ] {
+        let readme = render_python_readme_with_host_version(template_path, backend);
+
+        assert!(
+            readme.contains("Python 3.12+"),
+            "[{label}] README must use the declared minimum:\n{readme}"
+        );
+        assert!(
+            !readme.contains("Python 3.14+"),
+            "[{label}] README must not leak the generator host version:\n{readme}"
+        );
+    }
+}
+
 #[test]
 fn tauri_embedded_generation_renders_without_generator_placeholder_leaks() {
     for (label, project_name, enable_proto_gen, enable_error_gen, crate_name) in [
@@ -199,6 +248,23 @@ fn tauri_embedded_generation_renders_without_generator_placeholder_leaks() {
             );
         }
     }
+}
+
+#[test]
+fn tauri_numeric_leading_project_name_renders_legal_package_and_lib_names() {
+    let tmp = render_tauri_templates("123-app", false, false);
+
+    let cargo_toml = fs::read_to_string(tmp.path().join("src-tauri/Cargo.toml"))
+        .expect("read src-tauri/Cargo.toml");
+
+    assert!(
+        cargo_toml.contains("[package]\nname = \"_123-app\""),
+        "[package] name must not start with a digit:\n{cargo_toml}"
+    );
+    assert!(
+        cargo_toml.contains("[lib]\nname = \"_123_app_lib\""),
+        "[lib] name must keep the crate identifier sanitizer:\n{cargo_toml}"
+    );
 }
 
 #[test]
@@ -650,6 +716,30 @@ fn mcp_python_embedded_generation_renders_without_external_tools() {
             readme.contains("/mcp") && readme.contains("/sse") && readme.contains("make test"),
             "[{backend}] README missing /mcp, /sse or `make test`:\n{readme}"
         );
+        assert_eq!(
+            readme
+                .matches("Accept: application/json, text/event-stream")
+                .count(),
+            2,
+            "[{backend}] both streamable-HTTP curl examples need the Accept header:\n{readme}"
+        );
+        if backend == "official" {
+            assert!(
+                readme.contains("from mcp import ClientSession")
+                    && readme
+                        .contains("from mcp.client.streamable_http import streamablehttp_client"),
+                "[official] README must use the installed official SDK client:\n{readme}"
+            );
+            assert!(
+                !readme.contains("from fastmcp import Client"),
+                "[official] README must not import the uninstalled fastmcp package:\n{readme}"
+            );
+        } else {
+            assert!(
+                readme.contains("from fastmcp import Client"),
+                "[fastmcp] README must retain the fastmcp client example:\n{readme}"
+            );
+        }
     }
 }
 
@@ -1230,6 +1320,10 @@ fn vue3_embedded_generation_renders_without_external_tools() {
         package_json_content.contains("\"name\": \"test-vue3-embedded\""),
         "package.json did not contain substituted project name"
     );
+    assert!(
+        package_json_content.contains("\"format:check\": \"prettier --check .\""),
+        "package.json must expose a non-mutating format check:\n{package_json_content}"
+    );
 
     let vite_config = temp_dir.path().join("vite.config.ts");
     assert!(vite_config.exists(), "vite.config.ts was not generated");
@@ -1411,6 +1505,11 @@ fn mcp_server_embedded_generation_renders_without_external_tools() {
     assert!(
         readme.contains("mcp-demo") && readme.contains("streamable") && readme.contains("/sse"),
         "README missing project name / transport sections:\n{readme}"
+    );
+    let makefile = fs::read_to_string(tmp.path().join("Makefile")).expect("read Makefile");
+    assert!(
+        makefile.contains("check: fmt lint test"),
+        "MCP Makefile must expose the README's check target:\n{makefile}"
     );
 }
 
@@ -1790,6 +1889,10 @@ fn react_embedded_generation_renders_without_external_tools() {
     assert!(
         package_json.contains("\"name\": \"test-react-embedded\""),
         "package.json must contain substituted project name:\n{package_json}"
+    );
+    assert!(
+        package_json.contains("\"format:check\": \"prettier --check .\""),
+        "package.json must expose a non-mutating format check:\n{package_json}"
     );
     let readme = fs::read_to_string(temp_dir.path().join("README.md")).expect("read README.md");
     assert!(

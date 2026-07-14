@@ -2,8 +2,29 @@ use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Command;
 
+use crate::constants::defaults;
 use crate::generators::core::{Generator, InheritableParams, Parameters, TemplateProcessor};
 use crate::generators::language::python::parameters::PythonParams;
+
+fn rewrite_requires_python(output_path: &Path) -> Result<()> {
+    let pyproject_path = output_path.join("pyproject.toml");
+    let content = std::fs::read_to_string(&pyproject_path)
+        .with_context(|| format!("Failed to read {}", pyproject_path.display()))?;
+    let requirement = regex::Regex::new(r#"(?m)^requires-python[ \t]*=[ \t]*"[^"]*"[ \t]*$"#)
+        .context("Failed to compile requires-python pattern")?;
+
+    if !requirement.is_match(&content) {
+        return Err(anyhow::anyhow!(
+            "Missing requires-python in {}",
+            pyproject_path.display()
+        ));
+    }
+
+    let replacement = format!("requires-python = \">={}\"", defaults::PYTHON_MIN_VERSION);
+    let rewritten = requirement.replace(&content, replacement).into_owned();
+    std::fs::write(&pyproject_path, rewritten)
+        .with_context(|| format!("Failed to write {}", pyproject_path.display()))
+}
 
 /// Python 语言生成器
 pub struct PythonGenerator {}
@@ -102,6 +123,7 @@ impl Generator for PythonGenerator {
 
         // 1. 使用 uv init 创建基础项目结构
         self.init_uv_project(&params, output_path)?;
+        rewrite_requires_python(output_path)?;
 
         // 2. 处理嵌入式模板
         let mut template_processor = TemplateProcessor::new()?;
@@ -133,3 +155,7 @@ impl Generator for PythonGenerator {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "generator_tests.rs"]
+mod tests;

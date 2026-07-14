@@ -1,6 +1,6 @@
 # GENERATORS MODULE
 
-**Updated:** 2026-06-25 (v0.5.0)
+**Updated:** 2026-07-14 (v0.10.10)
 
 Data-driven dispatch: a `FrameworkSpec` registry + `GenKind` enum replace the old
 78-line `match` tree. Adding a framework is a data change, not a code change.
@@ -78,8 +78,13 @@ GinSync has its own full sequence in `generate_gin_project`: framework → go mo
 - If template dir missing: `tracing::warn!` + skip (non-fatal). Don't create an empty dir.
 - `build_tooling_context`: per-language context — Go→GoParams (module_name/go_version/host/port),
   Python→PythonParams (python_version/package_name/host/port), Rust→RustParams, TS→ProjectParams.
-- Old per-framework Makefile/Dockerfile templates were removed; build tooling ONLY from
-  `--with-build` (mcp-server keeps its own `Makefile.tmpl` for `buf generate` — framework-specific).
+- Go build-tooling context also injects `go_main_package`/`go_copy_config`; McpServer builds
+  `./cmd/server` and copies `config.toml`, while other Go frameworks keep `.`/`false`.
+- FastApi, McpServerPython, and Go McpServer set `has_own_makefile=true`, so their framework
+  Makefiles are preserved while `--with-build` still renders the shared Dockerfile.
+
+Rust generation runs `cargo fmt` after generation with a framework-aware manifest: pure Rust uses
+the root crate, while Tauri uses `src-tauri/Cargo.toml` when that manifest exists.
 
 ## WHERE TO LOOK
 

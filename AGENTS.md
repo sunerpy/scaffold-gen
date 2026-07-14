@@ -1,6 +1,6 @@
 # SCAFFOLD-GEN KNOWLEDGE BASE
 
-**Version:** v0.10.7 **Updated:** 2026-07-09 **Branch:** main
+**Version:** v0.10.10 **Updated:** 2026-07-14 **Branch:** main
 
 ## OVERVIEW
 
@@ -62,9 +62,9 @@ scaffold-gen/
 │       ├── SKILL.md         # Embedded agent skill (include_str! into src/skill/embed.rs)
 │       └── evals/evals.json # Eval test prompts (skill-creator loop artifact)
 ├── tests/
-│   └── generation.rs        # Integration tests (public API, 19 tests)
+│   └── generation.rs        # Integration tests (public API, 23 tests)
 ├── Makefile                 # Primary task runner
-└── Cargo.toml               # Edition 2024, binary: scafgen, version: 0.9.0
+└── Cargo.toml               # Edition 2024, binary: scafgen, version: 0.10.9
 ```
 
 Python generation shares `orchestrator.rs::build_python_params()`; `McpPythonAuthContext`
@@ -188,8 +188,8 @@ All tracing/diagnostics → **stderr**.
    confirmation
 4. **Go-Zero unimplemented**: `Framework::GoZero` resolves to `GenKind::Unimplemented` — returns a
    clear error; no generator struct exists; enum variant kept for CLI discoverability
-5. **Tests: 229 total**: 67 lib + 143 bin inline + 19 integration in `tests/generation.rs`; `make
-test` covers all
+5. **Tests: 488 total**: 163 lib + 302 bin inline + 23 integration in `tests/generation.rs`; `make
+test` covers all (plus 0 doc tests)
 6. **Vue3 is EmbeddedAsync**: moved from ExternalAsync — full offline scaffold, optional `pnpm
 install` post-step; `external.rs` no longer contains Vue3 logic
 7. **`--with-build` is opt-in interactive**: omitting it on non-TTY stdin triggers an `inquire`
@@ -313,7 +313,7 @@ make release-upx    # Release + UPX compression
 make fmt            # Format code (rustfmt + oxfmt for YAML/JSON/Markdown)
 make fmt-check      # Check formatting (CI gate — also checks AGENTS.md now)
 make lint           # Clippy with -D warnings
-make test           # cargo test (67 lib + 143 bin + 19 integration)
+make test           # cargo test (163 lib + 302 bin + 23 integration; 488 total)
 make ci             # fmt-check + lint + test
 
 # Cross-compile
@@ -350,3 +350,8 @@ strip = true
   oxfmt formats them as Markdown — `make fmt-check` will fail if they have formatting drift
 - `scafgen list` output is entirely data-driven from `registry::all_specs()` — adding a REGISTRY
   row automatically updates the list; no separate listing to maintain
+- v0.10.10 sanitizes numeric-leading Tauri package names; fixes Go MCP Docker build paths and
+  config copying; formats generated Rust crates; adds Go MCP `make check` and frontend
+  `format:check`; decouples Python README minimum versions and fixes mcp-python curl/official-client
+  examples; validates unsupported combinations early; and keeps Cargo.lock synchronized through
+  release-please's Rust release type

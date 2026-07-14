@@ -72,6 +72,20 @@ fn to_template_context_exposes_python_version_package_name_and_tools() {
 }
 
 #[test]
+fn template_context_keeps_host_and_minimum_python_versions_distinct() {
+    let params = PythonParams::new("demo".to_string()).with_version("3.14".to_string());
+
+    let ctx = params.to_template_context();
+
+    assert_eq!(ctx["python_version"], serde_json::json!("3.14"));
+    assert_eq!(
+        ctx["python_min_version"],
+        serde_json::json!(defaults::PYTHON_MIN_VERSION)
+    );
+    assert_ne!(ctx["python_version"], ctx["python_min_version"]);
+}
+
+#[test]
 fn package_name_normalizes_hyphen_space_and_case() {
     let params = PythonParams::new("Foo-Bar Baz".to_string());
     let ctx = params.to_template_context();

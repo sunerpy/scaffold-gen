@@ -3,14 +3,13 @@
   "include-component-in-tag": false,
   "packages": {
     ".": {
-      "release-type": "simple",
+      "release-type": "rust",
       "package-name": "scaffold-gen",
       "bump-minor-pre-major": true,
       "include-v-in-tag": true,
       "draft": true,
       "force-tag-creation": true,
-      "changelog-path": "changelog/CHANGELOG-v0.x.md",
-      "extra-files": [{ "type": "toml", "path": "Cargo.toml", "jsonpath": "$.package.version" }]
+      "changelog-path": "changelog/CHANGELOG-v0.x.md"
     }
   }
 }
