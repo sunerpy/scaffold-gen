@@ -47,6 +47,46 @@ pub struct NewCommand {
     pub(super) auth_mode: Option<String>,
 }
 
+fn ensure_combination_supported(language: Language, framework: Framework) -> Result<()> {
+    let valid_frameworks = Framework::frameworks_for_language(language);
+    if !valid_frameworks.is_empty()
+        && !valid_frameworks.contains(&framework)
+        && framework != Framework::None
+    {
+        return Err(anyhow::anyhow!(
+            "Framework '{}' is not supported for {} language. Available frameworks: {}",
+            framework.as_str(),
+            language,
+            valid_frameworks
+                .iter()
+                .map(|candidate| candidate.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
+    let spec = registry::resolve(language, framework).ok_or_else(|| {
+        anyhow::anyhow!(
+            "{} language requires a framework. Please choose one from: {}",
+            language,
+            valid_frameworks
+                .iter()
+                .map(|candidate| candidate.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    })?;
+
+    if spec.kind == registry::GenKind::Unimplemented {
+        return Err(anyhow::anyhow!(
+            "Framework '{}' is not implemented yet",
+            framework.as_str()
+        ));
+    }
+
+    Ok(())
+}
+
 impl NewCommand {
     pub fn new(project_name: String, target_path: Option<String>) -> Self {
         Self {
@@ -170,11 +210,12 @@ impl NewCommand {
 
         // 交互式选择
         let language = self.select_language()?;
+        let framework = self.select_framework(&language)?;
+
+        ensure_combination_supported(language, framework)?;
 
         // 环境检查
         self.check_environment(&language).await?;
-
-        let framework = self.select_framework(&language)?;
 
         // 配置选项
         let (host, port, _grpc_port) = self.configure_network_settings(&framework, &language)?;
@@ -318,34 +359,14 @@ impl NewCommand {
     async fn generate_project(&self, params: ProjectParams) -> Result<()> {
         tracing::info!("正在生成项目...");
 
-        // 验证语言和框架组合是否有效
-        let valid_frameworks = Framework::frameworks_for_language(params.language);
-        if !valid_frameworks.is_empty()
-            && !valid_frameworks.contains(&params.framework)
-            && params.framework != Framework::None
-        {
-            return Err(anyhow::anyhow!(
-                "Framework '{}' is not supported for {} language. Available frameworks: {}",
-                params.framework.as_str(),
-                params.language,
-                valid_frameworks
-                    .iter()
-                    .map(|f| f.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ));
-        }
+        ensure_combination_supported(params.language, params.framework)?;
 
         // 单一调度点：把 (语言, 框架) 解析为唯一的生成规格
         let spec = registry::resolve(params.language, params.framework).ok_or_else(|| {
             anyhow::anyhow!(
-                "{} language requires a framework. Please choose one from: {}",
+                "Validated framework '{}' has no generation spec for {}",
+                params.framework.as_str(),
                 params.language,
-                valid_frameworks
-                    .iter()
-                    .map(|f| f.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
             )
         })?;
 
