@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.9](https://github.com/sunerpy/scaffold-gen/compare/v0.10.8...v0.10.9) (2026-07-14)
+
+
+### Bug Fixes
+
+* **tauri:** 将 Tauri 模板迁移到 minijinja 分隔符并修复占位符泄漏 ([#54](https://github.com/sunerpy/scaffold-gen/issues/54)) ([501d104](https://github.com/sunerpy/scaffold-gen/commit/501d104ff7c7cadc47a4e601443edd4f18cfd14c))
+
 ## [0.10.8](https://github.com/sunerpy/scaffold-gen/compare/v0.10.7...v0.10.8) (2026-07-13)
 
 
