@@ -104,6 +104,12 @@ impl InheritableParams for TauriParams {
             )),
         );
         context.insert(
+            "package_name".to_string(),
+            Value::String(crate::constants::string_utils::to_cargo_package_name(
+                &self.base.project_name,
+            )),
+        );
+        context.insert(
             "project_title".to_string(),
             Value::String(self.base.project_name.clone()),
         );

@@ -235,6 +235,26 @@ pub mod string_utils {
 
         result
     }
+
+    /// 转换为合法的 Cargo 包名，并为数字开头的名称添加下划线前缀。
+    pub fn to_cargo_package_name(s: &str) -> String {
+        let mut result: String = s
+            .chars()
+            .map(|ch| {
+                if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+                    ch
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+
+        if result.chars().next().is_some_and(|ch| ch.is_ascii_digit()) {
+            result.insert(0, '_');
+        }
+
+        result
+    }
 }
 
 #[cfg(test)]
@@ -308,6 +328,14 @@ mod tests {
         assert_eq!(to_crate_ident("My-Cool_App"), "my_cool_app");
         assert_eq!(to_crate_ident("123-app"), "_123_app");
         assert_eq!(to_crate_ident("my.app"), "my_app");
+    }
+
+    #[test]
+    fn cargo_package_name_preserves_legal_names_and_prefixes_leading_digits() {
+        assert_eq!(to_cargo_package_name("123-app"), "_123-app");
+        assert_eq!(to_cargo_package_name("my-app"), "my-app");
+        assert_eq!(to_cargo_package_name("My_App"), "My_App");
+        assert_eq!(to_cargo_package_name("my.app"), "my_app");
     }
 
     #[test]
