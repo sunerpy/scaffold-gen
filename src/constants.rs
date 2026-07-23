@@ -255,6 +255,51 @@ pub mod string_utils {
 
         result
     }
+
+    /// 由项目名派生一个安全、防碰撞的 Docker 镜像名（形如 `<slug>-<digest>:latest`）。
+    ///
+    /// slug：ASCII 小写；保留 ASCII 字母数字；其它连续字符折叠为单个 `-`；去首尾 `-`；
+    /// 全无合法字符时用 `app`；最多 80 个 ASCII 字符。digest：始终追加原始项目名 UTF-8
+    /// 字节 SHA-256 的前 24 个十六进制字符——故大小写、`_`/`-`、不同 Unicode、被截断的
+    /// 长名都不会折叠到同一镜像名。Docker recipe 与 helper 只消费该键，绝不用原始项目名。
+    pub fn to_docker_image_name(project_name: &str) -> String {
+        use sha2::{Digest, Sha256};
+
+        let mut slug = String::new();
+        let mut previous_was_dash = false;
+        for ch in project_name.chars() {
+            if ch.is_ascii_alphanumeric() {
+                slug.push(ch.to_ascii_lowercase());
+                previous_was_dash = false;
+            } else if !previous_was_dash {
+                slug.push('-');
+                previous_was_dash = true;
+            }
+        }
+        let slug = slug.trim_matches('-');
+        let mut slug = if slug.is_empty() {
+            "app".to_string()
+        } else {
+            slug.to_string()
+        };
+        if slug.len() > 80 {
+            slug.truncate(80);
+            let slug_trimmed = slug.trim_end_matches('-');
+            slug = if slug_trimmed.is_empty() {
+                "app".to_string()
+            } else {
+                slug_trimmed.to_string()
+            };
+        }
+
+        let mut hasher = Sha256::new();
+        hasher.update(project_name.as_bytes());
+        let digest = hasher.finalize();
+        let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
+        let short = &hex[..24];
+
+        format!("{slug}-{short}:latest")
+    }
 }
 
 #[cfg(test)]
@@ -336,6 +381,68 @@ mod tests {
         assert_eq!(to_cargo_package_name("my-app"), "my-app");
         assert_eq!(to_cargo_package_name("My_App"), "My_App");
         assert_eq!(to_cargo_package_name("my.app"), "my_app");
+    }
+
+    #[test]
+    fn docker_image_name_is_lowercase_slug_plus_digest_and_collision_resistant() {
+        // Slug + 24-hex digest suffix, lowercased, non-alnum folded to single '-'.
+        let a = to_docker_image_name("OrderApi");
+        assert!(a.starts_with("orderapi-"), "readable slug preserved: {a}");
+        assert!(a.ends_with(":latest"), "tag appended: {a}");
+
+        // Near-collision inputs must NOT fold to the same image name.
+        let foo_us = to_docker_image_name("foo_bar");
+        let foo_dash = to_docker_image_name("foo-bar");
+        assert_ne!(
+            foo_us, foo_dash,
+            "distinct originals must differ: {foo_us} vs {foo_dash}"
+        );
+
+        // Case differences differ (digest of original bytes).
+        assert_ne!(to_docker_image_name("Foo"), to_docker_image_name("foo"));
+
+        // Distinct Unicode originals differ even if slug collapses.
+        assert_ne!(to_docker_image_name("café"), to_docker_image_name("cafe"));
+
+        // Empty-of-legal-chars falls back to `app` slug but stays unique per original.
+        let dots = to_docker_image_name("...");
+        assert!(
+            dots.starts_with("app-"),
+            "empty slug falls back to app: {dots}"
+        );
+        assert_ne!(dots, to_docker_image_name("///"));
+
+        // Deterministic.
+        assert_eq!(
+            to_docker_image_name("repeatable"),
+            to_docker_image_name("repeatable")
+        );
+    }
+
+    #[test]
+    fn docker_image_name_slug_is_length_bounded_and_distinct_on_truncation() {
+        let long_a = "x".repeat(200);
+        let long_b = format!("{}y", "x".repeat(199));
+        let img_a = to_docker_image_name(&long_a);
+        let img_b = to_docker_image_name(&long_b);
+
+        // Slug is capped: everything before the last '-<digest>:latest' is <= 80 ASCII chars.
+        let slug_a = img_a
+            .strip_suffix(":latest")
+            .and_then(|s| s.rsplit_once('-'))
+            .map(|(slug, _)| slug)
+            .expect("slug segment");
+        assert!(
+            slug_a.len() <= 80,
+            "slug must be length-bounded: {} chars",
+            slug_a.len()
+        );
+
+        // Two long names sharing a truncated slug still differ via the digest.
+        assert_ne!(
+            img_a, img_b,
+            "truncated long names must differ: {img_a} vs {img_b}"
+        );
     }
 
     #[test]

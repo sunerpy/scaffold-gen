@@ -1,4 +1,6 @@
 use anyhow::{Context, Result};
+use serde_json::Value;
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
@@ -102,35 +104,29 @@ impl PythonGenerator {
 
         Ok(())
     }
-}
 
-impl Generator for PythonGenerator {
-    type Params = PythonParams;
-
-    fn name(&self) -> &'static str {
-        "Python Language"
-    }
-
-    fn get_template_path(&self) -> &'static str {
-        "languages/python"
-    }
-
-    fn generate(&mut self, params: Self::Params, output_path: &Path) -> Result<()> {
-        // 验证参数
+    /// Generate the pure-Python project, merging `context_overrides` on top of the
+    /// params-derived template context. The orchestrator uses this to inject
+    /// `enable_build` / `docker_image_name` without adding fields to PythonParams.
+    /// `Generator::generate` calls this with an empty override map.
+    pub fn generate_with_context(
+        &mut self,
+        params: PythonParams,
+        output_path: &Path,
+        context_overrides: HashMap<String, Value>,
+    ) -> Result<()> {
         params.validate()?;
 
         tracing::info!("Generating {} structure", self.name());
 
-        // 1. 使用 uv init 创建基础项目结构
         self.init_uv_project(&params, output_path)?;
         rewrite_requires_python(output_path)?;
 
-        // 2. 处理嵌入式模板
         let mut template_processor = TemplateProcessor::new()?;
         let template_path = self.get_template_path();
-        let context = params.to_template_context();
+        let mut context = params.to_template_context();
+        context.extend(context_overrides);
 
-        // 检查嵌入式模板目录是否存在
         if crate::template_engine::embedded_template_dir_exists(template_path) {
             template_processor.process_embedded_template_directory(
                 template_path,
@@ -145,14 +141,27 @@ impl Generator for PythonGenerator {
             );
         }
 
-        // 3. 添加必要的依赖
         self.add_dependencies(output_path)?;
-
-        // 4. 安装依赖
         self.install_dependencies(output_path)?;
 
         tracing::info!("Python language generation completed successfully");
         Ok(())
+    }
+}
+
+impl Generator for PythonGenerator {
+    type Params = PythonParams;
+
+    fn name(&self) -> &'static str {
+        "Python Language"
+    }
+
+    fn get_template_path(&self) -> &'static str {
+        "languages/python"
+    }
+
+    fn generate(&mut self, params: Self::Params, output_path: &Path) -> Result<()> {
+        self.generate_with_context(params, output_path, HashMap::new())
     }
 }
 

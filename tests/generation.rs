@@ -673,8 +673,8 @@ fn mcp_python_embedded_generation_renders_without_external_tools() {
             );
         } else {
             assert!(
-                pyproject.contains("fastmcp>=2,<3"),
-                "[fastmcp] pyproject.toml must pin fastmcp>=2,<3:\n{pyproject}"
+                pyproject.contains("fastmcp>=2.14.7,<3"),
+                "[fastmcp] pyproject.toml must pin fastmcp>=2.14.7,<3:\n{pyproject}"
             );
         }
         assert!(
@@ -807,13 +807,13 @@ fn mcp_python_auth_renders() {
             "[{backend}/{mode}] settings.py must define AuthConfig with resource_server_url:\n{settings}"
         );
 
-        // config.toml：[auth] + enabled = false + resource_server_url。
+        // config.toml：[auth] + fail-closed enabled = true + resource_server_url。
         let config = read_rendered(&tmp, "config.toml", backend, mode);
         assert!(
             config.contains("[auth]")
-                && config.contains("enabled = false")
+                && config.lines().any(|l| l.trim() == "enabled = true")
                 && config.contains("resource_server_url"),
-            "[{backend}/{mode}] config.toml must have [auth] enabled=false + resource_server_url:\n{config}"
+            "[{backend}/{mode}] config.toml must have [auth] enabled=true (fail-closed) + resource_server_url:\n{config}"
         );
 
         // mcp_instance.py：official 后端导入 JwksTokenVerifier + AuthSettings + token_verifier=。
@@ -840,8 +840,9 @@ fn mcp_python_auth_renders() {
         let auth = read_rendered(&tmp, "app/auth.py", backend, mode);
         assert!(
             auth.contains("class JwksTokenVerifier")
-                && auth.contains("options={\"require\": [\"exp\"]}"),
-            "[{backend}/{mode}] app/auth.py must define JwksTokenVerifier with options require exp:\n{auth}"
+                && auth.contains("\"require\": [\"exp\"]")
+                && auth.contains("\"strict_aud\": True"),
+            "[{backend}/{mode}] app/auth.py must define JwksTokenVerifier with require exp + strict_aud:\n{auth}"
         );
 
         // pyproject.toml：official+auth 才有 pyjwt[crypto]。
@@ -883,12 +884,12 @@ fn mcp_python_auth_renders() {
             "[{backend}/{mode}] settings.py must define AuthConfig:\n{settings}"
         );
 
-        // mcp_instance.py：fastmcp 后端导入内置 JWTVerifier + auth=。
+        // mcp_instance.py：fastmcp 后端装配 StrictAudienceJWTVerifier(from app.auth) + auth=。
         let mcp_instance = read_rendered(&tmp, "app/mcp_instance.py", backend, mode);
         assert!(
-            mcp_instance.contains("from fastmcp.server.auth.providers.jwt import JWTVerifier")
+            mcp_instance.contains("from app.auth import StrictAudienceJWTVerifier")
                 && mcp_instance.contains("auth="),
-            "[{backend}/{mode}] mcp_instance.py must wire the built-in JWTVerifier + auth=:\n{mcp_instance}"
+            "[{backend}/{mode}] mcp_instance.py must wire StrictAudienceJWTVerifier + auth=:\n{mcp_instance}"
         );
 
         // server.py：B1 中间件再挂载仍存在。
@@ -1050,7 +1051,7 @@ fn mcp_python_azuread_renders() {
             "resource_app_id",
             "extra_issuers",
             "identity_claims",
-            "model_post_init",
+            "login.microsoftonline.com",
         ] {
             assert!(
                 settings.contains(marker),
@@ -1158,15 +1159,15 @@ fn mcp_python_azuread_renders() {
             "[{backend}/{mode}] config.toml must have mode=\"azure-ad\" + tenant_id:\n{config}"
         );
 
-        // mcp_instance.py：tenant fail-fast + 单个内置 JWTVerifier；fastmcp 不导入 warm_up_jwks。
+        // mcp_instance.py：tenant fail-fast + StrictAudienceJWTVerifier；fastmcp 不导入 warm_up_jwks。
         let mcp_instance = read_rendered(&tmp, "app/mcp_instance.py", backend, mode);
         assert!(
             mcp_instance.contains("settings.auth.tenant_id"),
             "[{backend}/{mode}] mcp_instance.py must fail-fast on tenant_id:\n{mcp_instance}"
         );
         assert!(
-            mcp_instance.contains("from fastmcp.server.auth.providers.jwt import JWTVerifier"),
-            "[{backend}/{mode}] mcp_instance.py must import the built-in JWTVerifier:\n{mcp_instance}"
+            mcp_instance.contains("from app.auth import StrictAudienceJWTVerifier"),
+            "[{backend}/{mode}] mcp_instance.py must import StrictAudienceJWTVerifier:\n{mcp_instance}"
         );
         assert!(
             !mcp_instance.contains("warm_up_jwks"),
@@ -1285,6 +1286,254 @@ fn mcp_python_azuread_renders() {
             assert!(
                 !mcp_instance.contains(marker),
                 "[{backend}/{mode}] mcp_instance.py must NOT contain `{marker}` for jwt:\n{mcp_instance}"
+            );
+        }
+    }
+}
+
+#[test]
+fn mcp_python_auth_modes_render_fail_closed() {
+    for backend in ["fastmcp", "official"] {
+        for mode in ["jwt", "azure-ad"] {
+            let tmp = render_mcp_python_auth(backend, mode);
+
+            let config = read_rendered(&tmp, "config.toml", backend, mode);
+            assert!(
+                config.contains("[auth]") && config.lines().any(|l| l.trim() == "enabled = true"),
+                "[{backend}/{mode}] config.toml must render fail-closed `enabled = true`:\n{config}"
+            );
+            assert!(
+                !config.lines().any(|l| l.trim() == "enabled = false"),
+                "[{backend}/{mode}] config.toml must NOT render `enabled = false`:\n{config}"
+            );
+
+            let settings = read_rendered(&tmp, "app/settings.py", backend, mode);
+            assert!(
+                settings.contains("enabled: bool = True"),
+                "[{backend}/{mode}] AuthConfig.enabled default must be True (fail-closed):\n{settings}"
+            );
+            assert!(
+                !settings.contains("enabled: bool = False"),
+                "[{backend}/{mode}] AuthConfig.enabled must NOT default to False:\n{settings}"
+            );
+        }
+    }
+}
+
+#[test]
+fn mcp_python_auth_settings_load_sources_before_validation() {
+    for backend in ["fastmcp", "official"] {
+        for mode in ["jwt", "azure-ad"] {
+            let tmp = render_mcp_python_auth(backend, mode);
+            let settings = read_rendered(&tmp, "app/settings.py", backend, mode);
+
+            assert!(
+                settings.contains("auth: AuthConfig = Field(default_factory=AuthConfig)"),
+                "[{backend}/{mode}] Settings.auth must use Field(default_factory=AuthConfig) so nested sources merge before validation:\n{settings}"
+            );
+            assert!(
+                !settings.contains("auth: AuthConfig = AuthConfig()"),
+                "[{backend}/{mode}] Settings.auth must NOT eagerly construct AuthConfig():\n{settings}"
+            );
+        }
+    }
+}
+
+#[test]
+fn mcp_python_auth_mode_cannot_be_overridden() {
+    for backend in ["fastmcp", "official"] {
+        for (mode, literal) in [
+            ("jwt", "Literal[\"jwt\"]"),
+            ("azure-ad", "Literal[\"azure-ad\"]"),
+        ] {
+            let tmp = render_mcp_python_auth(backend, mode);
+            let settings = read_rendered(&tmp, "app/settings.py", backend, mode);
+
+            assert!(
+                settings.contains(&format!("mode: {literal}")),
+                "[{backend}/{mode}] AuthConfig.mode must be a fixed {literal} that cannot be flipped via AUTH__MODE:\n{settings}"
+            );
+            assert!(
+                !settings.contains("mode: str ="),
+                "[{backend}/{mode}] AuthConfig.mode must NOT be a mutable str field:\n{settings}"
+            );
+        }
+    }
+}
+
+#[test]
+fn mcp_python_auth_tests_scrub_host_environment() {
+    for backend in ["fastmcp", "official"] {
+        for mode in ["jwt", "azure-ad"] {
+            let tmp = render_mcp_python_auth(backend, mode);
+
+            let conftest = read_rendered(&tmp, "tests/conftest.py", backend, mode);
+            let scrub_pos = conftest
+                .find("del os.environ")
+                .unwrap_or_else(|| panic!("[{backend}/{mode}] conftest.py must scrub AUTH__* env"));
+            let import_pos = conftest
+                .find("\nfrom app.server import")
+                .unwrap_or_else(|| panic!("[{backend}/{mode}] conftest.py must import app.server"));
+            assert!(
+                conftest.contains(".upper()"),
+                "[{backend}/{mode}] conftest.py must scrub AUTH env case-insensitively:\n{conftest}"
+            );
+            assert!(
+                scrub_pos < import_pos,
+                "[{backend}/{mode}] conftest.py must scrub AUTH env BEFORE importing app.server:\n{conftest}"
+            );
+            assert!(
+                conftest.contains("AUTH__ENABLED"),
+                "[{backend}/{mode}] conftest.py must set the disabled baseline AUTH__ENABLED:\n{conftest}"
+            );
+
+            let test_auth = read_rendered(&tmp, "tests/test_auth.py", backend, mode);
+            for func in [
+                "def test_enabled_without_config_fails_closed",
+                "def test_complete_auth_config_via_env_succeeds",
+                "def test_auth_mode_cannot_be_tampered",
+            ] {
+                assert!(
+                    test_auth.contains(func),
+                    "[{backend}/{mode}] test_auth.py must ship `{func}`:\n{test_auth}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn mcp_python_auth_none_remains_code_free() {
+    for backend in ["fastmcp", "official"] {
+        let mode = "none";
+        let tmp = render_mcp_python_auth(backend, mode);
+
+        let settings = read_rendered(&tmp, "app/settings.py", backend, mode);
+        assert!(
+            !settings.contains("AuthConfig"),
+            "[{backend}/{mode}] settings.py must contain NO AuthConfig when auth none:\n{settings}"
+        );
+
+        let config = read_rendered(&tmp, "config.toml", backend, mode);
+        assert!(
+            !config.contains("[auth]"),
+            "[{backend}/{mode}] config.toml must contain NO [auth] when auth none:\n{config}"
+        );
+
+        let pyproject = read_rendered(&tmp, "pyproject.toml", backend, mode);
+        assert!(
+            !pyproject.contains("pyjwt"),
+            "[{backend}/{mode}] pyproject.toml must contain NO auth deps when auth none:\n{pyproject}"
+        );
+
+        let whoami_path = tmp.path().join("app/tools/whoami.py");
+        if whoami_path.exists() {
+            let whoami = fs::read_to_string(&whoami_path)
+                .unwrap_or_else(|_| panic!("[{backend}/{mode}] read app/tools/whoami.py"));
+            assert!(
+                !whoami.contains("def whoami("),
+                "[{backend}/{mode}] whoami.py must be comment-only stub when auth none:\n{whoami}"
+            );
+        }
+
+        let test_auth_path = tmp.path().join("tests/test_auth.py");
+        if test_auth_path.exists() {
+            let test_auth = fs::read_to_string(&test_auth_path)
+                .unwrap_or_else(|_| panic!("[{backend}/{mode}] read tests/test_auth.py"));
+            assert!(
+                !test_auth.contains("def test_"),
+                "[{backend}/{mode}] test_auth.py must have NO test body when auth none:\n{test_auth}"
+            );
+        }
+    }
+}
+
+#[test]
+fn mcp_python_verifier_claim_hardening_renders() {
+    // Batch 2：token verifier claim 加固的渲染断言。两后端都必须渲染出共享 NumericDate
+    // helper、禁用 PyJWT 内建时间校验、并在 fastmcp+auth 分支输出 StrictAudienceJWTVerifier。
+    // Batch 2: token-verifier claim-hardening render assertions across both backends.
+
+    // ── official + jwt：共享 helper + strict_aud + 禁用 PyJWT 时间校验 + 无 audience 旁路 ──
+    {
+        let backend = "official";
+        let mode = "jwt";
+        let tmp = render_mcp_python_auth(backend, mode);
+        let auth = read_rendered(&tmp, "app/auth.py", backend, mode);
+
+        for marker in [
+            "def _coerce_numeric_date",
+            "MAX_NUMERIC_DATE = 253_402_300_799",
+            "LEEWAY = 60",
+            "\"strict_aud\": True",
+            "\"verify_iat\": False",
+            "\"verify_nbf\": False",
+            "\"verify_exp\": False",
+        ] {
+            assert!(
+                auth.contains(marker),
+                "[{backend}/{mode}] app/auth.py must contain `{marker}` (shared NumericDate helper + disabled PyJWT time claims):\n{auth}"
+            );
+        }
+        assert!(
+            !auth.contains("audience=self._audience or None"),
+            "[{backend}/{mode}] app/auth.py must NOT keep the `audience=self._audience or None` bypass (audience is guaranteed non-empty):\n{auth}"
+        );
+    }
+
+    // ── fastmcp + jwt：StrictAudienceJWTVerifier + 共享 helper（子类扩展 iat/nbf 校验）──
+    {
+        let backend = "fastmcp";
+        let mode = "jwt";
+        let tmp = render_mcp_python_auth(backend, mode);
+        let auth = read_rendered(&tmp, "app/auth.py", backend, mode);
+
+        for marker in [
+            "class StrictAudienceJWTVerifier",
+            "def _coerce_numeric_date",
+            "MAX_NUMERIC_DATE = 253_402_300_799",
+            "LEEWAY = 60",
+            "async def verify_token",
+            "await super().verify_token",
+        ] {
+            assert!(
+                auth.contains(marker),
+                "[{backend}/{mode}] app/auth.py must contain `{marker}` (StrictAudienceJWTVerifier subclass + shared helper):\n{auth}"
+            );
+        }
+
+        // mcp_instance.py：fastmcp+auth 分支改用 StrictAudienceJWTVerifier（import from app.auth）。
+        let mcp_instance = read_rendered(&tmp, "app/mcp_instance.py", backend, mode);
+        assert!(
+            mcp_instance.contains("from app.auth import StrictAudienceJWTVerifier"),
+            "[{backend}/{mode}] mcp_instance.py must import StrictAudienceJWTVerifier from app.auth:\n{mcp_instance}"
+        );
+        assert!(
+            mcp_instance.contains("StrictAudienceJWTVerifier("),
+            "[{backend}/{mode}] mcp_instance.py must construct StrictAudienceJWTVerifier (not the raw JWTVerifier):\n{mcp_instance}"
+        );
+
+        // pyproject.toml：fastmcp 下界收紧为 fastmcp>=2.14.7,<3（ADR-B2-3）。
+        let pyproject = read_rendered(&tmp, "pyproject.toml", backend, mode);
+        assert!(
+            pyproject.contains("fastmcp>=2.14.7,<3"),
+            "[{backend}/{mode}] pyproject.toml must pin fastmcp>=2.14.7,<3 (ADR-B2-3):\n{pyproject}"
+        );
+    }
+
+    // ── azure-ad 也走同一硬化路径（两后端）─────────────────────────────────────────
+    for backend in ["official", "fastmcp"] {
+        let mode = "azure-ad";
+        let tmp = render_mcp_python_azuread(backend);
+        let auth = read_rendered(&tmp, "app/auth.py", backend, mode);
+        assert!(
+            auth.contains("def _coerce_numeric_date") && auth.contains("MAX_NUMERIC_DATE"),
+            "[{backend}/{mode}] app/auth.py must contain the shared NumericDate helper:\n{auth}"
+        );
+        if backend == "fastmcp" {
+            assert!(
+                auth.contains("class StrictAudienceJWTVerifier"),
+                "[{backend}/{mode}] app/auth.py must define StrictAudienceJWTVerifier:\n{auth}"
             );
         }
     }
@@ -1947,5 +2196,233 @@ fn react_embedded_generation_renders_without_external_tools() {
             !content.contains(">>"),
             "file {rel} still contains unrendered `>>`"
         );
+    }
+}
+
+// ─── Batch 3: Python build contract (README/Makefile/--with-build consistency) ──
+
+/// Render `build/python` (the shared build-tooling tree) with an explicit
+/// `enable_build` + `docker_image_name` context (mirrors what the orchestrator
+/// injects). Returns the tempdir handle.
+fn render_build_python(project_name: &str, enable_build: bool) -> tempfile::TempDir {
+    let mut params = PythonParams::new(project_name.to_string());
+    params.base.port = Some(8000);
+    let mut context = params.to_template_context();
+    context.insert(
+        "enable_build".to_string(),
+        serde_json::Value::Bool(enable_build),
+    );
+    context.insert(
+        "docker_image_name".to_string(),
+        serde_json::Value::String(format!("{project_name}-0123456789abcdef01234567:latest")),
+    );
+
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    processor
+        .process_embedded_template_directory("build/python", tmp.path(), context)
+        .expect("render build/python templates");
+    tmp
+}
+
+/// Render a python framework template dir with an explicit `enable_build`
+/// context (mirrors what the orchestrator injects). Returns the tempdir handle.
+fn render_python_framework_with_build(
+    template_path: &str,
+    project_name: &str,
+    enable_build: bool,
+) -> tempfile::TempDir {
+    let mut params = PythonParams::new(project_name.to_string());
+    params.base.host = Some("0.0.0.0".to_string());
+    params.base.port = Some(8000);
+    let mut context = params.to_template_context();
+    if template_path == "frameworks/python/mcp-python" {
+        context.insert(
+            "mcp_backend".to_string(),
+            serde_json::Value::String("fastmcp".to_string()),
+        );
+        context.insert(
+            "mcp_backend_is_official".to_string(),
+            serde_json::Value::Bool(false),
+        );
+    }
+    context.insert(
+        "enable_build".to_string(),
+        serde_json::Value::Bool(enable_build),
+    );
+    context.insert(
+        "docker_image_name".to_string(),
+        serde_json::Value::String(format!("{project_name}-0123456789abcdef01234567:latest")),
+    );
+
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    processor
+        .process_embedded_template_directory(template_path, tmp.path(), context)
+        .unwrap_or_else(|_| panic!("render embedded templates from {template_path}"));
+    tmp
+}
+
+#[test]
+fn build_python_emits_dockerignore_and_docker_helper() {
+    // Given: --with-build renders build/python
+    let tmp = render_build_python("dockerignore-probe", true);
+    let files = collect_relative_files(tmp.path());
+
+    // Then: .dockerignore + scripts/docker.py are emitted alongside Makefile/Dockerfile
+    assert!(
+        files.iter().any(|f| f == ".dockerignore"),
+        "expected .dockerignore, got: {files:?}"
+    );
+    assert!(
+        files.iter().any(|f| f == "scripts/docker.py"),
+        "expected scripts/docker.py, got: {files:?}"
+    );
+
+    // .dockerignore excludes .env* but retains .env.example
+    let di = fs::read_to_string(tmp.path().join(".dockerignore")).expect("read .dockerignore");
+    assert!(
+        di.lines().any(|l| l.trim() == ".env*"),
+        ".dockerignore must exclude .env*:\n{di}"
+    );
+    assert!(
+        di.lines().any(|l| l.trim() == "!.env.example"),
+        ".dockerignore must retain !.env.example:\n{di}"
+    );
+
+    // docker.py is a subprocess-based helper, never shell=True
+    let helper = fs::read_to_string(tmp.path().join("scripts/docker.py")).expect("read docker.py");
+    assert!(
+        helper.contains("subprocess.run") && helper.contains("check=True"),
+        "docker.py must use subprocess.run([...], check=True):\n{helper}"
+    );
+    assert!(
+        !helper.contains("shell=True"),
+        "docker.py must never use shell=True:\n{helper}"
+    );
+}
+
+#[test]
+fn framework_makefiles_gate_docker_targets_on_enable_build() {
+    for template_path in ["frameworks/python/fastapi", "frameworks/python/mcp-python"] {
+        // With --with-build: docker-build / docker-run targets present
+        let with_build = render_python_framework_with_build(template_path, "docker-gate", true);
+        let mf_on =
+            fs::read_to_string(with_build.path().join("Makefile")).expect("read Makefile (on)");
+        assert!(
+            mf_on.contains("docker-build") && mf_on.contains("docker-run"),
+            "[{template_path}] Makefile must expose docker targets with --with-build:\n{mf_on}"
+        );
+        assert!(
+            mf_on.contains("python3 scripts/docker.py build")
+                && mf_on.contains("python3 scripts/docker.py run"),
+            "[{template_path}] docker targets must call the helper:\n{mf_on}"
+        );
+
+        // Without --with-build: no docker targets
+        let without = render_python_framework_with_build(template_path, "docker-gate", false);
+        let mf_off =
+            fs::read_to_string(without.path().join("Makefile")).expect("read Makefile (off)");
+        assert!(
+            !mf_off.contains("docker-build") && !mf_off.contains("docker-run"),
+            "[{template_path}] Makefile must NOT expose docker targets without --with-build:\n{mf_off}"
+        );
+    }
+}
+
+#[test]
+fn framework_makefiles_expose_build_target() {
+    for template_path in ["frameworks/python/fastapi", "frameworks/python/mcp-python"] {
+        let tmp = render_python_framework_with_build(template_path, "build-target", true);
+        let mf = fs::read_to_string(tmp.path().join("Makefile")).expect("read Makefile");
+        assert!(
+            mf.contains("build:"),
+            "[{template_path}] Makefile must expose a build target:\n{mf}"
+        );
+    }
+}
+
+#[test]
+fn python_readmes_drop_docker_build_command() {
+    // FastAPI + mcp-python READMEs must stop advertising `docker build -t`.
+    for template_path in ["frameworks/python/fastapi", "frameworks/python/mcp-python"] {
+        let tmp = render_python_framework_with_build(template_path, "readme-probe", true);
+        let readme = fs::read_to_string(tmp.path().join("README.md")).expect("read README.md");
+        assert!(
+            !readme.contains("docker build -t"),
+            "[{template_path}] README must not contain `docker build -t`:\n{readme}"
+        );
+        assert!(
+            readme.contains("python3 scripts/docker.py"),
+            "[{template_path}] README must document the docker helper:\n{readme}"
+        );
+    }
+}
+
+#[test]
+fn pure_python_readme_drops_docker_build_command() {
+    // Pure-Python README with enable_build=true must document the helper, not `docker build -t`.
+    let mut params = PythonParams::new("pure-readme".to_string());
+    params.base.port = Some(8000);
+    let mut context = params.to_template_context();
+    context.insert("enable_build".to_string(), serde_json::Value::Bool(true));
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    processor
+        .process_embedded_template_directory("languages/python", tmp.path(), context)
+        .expect("render languages/python");
+    let readme = fs::read_to_string(tmp.path().join("README.md")).expect("read README.md");
+    assert!(
+        !readme.contains("docker build -t"),
+        "pure-Python README must not contain `docker build -t`:\n{readme}"
+    );
+    assert!(
+        readme.contains("python3 scripts/docker.py"),
+        "pure-Python README must document the docker helper:\n{readme}"
+    );
+}
+
+#[test]
+fn generic_python_makefile_has_no_overridable_defs_or_recipe_expansion() {
+    // The generic Makefile must define no overridable variables and expand none in recipes,
+    // while STILL allowing `$(origin NAME)` guards and `unexport NAME` lines.
+    let tmp = render_build_python("makefile-hygiene", true);
+    let mf = fs::read_to_string(tmp.path().join("Makefile")).expect("read Makefile");
+
+    let guarded = [
+        "VERSION",
+        "PROJECT_NAME",
+        "PROJECT_ROOT",
+        "APP_ENTRY",
+        "HAS_OXFMT",
+    ];
+
+    for line in mf.lines() {
+        // No `$(shell ...)` anywhere.
+        assert!(
+            !line.contains("$(shell"),
+            "generic Makefile must not use $(shell): {line}"
+        );
+
+        // No assignment definitions for the guarded names. A definition line is
+        // `NAME :=` / `NAME ?=` / `NAME =` (after optional leading whitespace).
+        // `$(origin NAME)` / `unexport NAME` lines are NOT definitions and stay allowed.
+        let trimmed = line.trim_start();
+        for name in guarded {
+            let is_def = trimmed
+                .strip_prefix(name)
+                .map(str::trim_start)
+                .is_some_and(|rest| {
+                    rest.starts_with(":=") || rest.starts_with("?=") || rest.starts_with('=')
+                });
+            assert!(!is_def, "generic Makefile must not define `{name}`: {line}");
+
+            // No recipe expansion of the guarded names via `$(NAME)`.
+            let expansion = format!("$({name})");
+            assert!(
+                !line.contains(&expansion),
+                "generic Makefile must not expand `{expansion}` in a recipe: {line}"
+            );
+        }
     }
 }

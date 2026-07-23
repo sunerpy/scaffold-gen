@@ -1,0 +1,14 @@
+# Keep local secrets and dev artifacts out of the Docker build context.
+.env
+.env.*
+.env*
+.venv
+.git
+.opencode
+logs
+__pycache__
+.pytest_cache
+.ruff_cache
+*.pyc
+# Retain the committed example env so images can document expected variables.
+!.env.example

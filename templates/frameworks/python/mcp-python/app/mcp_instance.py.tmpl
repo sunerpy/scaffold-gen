@@ -101,8 +101,8 @@ mcp = FastMCP(
 #    stateless_http 在 http_app() 工厂上传入 (见 app/server.py)。
 from fastmcp import FastMCP
 <%- if auth_enabled %>
-from fastmcp.server.auth.providers.jwt import JWTVerifier
 
+from app.auth import StrictAudienceJWTVerifier
 from app.settings import settings
 <%- endif %>
 <%if auth_enabled%>
@@ -131,10 +131,10 @@ if settings.auth.enabled:
             " [auth] enabled but jwks_uri/issuer/resource_server_url are not all set."
         )
 <%- endif %>
-    _verifier = JWTVerifier(
+    _verifier = StrictAudienceJWTVerifier(
         jwks_uri=settings.auth.jwks_uri,
         issuer=settings.auth.issuer,
-        audience=settings.auth.audience or None,
+        audience=settings.auth.audience,
         algorithm=settings.auth.algorithm,
         required_scopes=settings.auth.required_scopes or None,
     )

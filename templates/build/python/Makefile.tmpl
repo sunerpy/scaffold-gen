@@ -3,39 +3,60 @@
 #
 #   make help          list targets
 #   make build         sync the environment (uv sync)
-#   make run           run the app (adjust APP_ENTRY for FastAPI/uvicorn)
+#   make run           run the app (uv run python main.py)
 #   make test          pytest
 #   make fmt           format (ruff + oxfmt)
 #   make lint          ruff check
 #   make check         fmt-check + lint + test (local verification)
 #   make clean         remove caches / build artifacts
-#   make docker-build  build the container image
-#   make docker-run    run the built image
+#   make docker-build  build the container image (scripts/docker.py build)
+#   make docker-run    run the built image (scripts/docker.py run)
 
-PROJECT_NAME := <<project_name>>
-PROJECT_ROOT := $(abspath .)
+# Drop any command-line variable overrides propagated to sub-makes so recipes
+# can never inherit attacker-controlled values through recursion.
+override MAKEOVERRIDES :=
+unexport MAKEOVERRIDES
 
-# Entry point. Basic projects run `python main.py`; FastAPI users override, e.g.
-#   make run APP_ENTRY="uv run uvicorn app.main:app --reload"
-APP_ENTRY ?= uv run python main.py
+# Reject caller-supplied overrides of names this Makefile references. The guard
+# only inspects $(origin NAME) and never expands the value, so a payload with an
+# embedded function call fails at parse time instead of being evaluated. `-e`
+# (MAKEFLAGS=-e) reports these as "environment override" / "command line".
+define reject_override
+ifneq (,$$(filter environment environment override command line,$$(origin $(1))))
+$$(error $(1) must not be overridden (origin: $$(origin $(1))))
+endif
+unexport $(1)
+endef
 
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+$(eval $(call reject_override,DOCKER_IMAGE))
+$(eval $(call reject_override,DOCKER_BIND))
+$(eval $(call reject_override,HOST_PORT))
+$(eval $(call reject_override,APP_ENTRY))
+$(eval $(call reject_override,PROJECT_ROOT))
+$(eval $(call reject_override,HAS_OXFMT))
+$(eval $(call reject_override,VERSION))
+$(eval $(call reject_override,PROJECT_NAME))
 
-HAS_OXFMT := $(shell command -v oxfmt 2>/dev/null)
+# MAKEFILE_LIST is a built-in special variable: a plain environment value is
+# discarded when Make reads this file (origin becomes `file`), so only the
+# `command line` and `environment override` sources are guardable here.
+ifneq (,$(filter command line environment override,$(origin MAKEFILE_LIST)))
+$(error MAKEFILE_LIST must not be overridden (origin: $(origin MAKEFILE_LIST)))
+endif
 
 .DEFAULT_GOAL := help
 
 .PHONY: help build run test fmt fmt-py fmt-oxfmt fmt-check lint check clean docker-build docker-run
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort \
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' Makefile | sort \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 build: ## Sync the environment (install deps into .venv)
 	@uv sync
 
-run: ## Run the application (override APP_ENTRY for uvicorn)
-	@$(APP_ENTRY)
+run: ## Run the application (uv run python main.py)
+	@uv run python main.py
 
 test: ## Run tests
 	@uv run pytest
@@ -47,17 +68,13 @@ fmt-py:
 	@uv run ruff check --fix .
 
 fmt-oxfmt:
-ifdef HAS_OXFMT
-	@oxfmt --write --no-error-on-unmatched-pattern "$(PROJECT_ROOT)"
-else
-	@echo "oxfmt not found, skipping non-Python formatting (cargo install oxfmt)"
-endif
+	@command -v oxfmt >/dev/null 2>&1 && oxfmt --write --no-error-on-unmatched-pattern . \
+		|| echo "oxfmt not found, skipping non-Python formatting (cargo install oxfmt)"
 
 fmt-check: ## Verify formatting without writing
 	@uv run ruff format --check .
-ifdef HAS_OXFMT
-	@oxfmt --check --no-error-on-unmatched-pattern "$(PROJECT_ROOT)"
-endif
+	@command -v oxfmt >/dev/null 2>&1 && oxfmt --check --no-error-on-unmatched-pattern . \
+		|| echo "oxfmt not found, skipping non-Python format check (cargo install oxfmt)"
 
 lint: ## Run ruff lint
 	@uv run ruff check .
@@ -70,7 +87,7 @@ clean: ## Remove caches / build artifacts
 	@find . -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
 
 docker-build: ## Build the container image
-	@docker build --build-arg VERSION=$(VERSION) -t $(PROJECT_NAME):latest .
+	@python3 scripts/docker.py build
 
 docker-run: docker-build ## Run the built image
-	@docker run --rm<%if port%> -p <<port>>:<<port>><%endif%> $(PROJECT_NAME):latest
+	@python3 scripts/docker.py run
