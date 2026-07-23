@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/sunerpy/scaffold-gen/compare/v0.10.10...v0.11.0) (2026-07-23)
+
+
+### Features
+
+* **mcp-python:** Python 分享就绪性加固（fail-closed 认证 + verifier 加固 + 构建契约） ([#58](https://github.com/sunerpy/scaffold-gen/issues/58)) ([2171e4c](https://github.com/sunerpy/scaffold-gen/commit/2171e4c91ee07ec7d8fe99fc3cdecb05e7a5386e))
+
 ## [0.10.10](https://github.com/sunerpy/scaffold-gen/compare/v0.10.9...v0.10.10) (2026-07-14)
 
 
