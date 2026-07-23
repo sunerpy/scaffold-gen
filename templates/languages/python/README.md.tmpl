@@ -67,27 +67,32 @@ uv run pre-commit run --all-files    # 全量运行
 
 ---
 
+<%if enable_build%>
 ## 构建与容器化 (Makefile + Docker)
 
-> 本节内容仅在项目生成时选择了 `--with-build`（或在交互提示"生成配套 Makefile + Dockerfile？"中选择了是）时才会生成。
-> 若当前项目没有 `Makefile` / `Dockerfile`，用 `scafgen new <name> --language python --with-build` 重新生成即可。
-
-Makefile + 多阶段 Dockerfile 由 `scafgen` 自动生成，覆盖从本地构建到容器化的完整流程，
+Makefile + 多阶段 Dockerfile 由 `scafgen --with-build` 自动生成，覆盖从本地构建到容器化的完整流程，
 **全部通过 `make` 完成，不依赖 GitHub Actions / CI 平台**。
 
 ```bash
 make help          # 列出所有可用目标
-make build         # 打包 / 预编译
-make run           # 本地运行程序
+make build         # uv sync（安装依赖）
+make run           # 本地运行程序（uv run python main.py）
 make test          # 运行测试
 make fmt           # 格式化代码
 make lint          # lint 检查
 make check         # fmt + lint + test（一键本地校验）
-make docker-build  # 构建容器镜像（docker build -t <<project_name>>:latest .）
-make docker-run    # 运行容器
+make docker-build  # 构建容器镜像（python3 scripts/docker.py build）
+make docker-run    # 运行容器（python3 scripts/docker.py run）
+```
+
+自定义绑定地址 / 宿主端口（不改代码，只传参数）：
+
+```bash
+python3 scripts/docker.py run --bind 127.0.0.1 --host-port <port>
 ```
 
 ---
+<%endif%>
 
 ## 推荐工具：CodeGraph (Recommended)
 

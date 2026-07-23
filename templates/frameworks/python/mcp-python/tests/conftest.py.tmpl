@@ -46,6 +46,17 @@ warnings.filterwarnings("ignore", message=r".*authlib\.jose.*", category=Depreca
 
 import pytest_asyncio  # noqa: E402
 
+<%- if auth_enabled %>
+import os  # noqa: E402
+
+# 认证 fail-closed 下隔离宿主环境：大小写不敏感地清除顶层 AUTH 与所有 AUTH__*，
+# 再设禁用基线（mode 固定，不可切换），确保导入期构建 mcp 不受 CI/本机 AUTH 干扰。
+for _key in list(os.environ):
+    if _key.upper() == "AUTH" or _key.upper().startswith("AUTH__"):
+        del os.environ[_key]
+os.environ["AUTH__ENABLED"] = "false"
+
+<%- endif %>
 <%if mcp_backend_is_official-%>
 # ── 后端：official (modelcontextprotocol/python-sdk v1) ──────────────────────
 #    v1 用 create_connected_server_and_client_session 把底层 server 连进一个

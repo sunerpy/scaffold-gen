@@ -10,12 +10,16 @@ verify_token code path runs against the locally generated public key.
 pytest-asyncio auto 模式：直接写 `async def test_*`（见 pyproject asyncio_mode="auto"）。
 """
 
+import os
 import time
 
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from pydantic import ValidationError
+
+from app.settings import load_settings
 
 ISSUER = "https://issuer.example/realms/test"
 AUDIENCE = "mcp-test-api"
@@ -64,6 +68,107 @@ def _sign(
         encryption_algorithm=serialization.NoEncryption(),
     )
     return jwt.encode(claims, private_pem, algorithm=ALGORITHM, headers={"kid": KID})
+
+
+def _sign_claims(private_key: rsa.RSAPrivateKey, **overrides: object) -> str:
+    """签一个以默认合法 claims 为基础、按 overrides 逐键覆盖的 JWT；overrides 值为 None 则删除该键.
+
+    Sign a JWT from valid defaults, applying per-key overrides (a None value deletes the key) so
+    malformed-claim cases (bool/fraction/object/future/huge/non-finite exp/iat/nbf) can be built.
+    """
+    now = int(time.time())
+    claims: dict = {
+        "iss": ISSUER,
+        "aud": AUDIENCE,
+        "sub": "user-123",
+        "iat": now,
+        "exp": now + 3600,
+        "scope": "mcp.read mcp.call",
+        "client_id": "client-abc",
+    }
+    for key, value in overrides.items():
+        if value is None:
+            claims.pop(key, None)
+        else:
+            claims[key] = value
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    return jwt.encode(claims, private_pem, algorithm=ALGORITHM, headers={"kid": KID})
+
+
+# 恶意 / 畸形 exp / iat / nbf 输入的共享矩阵（两后端逐输入必须一致返回 None）。
+MALFORMED_TIME_CLAIMS = [
+    ("iat", True),
+    ("iat", "123"),
+    ("iat", 1.5),
+    ("iat", {"x": 1}),
+    ("iat", float("inf")),
+    ("iat", float("nan")),
+    ("iat", 10**1000),
+    ("iat", int(time.time()) + 10_000),
+    ("nbf", True),
+    ("nbf", "123"),
+    ("nbf", 1.5),
+    ("nbf", {"x": 1}),
+    ("nbf", float("inf")),
+    ("nbf", 10**1000),
+    ("nbf", int(time.time()) + 10_000),
+]
+
+# 恶意 / 畸形 identity claim 输入（若存在必须是非空字符串，否则返回 None）。
+MALFORMED_IDENTITY_CLAIMS = [
+    ("client_id", 123),
+    ("client_id", True),
+    ("client_id", ["a"]),
+    ("client_id", {"x": 1}),
+    ("azp", 123),
+    ("azp", ["a"]),
+    ("sub", 123),
+    ("sub", True),
+]
+
+
+# ── fail-closed 启动边界（后端无关，只测 app.settings 加载与校验）─────────────────
+def _scrub_auth_env(monkeypatch) -> None:
+    for _key in list(os.environ):
+        if _key.upper() == "AUTH" or _key.upper().startswith("AUTH__"):
+            monkeypatch.delenv(_key, raising=False)
+
+
+def test_enabled_without_config_fails_closed(monkeypatch) -> None:
+    """Given auth enabled but no config / When settings load / Then it lists all missing fields."""
+    _scrub_auth_env(monkeypatch)
+    monkeypatch.setenv("AUTH__ENABLED", "true")
+    with pytest.raises(ValidationError) as excinfo:
+        load_settings()
+    message = str(excinfo.value)
+    for field in ("jwks_uri", "issuer", "audience", "resource_server_url"):
+        assert field in message
+
+
+def test_complete_auth_config_via_env_succeeds(monkeypatch) -> None:
+    """Given a complete auth config via env / When settings load / Then auth is enabled."""
+    _scrub_auth_env(monkeypatch)
+    monkeypatch.setenv("AUTH__ENABLED", "true")
+    monkeypatch.setenv("AUTH__JWKS_URI", "https://issuer.example/jwks")
+    monkeypatch.setenv("AUTH__ISSUER", ISSUER)
+    monkeypatch.setenv("AUTH__AUDIENCE", AUDIENCE)
+    monkeypatch.setenv("AUTH__RESOURCE_SERVER_URL", "http://127.0.0.1:8000")
+    loaded = load_settings()
+    assert loaded.auth.enabled is True
+    assert loaded.auth.audience == AUDIENCE
+
+
+def test_auth_mode_cannot_be_tampered(monkeypatch) -> None:
+    """Given AUTH__MODE set to a foreign value / When settings load / Then literal_error raised."""
+    _scrub_auth_env(monkeypatch)
+    monkeypatch.setenv("AUTH__ENABLED", "false")
+    monkeypatch.setenv("AUTH__MODE", "tampered-mode")
+    with pytest.raises(ValidationError):
+        load_settings()
 
 <% if mcp_backend_is_official %>
 # ── 后端：official —— 直接测 app/auth.py 的 JwksTokenVerifier ─────────────────
@@ -137,6 +242,201 @@ async def test_missing_required_scope_rejected(verifier, keypair) -> None:
     private_key, _ = keypair
     token = _sign(private_key, scope="other.scope")
     assert await verifier.verify_token(token) is None
+
+
+async def test_array_audience_rejected(verifier, keypair) -> None:
+    """Given aud is an array containing the expected value / Then None (strict_aud)."""
+    private_key, _ = keypair
+    token = _sign_claims(private_key, aud=[AUDIENCE, "some-other-api"])
+    assert await verifier.verify_token(token) is None
+
+
+async def test_wrong_issuer_rejected(verifier, keypair) -> None:
+    """Given a token from a different issuer / When verified / Then None is returned."""
+    private_key, _ = keypair
+    token = _sign_claims(private_key, iss="https://evil.example/realms/test")
+    assert await verifier.verify_token(token) is None
+
+
+async def test_missing_exp_rejected(verifier, keypair) -> None:
+    """Given a token without exp / When verified / Then None is returned."""
+    private_key, _ = keypair
+    assert await verifier.verify_token(_sign_claims(private_key, exp=None)) is None
+
+
+@pytest.mark.parametrize("exp_value", [0, "1700000000", True, 1.5, float("inf"), 10**1000])
+async def test_malformed_exp_rejected(verifier, keypair, exp_value) -> None:
+    """Given a token with a malformed exp / When verified / Then None is returned."""
+    private_key, _ = keypair
+    assert await verifier.verify_token(_sign_claims(private_key, exp=exp_value)) is None
+
+
+async def test_exp_over_max_numeric_date_rejected(verifier, keypair) -> None:
+    """Given exp = MAX_NUMERIC_DATE + 1 / When verified / Then None is returned."""
+    private_key, _ = keypair
+    token = _sign_claims(private_key, exp=253_402_300_800)
+    assert await verifier.verify_token(token) is None
+
+
+async def test_exp_at_max_numeric_date_boundary_accepted(verifier, keypair) -> None:
+    """Given exp = MAX_NUMERIC_DATE (integer boundary) / When verified / Then accepted."""
+    private_key, _ = keypair
+    token = _sign_claims(private_key, exp=253_402_300_799)
+    assert await verifier.verify_token(token) is not None
+
+
+async def test_future_integral_float_exp_accepted(verifier, keypair) -> None:
+    """Given a future exp expressed as an integral float / When verified / Then accepted."""
+    private_key, _ = keypair
+    token = _sign_claims(private_key, exp=float(int(time.time()) + 3600))
+    assert await verifier.verify_token(token) is not None
+
+
+@pytest.mark.parametrize(("claim", "value"), MALFORMED_TIME_CLAIMS)
+async def test_malformed_time_claim_rejected(verifier, keypair, claim, value) -> None:
+    """Given a malformed / future iat or nbf / When verified / Then None is returned."""
+    private_key, _ = keypair
+    assert await verifier.verify_token(_sign_claims(private_key, **{claim: value})) is None
+
+
+async def test_legal_past_integral_float_iat_accepted(verifier, keypair) -> None:
+    """Given a legal past iat expressed as an integral float / When verified / Then accepted."""
+    private_key, _ = keypair
+    token = _sign_claims(private_key, iat=float(int(time.time()) - 30))
+    assert await verifier.verify_token(token) is not None
+
+
+@pytest.mark.parametrize(("claim", "value"), MALFORMED_IDENTITY_CLAIMS)
+async def test_malformed_identity_claim_rejected(verifier, keypair, claim, value) -> None:
+    """Given a present-but-malformed client_id/azp/sub / When verified / Then None is returned."""
+    private_key, _ = keypair
+    assert await verifier.verify_token(_sign_claims(private_key, **{claim: value})) is None
+
+
+# ── 传输层：test-local 带鉴权的 app（official）—— 证明恶意 claim 回 401、不 500、后续不损坏 ──
+#    共享 conftest 的 client 在 import 前禁用了鉴权，无法证明 /mcp、/sse 的鉴权语义，故在此
+#    本地新建一个鉴权已启用的 app：真实 JwksTokenVerifier + AuthSettings + session_manager，
+#    JWKS 取键打桩成本地公钥。base_url 必须匹配 resource_server_url，否则 v1 传输安全回 421。
+import contextlib
+
+from mcp.server.auth.settings import AuthSettings
+from mcp.server.fastmcp import FastMCP
+from starlette.applications import Starlette
+from starlette.routing import Route
+from starlette.testclient import TestClient
+
+RESOURCE_URL = "http://127.0.0.1:8000"
+
+
+@pytest.fixture
+def auth_app(keypair):
+    """本地构建鉴权已启用的 official app（stateless streamable + sse），JWKS 打桩成本地公钥."""
+    _private_key, public_pem = keypair
+    verifier = JwksTokenVerifier(
+        jwks_uri="https://issuer.example/jwks",
+        issuer=ISSUER,
+        audience=AUDIENCE,
+        algorithm=ALGORITHM,
+        required_scopes=["mcp.read"],
+    )
+    verifier._jwks.get_signing_key_from_jwt = (  # noqa: SLF001
+        lambda _token: _StubSigningKey(public_pem)
+    )
+    auth_settings = AuthSettings(
+        issuer_url=ISSUER,
+        resource_server_url=RESOURCE_URL,
+        required_scopes=["mcp.read"],
+    )
+    mcp = FastMCP(
+        "auth-transport-test",
+        json_response=True,
+        stateless_http=True,
+        auth=auth_settings,
+        token_verifier=verifier,
+    )
+
+    @mcp.tool()
+    def echo(msg: str) -> dict:
+        return {"echo": msg}
+
+    mcp.settings.streamable_http_path = "/mcp"
+    mcp.settings.sse_path = "/sse"
+    streamable_app = mcp.streamable_http_app()
+    sse_app = mcp.sse_app()
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: Starlette):
+        async with contextlib.AsyncExitStack() as stack:
+            await stack.enter_async_context(mcp.session_manager.run())
+            yield
+
+    routes: list = [Route("/healthz", lambda r: None)]
+    routes.extend(streamable_app.routes)
+    routes.extend(sse_app.routes)
+    seen = set()
+    middleware: list = []
+    for sub in (streamable_app, sse_app):
+        for m in getattr(sub, "user_middleware", []):
+            key = getattr(m, "cls", m)
+            if key not in seen:
+                seen.add(key)
+                middleware.append(m)
+    return Starlette(routes=routes, middleware=middleware or None, lifespan=lifespan)
+
+
+def _initialize(client: TestClient, private_key: rsa.RSAPrivateKey) -> int:
+    """用合法 token 发一次 initialize，返回状态码（证明后续请求不因前一恶意请求而 500/损坏）."""
+    resp = client.post(
+        "/mcp",
+        headers={
+            "Authorization": f"Bearer {_sign(private_key)}",
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        },
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "t", "version": "1"},
+            },
+        },
+    )
+    return resp.status_code
+
+
+async def test_streamable_malicious_then_legit(auth_app, keypair) -> None:
+    """Malicious array-aud token to /mcp / Then 401 (not 500); a legit request still 200."""
+    private_key, _ = keypair
+    with TestClient(auth_app, base_url=RESOURCE_URL) as client:
+        bad_token = _sign_claims(private_key, aud=[AUDIENCE, "other"])
+        bad = client.post(
+            "/mcp",
+            headers={
+                "Authorization": f"Bearer {bad_token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+            },
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        )
+        assert bad.status_code == 401
+        assert _initialize(client, private_key) == 200
+
+
+async def test_sse_malicious_then_legit(auth_app, keypair) -> None:
+    """Malicious array-aud token to /sse / Then 401 (not 500); /mcp still serves legit."""
+    private_key, _ = keypair
+    with TestClient(auth_app, base_url=RESOURCE_URL) as client:
+        bad = client.get(
+            "/sse",
+            headers={
+                "Authorization": f"Bearer {_sign_claims(private_key, iat=True)}",
+            },
+        )
+        assert bad.status_code == 401
+        assert _initialize(client, private_key) == 200
 <%- if auth_is_azure_ad %>
 
 
@@ -229,19 +529,19 @@ async def test_aad_unlisted_issuer_rejected(aad_verifier, keypair) -> None:
     assert await aad_verifier.verify_token(token) is None
 <%- endif %>
 <%- else %>
-# ── 后端：fastmcp —— 测真实 JWTVerifier 的 jwks_uri 路径 ──────────────────────
+# ── 后端：fastmcp —— 测真实 StrictAudienceJWTVerifier 的 jwks_uri 路径 ─────────
 #    校验器以 jwks_uri 构造（app 真正构建的那条路径，非 public_key 分支）。打桩最窄
 #    接缝 _get_jwks_key：它返回 JWKS 解析出的验签公钥(PEM 字符串)，我们换成本地公钥。
-#    _get_verification_key 里"取 kid → 调 _get_jwks_key"以及 load_access_token 的
-#    验签/iss/aud/exp/scope 全部真实执行，不走网络。
-from fastmcp.server.auth.providers.jwt import JWTVerifier
+#    _get_verification_key 里"取 kid → 调 _get_jwks_key"、父类 load_access_token 的
+#    验签/iss/aud/exp/scope 以及子类新增的 exp/iat/nbf/identity 加固全部真实执行，不走网络。
+from app.auth import StrictAudienceJWTVerifier
 
 
 @pytest.fixture
-def verifier(keypair, monkeypatch) -> JWTVerifier:
-    """构造真实 JWTVerifier(jwks_uri=...)，把 JWKS 取键打桩成本地公钥（不走网络）."""
+def verifier(keypair, monkeypatch) -> StrictAudienceJWTVerifier:
+    """构造真实 StrictAudienceJWTVerifier(jwks_uri=...)，把 JWKS 取键打桩成本地公钥（不走网络）."""
     _private_key, public_pem = keypair
-    v = JWTVerifier(
+    v = StrictAudienceJWTVerifier(
         jwks_uri="https://issuer.example/jwks",
         issuer=ISSUER,
         audience=AUDIENCE,
@@ -284,6 +584,164 @@ async def test_bad_signature_rejected(verifier) -> None:
     other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     token = _sign(other_key)
     assert await verifier.verify_token(token) is None
+
+
+async def test_array_audience_rejected(verifier, keypair) -> None:
+    """Given aud is an array containing the expected value / Then None (strict aud)."""
+    private_key, _ = keypair
+    token = _sign_claims(private_key, aud=[AUDIENCE, "some-other-api"])
+    assert await verifier.verify_token(token) is None
+
+
+async def test_wrong_issuer_rejected(verifier, keypair) -> None:
+    """Given a token from a different issuer / When verified / Then None is returned."""
+    private_key, _ = keypair
+    token = _sign_claims(private_key, iss="https://evil.example/realms/test")
+    assert await verifier.verify_token(token) is None
+
+
+async def test_future_integral_float_exp_accepted(verifier, keypair) -> None:
+    """Given a future exp expressed as an integral float / When verified / Then accepted."""
+    private_key, _ = keypair
+    token = _sign_claims(private_key, exp=float(int(time.time()) + 3600))
+    assert await verifier.verify_token(token) is not None
+
+
+@pytest.mark.parametrize(("claim", "value"), MALFORMED_TIME_CLAIMS)
+async def test_malformed_time_claim_rejected(verifier, keypair, claim, value) -> None:
+    """Given a malformed / future iat or nbf / When verified / Then None is returned."""
+    private_key, _ = keypair
+    assert await verifier.verify_token(_sign_claims(private_key, **{claim: value})) is None
+
+
+async def test_legal_past_integral_float_iat_accepted(verifier, keypair) -> None:
+    """Given a legal past iat expressed as an integral float / When verified / Then accepted."""
+    private_key, _ = keypair
+    token = _sign_claims(private_key, iat=float(int(time.time()) - 30))
+    assert await verifier.verify_token(token) is not None
+
+
+@pytest.mark.parametrize(("claim", "value"), MALFORMED_IDENTITY_CLAIMS)
+async def test_malformed_identity_claim_rejected(verifier, keypair, claim, value) -> None:
+    """Given a present-but-malformed client_id/azp/sub / When verified / Then None is returned."""
+    private_key, _ = keypair
+    assert await verifier.verify_token(_sign_claims(private_key, **{claim: value})) is None
+
+
+# ── 传输层：test-local 带鉴权的 app（fastmcp）—— 证明恶意 claim 回 401、不 500、后续不损坏 ──
+#    共享 conftest 的 client 在 import 前禁用了鉴权，无法证明 /mcp、/sse 的鉴权语义，故在此
+#    本地新建一个鉴权已启用的 app：真实 StrictAudienceJWTVerifier（JWKS 取键打桩成本地公钥）+
+#    fastmcp http_app 工厂拼装 /mcp、/sse，再把子应用的鉴权中间件复制到父应用。
+import contextlib
+
+from starlette.applications import Starlette
+from starlette.routing import Route
+from starlette.testclient import TestClient
+
+
+@pytest.fixture
+def auth_app(keypair):
+    """本地构建鉴权已启用的 fastmcp app（stateless streamable + sse），JWKS 打桩成本地公钥."""
+    _private_key, public_pem = keypair
+    verifier = StrictAudienceJWTVerifier(
+        jwks_uri="https://issuer.example/jwks",
+        issuer=ISSUER,
+        audience=AUDIENCE,
+        algorithm=ALGORITHM,
+        required_scopes=["mcp.read"],
+    )
+
+    async def _fake_get_jwks_key(_kid: str | None) -> str:
+        return public_pem
+
+    verifier._get_jwks_key = _fake_get_jwks_key  # noqa: SLF001
+
+    from fastmcp import FastMCP
+
+    mcp = FastMCP("auth-transport-test", auth=verifier)
+
+    @mcp.tool
+    def echo(msg: str) -> dict:
+        return {"echo": msg}
+
+    streamable_app = mcp.http_app(path="/mcp", stateless_http=True)
+    sse_app = mcp.http_app(path="/sse", transport="sse")
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: Starlette):
+        async with contextlib.AsyncExitStack() as stack:
+            await stack.enter_async_context(streamable_app.lifespan(app))
+            await stack.enter_async_context(sse_app.lifespan(app))
+            yield
+
+    routes: list = [Route("/healthz", lambda r: None)]
+    routes.extend(streamable_app.routes)
+    routes.extend(sse_app.routes)
+    seen = set()
+    middleware: list = []
+    for sub in (streamable_app, sse_app):
+        for m in getattr(sub, "user_middleware", []):
+            key = getattr(m, "cls", m)
+            if key not in seen:
+                seen.add(key)
+                middleware.append(m)
+    return Starlette(routes=routes, middleware=middleware or None, lifespan=lifespan)
+
+
+def _initialize(client: TestClient, private_key: rsa.RSAPrivateKey) -> int:
+    """用合法 token 发一次 initialize，返回状态码（证明后续请求不因前一恶意请求而 500/损坏）."""
+    resp = client.post(
+        "/mcp",
+        headers={
+            "Authorization": f"Bearer {_sign(private_key)}",
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        },
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "t", "version": "1"},
+            },
+        },
+    )
+    return resp.status_code
+
+
+async def test_streamable_malicious_then_legit(auth_app, keypair) -> None:
+    """Malicious array-aud token to /mcp / Then 401 (not 500); a legit request still 200."""
+    private_key, _ = keypair
+    with TestClient(auth_app) as client:
+        bad_token = _sign_claims(private_key, aud=[AUDIENCE, "other"])
+        bad = client.post(
+            "/mcp",
+            headers={
+                "Authorization": f"Bearer {bad_token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+            },
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        )
+        assert bad.status_code == 401
+        assert _initialize(client, private_key) == 200
+
+
+async def test_sse_malicious_then_legit(auth_app, keypair) -> None:
+    """Malicious future-iat token to /sse / Then 401 (not 500); /mcp still serves legit."""
+    private_key, _ = keypair
+    with TestClient(auth_app) as client:
+        future_token = _sign_claims(private_key, iat=int(time.time()) + 10_000)
+        bad = client.get(
+            "/sse",
+            headers={
+                "Authorization": f"Bearer {future_token}",
+            },
+        )
+        assert bad.status_code == 401
+        assert _initialize(client, private_key) == 200
 <%- endif %>
 <%- else -%>
 # 鉴权未启用：本文件无测试内容 (auth disabled — no tests here).

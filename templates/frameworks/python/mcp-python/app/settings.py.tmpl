@@ -14,8 +14,11 @@ You normally never edit this file — change host/port/paths in config.toml or .
 """
 
 from pathlib import Path
+<%- if auth_enabled %>
+from typing import Literal
+<%- endif %>
 
-from pydantic import BaseModel<%if auth_enabled%>, Field<%endif%>
+from pydantic import BaseModel<%if auth_enabled%>, Field, model_validator<%endif%>
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -93,11 +96,15 @@ class LogConfig(BaseModel):
 class AuthConfig(BaseModel):
     """OAuth2 / JWT 鉴权配置 (auth configuration)，对应 config.toml 的 [auth] 段."""
 
-    # 是否启用鉴权 / enable auth (默认 false：默认不校验 Bearer token)
-    enabled: bool = False
+    # 是否启用鉴权 / enable auth。选择了鉴权模式即默认 fail-closed=true；
+    # 仅本地诊断/迁移可用 AUTH__ENABLED=false 显式关闭（不允许借此切换 mode）。
+    # Chose an auth mode → defaults to fail-closed true; AUTH__ENABLED=false is a
+    # local diagnostics/migration escape hatch only and cannot switch the mode.
+    enabled: bool = True
 
-    # 鉴权模式 / auth mode: 目前仅 "jwt" (Bearer JWT 校验)
-    mode: str = "jwt"
+    # 鉴权模式 / auth mode: 生成时固定，AUTH__MODE 无法篡改 (literal_error on mismatch)。
+    # Fixed at generation time; a mismatched AUTH__MODE raises a Pydantic literal_error.
+    mode: Literal["<<auth_mode>>"] = "<<auth_mode>>"
 
     # JWKS 公钥地址 / JWKS URI —— 从 IdP 的 /.well-known/openid-configuration 取 "jwks_uri"
     # From your IdP's /.well-known/openid-configuration → "jwks_uri".
@@ -142,22 +149,40 @@ class AuthConfig(BaseModel):
     identity_claims: list[str] = Field(
         default_factory=lambda: ["preferred_username", "upn", "email", "unique_name"]
     )
-
-    def model_post_init(self, __context) -> None:
-        """azure-ad 模式下从 tenant_id 自动推导留空项 (only fills blanks)."""
-        if self.mode != "azure-ad" or not self.tenant_id:
-            return
-        if not self.jwks_uri:
-            self.jwks_uri = (
-                f"https://login.microsoftonline.com/{self.tenant_id}/discovery/v2.0/keys"
-            )
-        if not self.issuer:
-            self.issuer = f"https://login.microsoftonline.com/{self.tenant_id}/v2.0"
-        if not self.extra_issuers:
-            self.extra_issuers = [f"https://sts.windows.net/{self.tenant_id}/"]
-        if not self.audience and self.resource_app_id:
-            self.audience = self.resource_app_id
 <%- endif %>
+
+    @model_validator(mode="after")
+    def _require_complete_when_enabled(self) -> "AuthConfig":
+        """启用鉴权时要求完整配置与非空 audience；显式关闭则跳过。
+
+        缺失字段会以 Pydantic ValidationError 一次性列出全部缺失字段名。
+        Fail-closed: when enabled, all required fields must be non-empty.
+        """
+        if not self.enabled:
+            return self
+<%- if auth_is_azure_ad %>
+        if self.tenant_id:
+            if not self.jwks_uri:
+                self.jwks_uri = (
+                    f"https://login.microsoftonline.com/{self.tenant_id}/discovery/v2.0/keys"
+                )
+            if not self.issuer:
+                self.issuer = f"https://login.microsoftonline.com/{self.tenant_id}/v2.0"
+            if not self.extra_issuers:
+                self.extra_issuers = [f"https://sts.windows.net/{self.tenant_id}/"]
+            if not self.audience and self.resource_app_id:
+                self.audience = self.resource_app_id
+<%- endif %>
+        missing = [
+            name
+            for name in ("jwks_uri", "issuer", "audience", "resource_server_url")
+            if not getattr(self, name)
+        ]
+        if missing:
+            raise ValueError(
+                "[auth] enabled but required fields are empty: " + ", ".join(missing)
+            )
+        return self
 
 <%- endif %>
 
@@ -176,7 +201,7 @@ class Settings(BaseSettings):
     mcp: McpConfig = McpConfig()
     log: LogConfig = LogConfig()
 <%- if auth_enabled %>
-    auth: AuthConfig = AuthConfig()
+    auth: AuthConfig = Field(default_factory=AuthConfig)
 <%- endif %>
 
     @classmethod

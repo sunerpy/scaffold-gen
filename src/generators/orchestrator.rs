@@ -77,6 +77,24 @@ async fn build_python_params(
     Ok(params)
 }
 
+/// Build-tooling template keys shared by every Python path: `enable_build`
+/// drives conditional README/Makefile sections, `docker_image_name` is the
+/// collision-resistant image name the Docker helper consumes.
+fn python_build_context_overrides(
+    project_name: &str,
+    enable_build: bool,
+) -> std::collections::HashMap<String, serde_json::Value> {
+    let mut overrides = std::collections::HashMap::new();
+    overrides.insert("enable_build".to_string(), serde_json::json!(enable_build));
+    overrides.insert(
+        "docker_image_name".to_string(),
+        serde_json::json!(crate::constants::string_utils::to_docker_image_name(
+            project_name
+        )),
+    );
+    overrides
+}
+
 fn rust_format_manifest_path(request: &GenerationRequest<'_>) -> Option<PathBuf> {
     if request.spec.language != Language::Rust {
         return None;
@@ -352,10 +370,12 @@ impl GeneratorOrchestrator {
                 context
             }
             Language::Python => {
-                let mut python_params = PythonParams::new(project_name);
+                let mut python_params = PythonParams::new(project_name.clone());
                 python_params.base.host = request.host.clone();
                 python_params.base.port = request.port;
-                python_params.to_template_context()
+                let mut context = python_params.to_template_context();
+                context.extend(python_build_context_overrides(&project_name, true));
+                context
             }
             Language::Rust => RustParams::new(project_name).to_template_context(),
             Language::TypeScript => ProjectParams::new(project_name).to_template_context(),
@@ -407,6 +427,7 @@ impl GeneratorOrchestrator {
                     request.host.clone(),
                     request.port,
                     request.enable_precommit,
+                    request.enable_build,
                 )
                 .await?;
             }
@@ -421,6 +442,7 @@ impl GeneratorOrchestrator {
                         backend: request.mcp_backend,
                         auth_mode: request.auth_mode,
                     },
+                    request.enable_build,
                 )
                 .await?;
             }
@@ -429,6 +451,7 @@ impl GeneratorOrchestrator {
                     project_name.clone(),
                     output_path,
                     request.enable_precommit,
+                    request.enable_build,
                 )
                 .await?;
             }
@@ -593,13 +616,17 @@ impl GeneratorOrchestrator {
         project_name: String,
         output_path: &Path,
         enable_precommit: bool,
+        enable_build: bool,
     ) -> Result<()> {
         tracing::info!("Starting Python project generation: {project_name}");
 
-        let python_params = build_python_params(project_name, None, None, enable_precommit).await?;
+        let python_params =
+            build_python_params(project_name.clone(), None, None, enable_precommit).await?;
+
+        let overrides = python_build_context_overrides(&project_name, enable_build);
 
         self.python_generator
-            .generate(python_params, output_path)
+            .generate_with_context(python_params, output_path, overrides)
             .context("Failed to generate Python files")?;
 
         Ok(())
@@ -617,6 +644,7 @@ impl GeneratorOrchestrator {
         host: Option<String>,
         port: Option<u16>,
         enable_precommit: bool,
+        enable_build: bool,
     ) -> Result<()> {
         tracing::info!("Starting FastAPI project generation: {project_name}");
 
@@ -637,7 +665,8 @@ impl GeneratorOrchestrator {
             ));
         }
 
-        let context = python_params.to_template_context();
+        let mut context = python_params.to_template_context();
+        context.extend(python_build_context_overrides(&project_name, enable_build));
         let mut template_processor = TemplateProcessor::new()?;
         template_processor
             .process_embedded_template_directory(template_path, output_path, context)
@@ -662,6 +691,7 @@ impl GeneratorOrchestrator {
         port: Option<u16>,
         enable_precommit: bool,
         mcp_options: McpPythonOptions,
+        enable_build: bool,
     ) -> Result<()> {
         tracing::info!("Starting Python MCP server generation: {project_name}");
 
@@ -686,6 +716,7 @@ impl GeneratorOrchestrator {
 
         let mut context = python_params.to_template_context();
         McpPythonAuthContext::new(backend, auth_mode).inject_into(&mut context);
+        context.extend(python_build_context_overrides(&project_name, enable_build));
 
         let mut template_processor = TemplateProcessor::new()?;
         template_processor

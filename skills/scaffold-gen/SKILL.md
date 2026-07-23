@@ -98,8 +98,19 @@ Notes:
   `--auth none|jwt|azure-ad` (default `none`). `none` generates zero auth code; `jwt` adds
   unified JWT/JWKS resource-server validation; `azure-ad` is a turnkey Entra preset. Both
   flags are optional — omitting them keeps the defaults, no prompt is triggered.
-- `--with-build true` additionally emits a Makefile (build/run/test/fmt/lint/check/
-  docker-build) and a multi-stage Dockerfile — pure Make automation, no CI files.
+- **`--auth jwt`/`azure-ad` is fail-closed.** The generated project defaults `[auth].enabled=true`
+  and REFUSES TO START until `jwks_uri`/`issuer`/`audience`/`resource_server_url` are set (it
+  raises a Pydantic error listing every missing field). `mode` is a fixed `Literal` baked in at
+  generation time — it cannot be flipped via `AUTH__MODE`. Tell the user their new `jwt`/`azure-ad`
+  server will not boot until they fill those fields in `config.toml` / `.env` (or export
+  `AUTH__*`); a local-only escape hatch `AUTH__ENABLED=false` exists for migration but cannot
+  switch the mode. `--auth none` stays byte-for-byte anonymous (zero auth code).
+- `--with-build true` additionally emits a Makefile (build/run/test/fmt/lint/check + conditional
+  `docker-build`/`docker-run`), a multi-stage Dockerfile, a `.dockerignore` (keeps local `.env`
+  OUT of the image, keeps `.env.example`), and `scripts/docker.py` — pure Make automation, no CI
+  files. The Docker targets shell out only to `python3 scripts/docker.py build|run` (a hardened
+  helper: `subprocess.run([...])`, no `shell=True`, validated `--bind`/`--host-port`, collision-
+  resistant image name); custom binds/ports go through the helper's flags, never Make variables.
 - **Reuse the printed equivalent command.** On success `scafgen` prints the exact
   `💡 Equivalent non-interactive command` — that is the authoritative, complete flag
   set for that combo (including the Rust `--proto-gen`/`--error-gen` flags). If you

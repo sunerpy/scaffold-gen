@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""Docker build/run helper for <<project_name>>.
+
+Security contract (do not weaken):
+
+* Every Docker invocation goes through ``subprocess.run([...], check=True)`` with
+  an explicit argument list. Shell interpretation is never enabled, so no
+  project-derived value is ever handed to a shell.
+* The image name is a fixed, generator-computed constant (``IMAGE``); it is not
+  taken from the project name at runtime and cannot be overridden.
+* ``run`` accepts only validated overrides: ``--bind`` must parse as an IP
+  address, ``--host-port`` must be a decimal port in 1..=65535, ``--name`` must
+  use Docker-safe characters, and ``--cidfile`` must be an absolute path whose
+  parent directory already exists.
+* ``create`` accepts no entrypoint/command/env/volume overrides — it only names
+  the container and writes a cidfile, then prints the container id.
+"""
+
+from __future__ import annotations
+
+import argparse
+import ipaddress
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+# Generator-computed, collision-resistant image name. Immutable at runtime.
+IMAGE = "<<docker_image_name>>"
+
+# Port the container listens on, injected from the project's configured port.
+# ``None`` for pure-language projects that expose no port.
+CONTAINER_PORT: int | None = <%if port%><<port>><%else%>None<%endif%>
+
+# Default container name used when the caller does not pass ``--name``.
+CONTAINER_NAME = "<<project_name>>"
+
+_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]*$")
+
+
+def _valid_bind(value: str) -> str:
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        raise SystemExit(f"invalid --bind address: {value!r}")
+    return value
+
+
+def _valid_host_port(value: str) -> int:
+    if not re.fullmatch(r"[0-9]{1,5}", value):
+        raise SystemExit(f"invalid --host-port: {value!r}")
+    port = int(value)
+    if not (1 <= port <= 65535):
+        raise SystemExit(f"--host-port out of range 1..65535: {port}")
+    return port
+
+
+def _valid_name(value: str) -> str:
+    if not _NAME_RE.fullmatch(value):
+        raise SystemExit(f"invalid --name: {value!r}")
+    return value
+
+
+def _valid_cidfile(value: str) -> str:
+    path = Path(value)
+    if not path.is_absolute():
+        raise SystemExit(f"--cidfile must be an absolute path: {value!r}")
+    if not path.parent.is_dir():
+        raise SystemExit(f"--cidfile parent directory does not exist: {path.parent}")
+    return str(path)
+
+
+def _run(argv: list[str]) -> int:
+    return subprocess.run(argv, check=True).returncode
+
+
+def cmd_build(_args: argparse.Namespace) -> int:
+    return _run(["docker", "build", "-t", IMAGE, "."])
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    argv = ["docker", "run"]
+    if args.retain:
+        if not (args.name and args.cidfile):
+            raise SystemExit("--retain requires both --name and --cidfile")
+    else:
+        argv.append("--rm")
+    if args.name:
+        argv += ["--name", args.name]
+    if args.cidfile:
+        argv += ["--cidfile", args.cidfile]
+    if CONTAINER_PORT is not None:
+        argv += ["-p", f"{args.bind}:{args.host_port}:{CONTAINER_PORT}"]
+    argv.append(IMAGE)
+    return _run(argv)
+
+
+def cmd_create(args: argparse.Namespace) -> int:
+    if not (args.name and args.cidfile):
+        raise SystemExit("create requires both --name and --cidfile")
+    return _run(
+        ["docker", "create", "--name", args.name, "--cidfile", args.cidfile, IMAGE]
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=f"Docker helper for {IMAGE}")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("build").set_defaults(func=cmd_build)
+
+    run = sub.add_parser("run")
+    run.add_argument("--bind", type=_valid_bind, default="127.0.0.1")
+    run.add_argument("--host-port", type=_valid_host_port, default=CONTAINER_PORT)
+    run.add_argument("--name", type=_valid_name, default=None)
+    run.add_argument("--cidfile", type=_valid_cidfile, default=None)
+    run.add_argument("--retain", action="store_true")
+    run.set_defaults(func=cmd_run)
+
+    create = sub.add_parser("create")
+    create.add_argument("--name", type=_valid_name, required=True)
+    create.add_argument("--cidfile", type=_valid_cidfile, required=True)
+    create.set_defaults(func=cmd_create)
+
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

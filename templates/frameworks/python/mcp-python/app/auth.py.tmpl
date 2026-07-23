@@ -10,12 +10,75 @@ Validates IdP-issued JWT access tokens as a Resource Server (JWKS signature + is
 You normally never edit this file — tune auth in config.toml's [auth] section.
 """
 
+import math
+import time
+
 import jwt
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 
 from app.logging import get_logger
 
 logger = get_logger(__name__)
+
+# NumericDate 校验上界（RFC 7519 允许的最大 Unix 秒 = 9999-12-31T23:59:59Z）与时钟偏移容差。
+# NumericDate upper bound (max Unix seconds RFC 7519 permits) and clock-skew leeway.
+MAX_NUMERIC_DATE = 253_402_300_799
+LEEWAY = 60
+
+
+def _coerce_numeric_date(value: object) -> int | None:
+    """把一个 claim 值安全归一化成 NumericDate 整数秒；任何畸形/非法输入返回 None.
+
+    规则（两后端字节一致）：bool → None（True/False 是 int 子类，绝不当时间戳）；int → 原值；
+    float 仅当有限且为整数值时取 int()，否则 None；其它类型 → None。不做可能溢出的 int→float
+    转换，故 10**1000 这类超大 int 直接进入范围判断被上界拒绝，而非在此抛 OverflowError。
+    Normalize a claim value into an integer NumericDate; any malformed input yields None.
+    """
+    try:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            if math.isfinite(value) and value.is_integer():
+                return int(value)
+            return None
+        return None
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _numeric_dates_valid(claims: dict) -> bool:
+    """统一校验 exp(必需)/iat/nbf(可选) 的类型与时间范围，取代 PyJWT 内建时间校验.
+
+    exp 必须能归一化成整数且 now < exp <= MAX；iat/nbf 仅在 claim 存在时校验：必须能归一化成
+    整数、0 < v <= MAX、且不落在未来 (v <= now + LEEWAY)。任一不满足即认证失败。
+    Validate exp (required) and optional iat/nbf types + temporal ranges (replaces PyJWT's builtin).
+    """
+    now = time.time()
+    exp = _coerce_numeric_date(claims.get("exp"))
+    if exp is None or not (now < exp <= MAX_NUMERIC_DATE):
+        return False
+    for name in ("iat", "nbf"):
+        if name not in claims:
+            continue
+        value = _coerce_numeric_date(claims.get(name))
+        if value is None or not (0 < value <= MAX_NUMERIC_DATE) or value > now + LEEWAY:
+            return False
+    return True
+
+
+def _identity_claims_well_formed(claims: dict) -> bool:
+    """回退链中每个身份 claim 若存在必须是非空字符串，否则认证失败.
+
+    Each identity claim in the fallback chain, IF present, must be a non-empty string.
+    """
+    for name in ("client_id", "azp", "sub"):
+        if name in claims:
+            value = claims.get(name)
+            if not isinstance(value, str) or not value:
+                return False
+    return True
 
 
 def _parse_scopes(claims: dict) -> list[str]:
@@ -72,7 +135,7 @@ def warm_up_jwks(jwks_uri: str) -> None:
     try:
         jwt.PyJWKClient(jwks_uri).get_jwk_set()
     except Exception as exc:  # noqa: BLE001 - warm-up is best-effort
-        logger.debug("jwks_warmup_failed", error=str(exc))
+        logger.debug("jwks_warmup_failed", error_type=type(exc).__name__)
 
 
 class JwksTokenVerifier(TokenVerifier):
@@ -109,60 +172,192 @@ class JwksTokenVerifier(TokenVerifier):
         self._jwks = jwt.PyJWKClient(jwks_uri)
 
     async def verify_token(self, token: str) -> AccessToken | None:
-        # 多 issuer 时不能用 jwt.decode(issuer=...)（只接受单个字符串）→ 先不校验签发者，
-        # 解码后手动比对 iss ∈ accepted_issuers。单 issuer 时仍走原生 issuer 校验，保持等价。
-        # PyJWT's jwt.decode(issuer=...) accepts only one string; for multiple accepted
-        # issuers we decode WITHOUT issuer verification, then check iss manually.
-        multi_issuer = len(self._accepted_issuers) > 1
+        # 单一最外层 except：只记录异常类型、绝不记录 token/claim 值。
+        # 时间 claim(exp/iat/nbf)一律禁用 PyJWT 内建校验(verify_exp/iat/nbf=False)，改由
+        # _numeric_dates_valid 统一判定，与 fastmcp 子类逐输入一致；strict_aud 拒绝数组 aud。
+        # Single outermost except logs only the type, never token/claim values.
         try:
+            # 多 issuer 时不能用 jwt.decode(issuer=...)（只接受单个字符串）→ 先不校验签发者，
+            # 解码后手动比对 iss ∈ accepted_issuers。单 issuer 时仍走原生 issuer 校验，保持等价。
+            # PyJWT's jwt.decode(issuer=...) accepts only one string; for multiple accepted
+            # issuers we decode WITHOUT issuer verification, then check iss manually.
+            multi_issuer = len(self._accepted_issuers) > 1
             signing_key = self._jwks.get_signing_key_from_jwt(token)
             claims = jwt.decode(
                 token,
                 signing_key.key,
                 algorithms=[self._algorithm],
-                # 空 audience = 不校验受众 / empty audience = skip the aud check.
-                audience=self._audience or None,
+                # audience 由 Batch 1 保证非空；strict_aud=True 拒绝数组 aud（即使含正确值）。
+                # audience is guaranteed non-empty; strict_aud rejects array aud.
+                audience=self._audience,
                 # 单 issuer：交给 jwt.decode 校验；多 issuer：跳过，下面手动校验。
                 # single issuer → let jwt.decode verify; multi → skip, check below.
-                issuer=None if multi_issuer else (self._issuer or None),
-                # 必须带 exp：缺失或过期一律拒绝 / require exp: reject missing/expired.
-                options={"require": ["exp"]},
+                issuer=None if multi_issuer else self._issuer,
+                options={
+                    "require": ["exp"],
+                    "strict_aud": True,
+                    "verify_exp": False,
+                    "verify_iss": not multi_issuer,
+                    "verify_iat": False,
+                    "verify_nbf": False,
+                },
             )
-        except (jwt.PyJWTError, jwt.exceptions.PyJWKClientError) as exc:
-            logger.debug("token_verify_failed", error=str(exc))
-            return None
 
-        # 多 issuer 模式下手动校验签发者 / manual issuer check in multi-issuer mode.
-        if multi_issuer and claims.get("iss") not in self._accepted_issuers:
-            logger.debug(
-                "token_issuer_not_accepted",
-                got=claims.get("iss"),
-                accepted=self._accepted_issuers,
+            # 项目侧统一校验 exp/iat/nbf 的类型与时间范围（PyJWT 已被上面全部关闭）。
+            # Project-side unified exp/iat/nbf validation (PyJWT's builtin is fully off above).
+            if not _numeric_dates_valid(claims):
+                return None
+
+            # 多 issuer 模式下手动校验签发者 / manual issuer check in multi-issuer mode.
+            if multi_issuer and claims.get("iss") not in self._accepted_issuers:
+                return None
+
+            if not _identity_claims_well_formed(claims):
+                return None
+
+            scopes = _parse_scopes(claims)
+            if not self._required_scopes <= set(scopes):
+                return None
+
+            subject = _extract_identity(claims, self._identity_claims) or claims.get("sub")
+            return AccessToken(
+                token=token,
+                client_id=(claims.get("client_id") or claims.get("azp") or claims.get("sub") or ""),
+                scopes=scopes,
+                expires_at=_coerce_numeric_date(claims.get("exp")),
+                subject=subject,
+                claims=claims,
             )
+        except Exception as exc:
+            logger.debug("token_verify_failed", error_type=type(exc).__name__)
             return None
-
-        scopes = _parse_scopes(claims)
-        if not self._required_scopes <= set(scopes):
-            logger.debug(
-                "token_missing_required_scopes",
-                required=list(self._required_scopes),
-                got=scopes,
-            )
-            return None
-
-        subject = _extract_identity(claims, self._identity_claims) or claims.get("sub")
-        return AccessToken(
-            token=token,
-            client_id=(claims.get("client_id") or claims.get("azp") or claims.get("sub") or ""),
-            scopes=scopes,
-            expires_at=claims.get("exp"),
-            subject=subject,
-            claims=claims,
-        )
 <%- else -%>
 """鉴权未启用：本文件无内容。Auth disabled — this module is intentionally empty."""
 <%- endif -%>
 <%- else -%>
-"""fastmcp 后端使用其内置 JWTVerifier，无需本文件。
-fastmcp uses its built-in JWTVerifier; this module is unused."""
+<%- if auth_enabled -%>
+"""FastMCP 后端的严格 audience / claim 校验器 / strict audience+claim verifier (fastmcp backend).
+
+fastmcp 内置的 JWTVerifier 只手动校验 exp(过期)/iss/aud/scope，从不校验 iat/nbf，且 aud 命中
+数组中任一元素即通过。本子类在保留父类密码学验签的前提下"扩展"校验：super().verify_token 返回
+AccessToken 后，用与 official 后端字节一致的 NumericDate helper 复核 exp/iat/nbf、要求 aud 为
+精确相等的字符串、并检查身份 claim 良构。任何畸形 claim 只产生认证失败(None)，绝不 500。
+This subclass extends fastmcp's built-in JWTVerifier: after the parent's crypto verification returns
+an AccessToken, it re-checks exp/iat/nbf with the SAME NumericDate helper as the official backend,
+requires aud to be a string exactly equal to the configured audience, and validates identity claims.
+
+★ 普通用户无需修改本文件 ★ —— 鉴权参数请改 config.toml 的 [auth] 段。
+You normally never edit this file — tune auth in config.toml's [auth] section.
+"""
+
+import math
+import time
+
+from fastmcp.server.auth.providers.jwt import JWTVerifier
+from mcp.server.auth.provider import AccessToken
+
+from app.logging import get_logger
+
+logger = get_logger(__name__)
+
+# NumericDate 校验上界（RFC 7519 允许的最大 Unix 秒 = 9999-12-31T23:59:59Z）与时钟偏移容差。
+# NumericDate upper bound (max Unix seconds RFC 7519 permits) and clock-skew leeway.
+MAX_NUMERIC_DATE = 253_402_300_799
+LEEWAY = 60
+
+
+def _coerce_numeric_date(value: object) -> int | None:
+    """把一个 claim 值安全归一化成 NumericDate 整数秒；任何畸形/非法输入返回 None.
+
+    规则（两后端字节一致）：bool → None（True/False 是 int 子类，绝不当时间戳）；int → 原值；
+    float 仅当有限且为整数值时取 int()，否则 None；其它类型 → None。不做可能溢出的 int→float
+    转换，故 10**1000 这类超大 int 直接进入范围判断被上界拒绝，而非在此抛 OverflowError。
+    Normalize a claim value into an integer NumericDate; any malformed input yields None.
+    """
+    try:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            if math.isfinite(value) and value.is_integer():
+                return int(value)
+            return None
+        return None
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _numeric_dates_valid(claims: dict) -> bool:
+    """统一校验 exp(必需)/iat/nbf(可选) 的类型与时间范围，取代 PyJWT 内建时间校验.
+
+    exp 必须能归一化成整数且 now < exp <= MAX；iat/nbf 仅在 claim 存在时校验：必须能归一化成
+    整数、0 < v <= MAX、且不落在未来 (v <= now + LEEWAY)。任一不满足即认证失败。
+    Validate exp (required) and optional iat/nbf types + temporal ranges (replaces PyJWT's builtin).
+    """
+    now = time.time()
+    exp = _coerce_numeric_date(claims.get("exp"))
+    if exp is None or not (now < exp <= MAX_NUMERIC_DATE):
+        return False
+    for name in ("iat", "nbf"):
+        if name not in claims:
+            continue
+        value = _coerce_numeric_date(claims.get(name))
+        if value is None or not (0 < value <= MAX_NUMERIC_DATE) or value > now + LEEWAY:
+            return False
+    return True
+
+
+def _identity_claims_well_formed(claims: dict) -> bool:
+    """回退链中每个身份 claim 若存在必须是非空字符串，否则认证失败.
+
+    Each identity claim in the fallback chain, IF present, must be a non-empty string.
+    """
+    for name in ("client_id", "azp", "sub"):
+        if name in claims:
+            value = claims.get(name)
+            if not isinstance(value, str) or not value:
+                return False
+    return True
+
+
+class StrictAudienceJWTVerifier(JWTVerifier):
+    """在 fastmcp 内置 JWTVerifier 之上加固 audience / NumericDate / 身份 claim 校验。
+
+    verify_token 在任何校验失败时返回 None（不抛异常逃逸）→ 框架据此回 401。
+    Returns None on any verification failure so the framework responds 401 (never a 500).
+    """
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        # 单一最外层 except：只记录异常类型、绝不记录 token/claim 值。
+        # 先由父类完成密码学验签(不复制/不绕过/不 re-raise)，仅在其返回 AccessToken 后加固。
+        # Single outermost except logs only the type; the parent does the crypto verify.
+        try:
+            access = await super().verify_token(token)
+            if access is None:
+                return None
+
+            claims = access.claims or {}
+
+            # 与 official 后端字节一致的 exp/iat/nbf 校验（父类从不校验 iat/nbf）。
+            # Same exp/iat/nbf validation as the official backend (parent never checks iat/nbf).
+            if not _numeric_dates_valid(claims):
+                return None
+
+            # aud 必须是与配置精确相等的字符串（父类对数组 aud 命中任一元素即放过）。
+            # aud must be a string exactly equal to the configured audience.
+            aud = claims.get("aud")
+            if not isinstance(aud, str) or aud != self.audience:
+                return None
+
+            if not _identity_claims_well_formed(claims):
+                return None
+
+            return access
+        except Exception as exc:
+            logger.debug("token_verify_failed", error_type=type(exc).__name__)
+            return None
+<%- else -%>
+"""鉴权未启用：本文件无内容。Auth disabled — this module is intentionally empty."""
+<%- endif -%>
 <%- endif %>

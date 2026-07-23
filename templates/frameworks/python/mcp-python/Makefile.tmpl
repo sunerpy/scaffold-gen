@@ -13,12 +13,43 @@
 #   make check     fmt-check + lint + test
 #   make clean     remove caches / build artifacts
 
+# Drop any command-line variable overrides propagated to sub-makes so recipes
+# can never inherit attacker-controlled values through recursion.
+override MAKEOVERRIDES :=
+unexport MAKEOVERRIDES
+
+# Reject caller-supplied overrides of names this Makefile references. The guard
+# only inspects $(origin NAME) — it never expands the value — so a payload like
+# NAME='$(shell ...)' fails at parse time instead of being evaluated.
+define reject_override
+ifneq (,$$(filter environment environment override command line,$$(origin $(1))))
+$$(error $(1) must not be overridden (origin: $$(origin $(1))))
+endif
+unexport $(1)
+endef
+
+$(eval $(call reject_override,DOCKER_IMAGE))
+$(eval $(call reject_override,DOCKER_BIND))
+$(eval $(call reject_override,HOST_PORT))
+$(eval $(call reject_override,APP_ENTRY))
+$(eval $(call reject_override,PROJECT_ROOT))
+$(eval $(call reject_override,HAS_OXFMT))
+$(eval $(call reject_override,VERSION))
+$(eval $(call reject_override,PROJECT_NAME))
+
+# MAKEFILE_LIST is a built-in special variable: a plain environment value is
+# discarded when Make reads this file (origin becomes `file`), so only the
+# `command line` and `environment override` sources are guardable here.
+ifneq (,$(filter command line environment override,$(origin MAKEFILE_LIST)))
+$(error MAKEFILE_LIST must not be overridden (origin: $(origin MAKEFILE_LIST)))
+endif
+
 .DEFAULT_GOAL := help
 
-.PHONY: help install build run dev test fmt lint check clean
+.PHONY: help install build run dev test fmt lint check clean<%if enable_build%> docker-build docker-run<%endif%>
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort \
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' Makefile | sort \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
 
 install: ## Sync the environment (install deps into .venv)
@@ -51,3 +82,10 @@ check: ## Full local verification (fmt-check + lint + test)
 clean: ## Remove caches / build artifacts
 	@rm -rf .pytest_cache .ruff_cache dist build *.egg-info
 	@find . -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
+<%if enable_build%>
+docker-build: ## Build the container image
+	@python3 scripts/docker.py build
+
+docker-run: docker-build ## Run the built image
+	@python3 scripts/docker.py run
+<%endif%>

@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
 <%if mcp_backend_is_official%>    "mcp[cli]>=1.2,<2",
-<%else%>    "fastmcp>=2,<3",
+<%else%>    "fastmcp>=2.14.7,<3",
 <%endif%>    "uvicorn[standard]>=0.32.0",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.6.0",

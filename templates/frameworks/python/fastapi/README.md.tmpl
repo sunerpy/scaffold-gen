@@ -133,14 +133,20 @@ Makefile + 多阶段 Dockerfile 由 `scafgen` 自动生成，覆盖从本地构�
 
 ```bash
 make help          # 列出所有可用目标
-make build         # 打包 / 预编译
+make build         # uv sync（安装依赖）
 make run           # 本地启动 API 服务（uv run python main.py）
 make test          # 运行测试
 make fmt           # 格式化代码（Ruff）
 make lint          # lint 检查（Ruff check）
 make check         # fmt + lint + test（一键本地校验）
-make docker-build  # 构建容器镜像（docker build -t <<project_name>>:latest .）
-make docker-run    # 运行容器（服务监听 <<default_port>>）
+make docker-build  # 构建容器镜像（python3 scripts/docker.py build）
+make docker-run    # 运行容器（python3 scripts/docker.py run）
+```
+
+自定义绑定地址 / 宿主端口（不改代码，只传参数）：
+
+```bash
+python3 scripts/docker.py run --bind 127.0.0.1 --host-port <port>
 ```
 
 ---
