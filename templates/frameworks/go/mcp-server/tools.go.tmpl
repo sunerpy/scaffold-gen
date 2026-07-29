@@ -1,0 +1,38 @@
+//go:build tools
+
+// Package tools pins the module dependencies that generated code requires.
+//
+// Why this file exists:
+//
+// `proto/echo.proto` imports `mcp/jsonschema/jsonschema.proto`. When you run
+// `make generate` (buf generate), the emitted `proto/gen/echo.pb.go` imports:
+//
+//	_         "github.com/sunerpy/protoc-gen-jsonschema/mcp/jsonschema"
+//	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+//
+// Those imports only appear AFTER codegen runs. `go mod tidy` prunes any module
+// that no checked-in source imports, so without this file it would strip both
+// modules from go.mod, and the very next `go build ./...` after `make generate`
+// would fail with "no required module provides package ...".
+//
+// The `//go:build tools` constraint keeps this file out of every normal build,
+// test, and binary — it contributes zero code. But `go mod tidy` deliberately
+// evaluates source files as if ALL build tags were enabled (the only exception
+// is the `ignore` tag), so these blank imports are enough to keep both modules
+// in the `require` block permanently, independent of whether `proto/gen/` has
+// been generated yet.
+//
+// This is the standard Go `tools.go` pattern. Keep this file; deleting it makes
+// the module dependencies disappear on the next `go mod tidy`.
+//
+// If you drop the proto/JSON Schema workflow entirely, delete this file, the
+// `proto/` directory, `buf.*.yaml`, and the Makefile `generate` target together,
+// then run `go mod tidy` once.
+package tools
+
+import (
+	// Runtime support for the JSON Schema proto extensions used by proto/echo.proto.
+	_ "github.com/sunerpy/protoc-gen-jsonschema/mcp/jsonschema"
+	// Runtime support required by every protoc-gen-go generated .pb.go file.
+	_ "google.golang.org/protobuf/runtime/protoimpl"
+)
