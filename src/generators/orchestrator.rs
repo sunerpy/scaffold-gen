@@ -902,13 +902,17 @@ impl GeneratorOrchestrator {
                 tracing::info!("✅ go mod tidy completed");
             } else {
                 tracing::warn!(
-                    "⚠️ Warning: go mod tidy failed (run `make generate && go mod tidy` after editing proto): {}",
+                    "⚠️ Warning: go mod tidy failed — dependencies are already declared in \
+                     go.mod (pinned by tools.go), but modules could not be downloaded, so \
+                     go.sum was not written. Check network/GOPROXY and re-run `go mod tidy`: {}",
                     outcome.stderr()
                 );
             }
         } else {
             tracing::warn!(
-                "⚠️ Warning: go is not installed. Run `make generate` then `go mod tidy` manually."
+                "⚠️ Warning: go is not installed, so nothing was fetched. Install Go, then run \
+                 `go mod tidy` (downloads modules and writes go.sum) and `make generate` \
+                 (emits the real protobuf code)."
             );
         }
 

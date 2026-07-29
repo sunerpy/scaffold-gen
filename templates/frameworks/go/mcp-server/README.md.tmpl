@@ -28,6 +28,7 @@
 ├── config.example.toml             # 配置范例（复制为 config.toml 用）
 ├── buf.yaml / buf.gen.yaml         # buf：proto + JSON Schema 代码生成
 ├── Makefile                        # make generate / build / run / test / fmt / lint
+├── tools.go                        # 依赖锚点（//go:build tools，不参与编译）—— 别删
 ├── cmd/server/main.go              # 启动入口：读配置 → 建 MCP server → 挂到 Gin → 运行
 ├── proto/
 │   ├── echo.proto                  # ★★★ 工具入参约束写在这里（mcp.jsonschema 选项）★★★
@@ -52,7 +53,10 @@
   go install github.com/sunerpy/protoc-gen-jsonschema/cmd/protoc-gen-jsonschema@latest
   ```
 
-  Go 库依赖：`go get github.com/sunerpy/protoc-gen-jsonschema`（生成的 schema 依赖 `google/jsonschema-go`）。
+  对应的 Go 运行时库 `github.com/sunerpy/protoc-gen-jsonschema` 已经在 `go.mod` 里，由根目录的
+  `tools.go`（`//go:build tools` 空导入锚点）钉住 —— `make generate` 之后直接 `go build` 即可，
+  不需要额外 `go get`。**请不要删除 `tools.go`**，否则下一次 `go mod tidy` 会把它和
+  `google.golang.org/protobuf` 一起从 `go.mod` 里裁掉。
 
 ---
 
@@ -62,10 +66,7 @@
 # 1. 生成 proto + JSON Schema（首次克隆后必须先跑一次）
 make generate
 
-# 2. 整理依赖
-go mod tidy
-
-# 3. 启动服务（读取 config.toml 里的 addr / 路径）
+# 2. 启动服务（读取 config.toml 里的 addr / 路径）
 make run
 ```
 
