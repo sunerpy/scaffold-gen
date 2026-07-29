@@ -5,6 +5,7 @@ use scaffold_gen::generators::core::{Generator, Parameters, TemplateProcessor};
 use scaffold_gen::generators::framework::tauri::{TauriGenerator, TauriParams};
 use scaffold_gen::generators::language::go::GoParams;
 use scaffold_gen::generators::language::python::PythonParams;
+use scaffold_gen::generators::language::rust::{RustGenerator, RustParams};
 use walkdir::WalkDir;
 
 fn collect_relative_files(root: &Path) -> Vec<String> {
@@ -33,6 +34,128 @@ fn assert_no_custom_delimiter_residue(root: &Path, files: &[String], label: &str
             );
         }
     }
+}
+
+fn proto_package_declaration(proto: &str, label: &str) -> String {
+    let line = proto
+        .lines()
+        .map(str::trim)
+        .find(|line| line.starts_with("package "))
+        .unwrap_or_else(|| {
+            panic!("[{label}] rendered proto has no `package` declaration:\n{proto}")
+        });
+
+    let body = line.strip_prefix("package ").unwrap_or_default().trim();
+
+    body.strip_suffix(';')
+        .unwrap_or_else(|| panic!("[{label}] `package` declaration must end with `;`: {line}"))
+        .trim()
+        .to_string()
+}
+
+/// Structural legality gate for a rendered protobuf `package` identifier.
+///
+/// protobuf packages are dot-separated identifiers matching `[A-Za-z_][A-Za-z0-9_]*`;
+/// this scaffold always lowercases, narrowing the legal set to `[a-z0-9_.]`. Asserting
+/// the SHAPE rather than one expected literal is what catches a future template
+/// regression to any other unsanitized key — including the empty string that a typo'd
+/// context key renders to under `UndefinedBehavior::Lenient`.
+fn assert_legal_proto_package(package: &str, label: &str) {
+    assert!(
+        !package.is_empty(),
+        "[{label}] protobuf package is empty — an undefined context key renders as \
+         an empty string under UndefinedBehavior::Lenient"
+    );
+
+    for ch in package.chars() {
+        assert!(
+            ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_' || ch == '.',
+            "[{label}] illegal character {ch:?} in protobuf package `{package}`; \
+             protoc/buf accept only [a-z0-9_.] here"
+        );
+    }
+
+    for segment in package.split('.') {
+        assert!(
+            !segment.is_empty(),
+            "[{label}] protobuf package `{package}` has an empty dot-separated segment"
+        );
+        assert!(
+            !segment.starts_with(|ch: char| ch.is_ascii_digit()),
+            "[{label}] protobuf package segment `{segment}` of `{package}` starts with \
+             a digit; identifiers must start with a letter or `_`"
+        );
+    }
+}
+
+fn assert_rendered_proto_package(
+    root: &Path,
+    relative_path: &str,
+    expected_package: &str,
+    label: &str,
+) {
+    let proto_path = root.join(relative_path);
+    assert!(
+        proto_path.is_file(),
+        "[{label}] {relative_path} was not rendered; files: {:?}",
+        collect_relative_files(root)
+    );
+
+    let proto = fs::read_to_string(&proto_path)
+        .unwrap_or_else(|_| panic!("[{label}] read {relative_path}"));
+    let package = proto_package_declaration(&proto, label);
+
+    assert_legal_proto_package(&package, label);
+    assert_eq!(
+        package, expected_package,
+        "[{label}] {relative_path} rendered the wrong protobuf package:\n{proto}"
+    );
+    assert!(
+        proto.contains(&format!("package {expected_package};")),
+        "[{label}] {relative_path} must declare `package {expected_package};`:\n{proto}"
+    );
+}
+
+fn render_mcp_server_templates(project_name: &str) -> tempfile::TempDir {
+    let mut params =
+        GoParams::from_project_name(project_name.to_string()).with_version("1.24".to_string());
+    params.base.host = Some("0.0.0.0".to_string());
+    params.base.port = Some(8080);
+
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+    processor
+        .process_embedded_template_directory(
+            "frameworks/go/mcp-server",
+            tmp.path(),
+            params.to_template_context(),
+        )
+        .expect("render embedded mcp-server templates");
+
+    tmp
+}
+
+/// Render `languages/rust` through the real generator so the `protos/` skip rule
+/// (`enable_proto_gen`) is exercised rather than bypassed. Stops at rendering —
+/// `RustGenerator::generate` would additionally shell out to `cargo build`.
+fn render_rust_language_templates(project_name: &str, enable_proto_gen: bool) -> tempfile::TempDir {
+    let params = RustParams::new(project_name.to_string()).with_proto_gen(enable_proto_gen);
+    let context = params.to_template_context();
+    let tmp = tempfile::tempdir().expect("create tempdir");
+    let mut generator = RustGenerator::new().expect("create rust generator");
+    let mut processor = TemplateProcessor::new().expect("create processor");
+
+    generator
+        .render_embedded_templates(
+            &mut processor,
+            "languages/rust",
+            tmp.path(),
+            context,
+            &params,
+        )
+        .expect("render embedded rust language templates");
+
+    tmp
 }
 
 fn render_tauri_templates(
@@ -1759,6 +1882,76 @@ fn mcp_server_embedded_generation_renders_without_external_tools() {
     assert!(
         makefile.contains("check: fmt lint test"),
         "MCP Makefile must expose the README's check target:\n{makefile}"
+    );
+
+    // Then(4): 包名必须是合法 protobuf 标识符。本测试的项目名 `mcp-demo` 含连字符，
+    // 单靠 Then(2) 的分隔符扫描会放过 `package mcp-demo.v1;`。
+    assert_rendered_proto_package(tmp.path(), "proto/echo.proto", "mcp_demo.v1", "mcp-demo");
+}
+
+// Regression lock for the illegal-proto-package bug: `scafgen new servicedesk-mcp-go
+// --framework mcp-server --language go` used to render `package servicedesk-mcp-go.v1;`
+// and `buf build` failed with `proto/echo.proto:3:20:syntax error: unexpected '-'`.
+// The proto templates now read `<<proto_package>>` (sanitized via `to_proto_ident`)
+// instead of `<<project_name_snake>>`, which only splits on case — never on `-`/`.`.
+// `context_tests.rs` covers the context VALUE; these cover the RENDERED file, so a
+// template pointed back at `project_name_snake` can no longer pass unnoticed.
+#[test]
+fn go_mcp_proto_declares_a_legal_package_for_any_project_name() {
+    for (label, project_name, expected_package) in [
+        ("hyphenated", "servicedesk-mcp-go", "servicedesk_mcp_go.v1"),
+        ("digit-leading", "123-app", "_123_app.v1"),
+        ("already-clean", "cleanapp", "cleanapp.v1"),
+    ] {
+        let tmp = render_mcp_server_templates(project_name);
+        assert_rendered_proto_package(tmp.path(), "proto/echo.proto", expected_package, label);
+    }
+}
+
+#[test]
+fn rust_language_proto_declares_a_legal_package_for_any_project_name() {
+    for (label, project_name, expected_package) in [
+        ("hyphenated", "svc-desk-rs", "svc_desk_rs"),
+        ("digit-leading", "123-app", "_123_app"),
+        ("already-clean", "cleanapp", "cleanapp"),
+    ] {
+        let tmp = render_rust_language_templates(project_name, true);
+        assert_rendered_proto_package(tmp.path(), "protos/app.proto", expected_package, label);
+    }
+}
+
+#[test]
+fn tauri_proto_declares_a_legal_package_for_any_project_name() {
+    // Tauri is the third proto-emitting path (`GenKind::ExternalAsync`) and ships no
+    // committed placeholder generated code, so an illegal package leaves `src/protos/`
+    // empty and `mod protos;` unresolvable — nothing masks the breakage.
+    for (label, project_name, expected_package) in [
+        ("hyphenated", "svc-desk-rs", "svc_desk_rs"),
+        ("digit-leading", "123-app", "_123_app"),
+        ("already-clean", "cleanapp", "cleanapp"),
+    ] {
+        let tmp = render_tauri_templates(project_name, true, false);
+        assert_rendered_proto_package(tmp.path(), "protos/app.proto", expected_package, label);
+    }
+}
+
+#[test]
+fn rust_language_proto_is_gated_on_proto_gen() {
+    // Guards the test above: `protos/app.proto` must genuinely be flag-driven, so a
+    // silently-absent file fails `assert_rendered_proto_package`'s is_file() check
+    // rather than vacuously passing.
+    let disabled = render_rust_language_templates("svc-desk-rs", false);
+    assert!(
+        !disabled.path().join("protos/app.proto").exists(),
+        "proto_gen=false must skip protos/app.proto, got: {:?}",
+        collect_relative_files(disabled.path())
+    );
+
+    let enabled = render_rust_language_templates("svc-desk-rs", true);
+    assert!(
+        enabled.path().join("protos/app.proto").is_file(),
+        "proto_gen=true must render protos/app.proto, got: {:?}",
+        collect_relative_files(enabled.path())
     );
 }
 

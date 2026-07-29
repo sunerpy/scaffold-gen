@@ -31,6 +31,12 @@ pub fn build_base_context(params: &BaseParams) -> HashMap<String, Value> {
             &params.project_name
         )),
     );
+    context.insert(
+        "proto_package".to_string(),
+        json!(crate::constants::string_utils::to_proto_ident(
+            &params.project_name
+        )),
+    );
 
     // 为了兼容性添加别名
     context.insert("ProjectName".to_string(), json!(params.project_name));

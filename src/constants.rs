@@ -236,6 +236,11 @@ pub mod string_utils {
         result
     }
 
+    /// 将项目名转换为合法的 Protobuf package 标识符。
+    pub fn to_proto_ident(s: &str) -> String {
+        to_crate_ident(s)
+    }
+
     /// 转换为合法的 Cargo 包名，并为数字开头的名称添加下划线前缀。
     pub fn to_cargo_package_name(s: &str) -> String {
         let mut result: String = s
@@ -373,6 +378,14 @@ mod tests {
         assert_eq!(to_crate_ident("My-Cool_App"), "my_cool_app");
         assert_eq!(to_crate_ident("123-app"), "_123_app");
         assert_eq!(to_crate_ident("my.app"), "my_app");
+    }
+
+    #[test]
+    fn proto_ident_sanitizes_project_names() {
+        assert_eq!(to_proto_ident("service-desk"), "service_desk");
+        assert_eq!(to_proto_ident("123-app"), "_123_app");
+        assert_eq!(to_proto_ident("my.app"), "my_app");
+        assert_eq!(to_proto_ident("clean_name"), "clean_name");
     }
 
     #[test]
