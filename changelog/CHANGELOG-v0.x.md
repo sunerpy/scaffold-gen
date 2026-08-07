@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/sunerpy/scaffold-gen/compare/v0.11.1...v0.12.0) (2026-08-07)
+
+
+### Features
+
+* **go-mcp:** 生成项目在 generate 与 check 前断言插件最低版本 ([#62](https://github.com/sunerpy/scaffold-gen/issues/62)) ([19eee4c](https://github.com/sunerpy/scaffold-gen/commit/19eee4c743b1900b8854245faaf94cc96fd15661))
+
 ## [0.11.1](https://github.com/sunerpy/scaffold-gen/compare/v0.11.0...v0.11.1) (2026-07-29)
 
 
