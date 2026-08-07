@@ -3,21 +3,63 @@ PROJECT_NAME = <<project_name>>
 MODULE_NAME = <<module_name>>
 DIST_DIR = dist
 
+# buf resolves protoc-gen-jsonschema from PATH (buf.gen.yaml declares it as `local:`),
+# so the BINARY on PATH decides the emitted JSON Schema - go.mod does not.
+PGJS_MIN_VERSION = <<protoc_gen_jsonschema_min_version>>
+PGJS_PKG = github.com/sunerpy/protoc-gen-jsonschema/cmd/protoc-gen-jsonschema
+
 GO_FILES = $(shell find . -name "*.go" -not -path "./vendor/*")
 
-.PHONY: all generate build run test fmt lint check clean help
+.PHONY: all check-plugin generate build run test fmt lint check clean help
 
 all: fmt lint build
 
+## check-plugin: assert protoc-gen-jsonschema is installed and >= PGJS_MIN_VERSION
+check-plugin:
+	@if ! command -v protoc-gen-jsonschema > /dev/null 2>&1; then \
+		echo "ERROR: protoc-gen-jsonschema not found on PATH."; \
+		echo "  required: >= v$(PGJS_MIN_VERSION)"; \
+		echo "  found:    (not installed)"; \
+		echo "  install:  go install $(PGJS_PKG)@latest"; \
+		echo "            (or pin the minimum: go install $(PGJS_PKG)@v$(PGJS_MIN_VERSION))"; \
+		echo "  note:     buf resolves this plugin from PATH, so the binary on PATH - not"; \
+		echo "            the go.mod pin - decides the generated JSON Schema."; \
+		exit 1; \
+	fi
+	@have=$$(protoc-gen-jsonschema --version 2>/dev/null | awk 'NR==1{print $$2; exit}' | sed 's/^[vV]//'); \
+	where=$$(command -v protoc-gen-jsonschema); \
+	if [ -z "$$have" ]; then \
+		echo "ERROR: protoc-gen-jsonschema --version did not report a version."; \
+		echo "  required: >= v$(PGJS_MIN_VERSION)"; \
+		echo "  found:    unreadable ($$where)"; \
+		echo "  install:  go install $(PGJS_PKG)@latest"; \
+		echo "            (or pin the minimum: go install $(PGJS_PKG)@v$(PGJS_MIN_VERSION))"; \
+		exit 1; \
+	fi; \
+	if awk -v have="$$have" -v min="$(PGJS_MIN_VERSION)" 'BEGIN{nh=split(have,h,"."); nm=split(min,m,"."); for(i=1;i<=3;i++){hv=(i<=nh?h[i]+0:0); mv=(i<=nm?m[i]+0:0); if(hv>mv) exit 0; if(hv<mv) exit 1} exit 0}'; then \
+		echo "protoc-gen-jsonschema v$$have OK (>= v$(PGJS_MIN_VERSION))"; \
+	else \
+		echo "ERROR: protoc-gen-jsonschema is too old - refusing to generate a wrong JSON Schema."; \
+		echo "  required: >= v$(PGJS_MIN_VERSION)"; \
+		echo "  found:    v$$have ($$where)"; \
+		echo "  install:  go install $(PGJS_PKG)@latest"; \
+		echo "            (or pin the minimum: go install $(PGJS_PKG)@v$(PGJS_MIN_VERSION))"; \
+		echo "  why:      older plugins render a proto3 map<string,string> field as a JSON Schema"; \
+		echo "            array of key/value objects instead of an object with additionalProperties."; \
+		echo "            buf generate, go build and go vet all still succeed, so the broken"; \
+		echo "            contract only surfaces when an MCP client validates tool arguments."; \
+		exit 1; \
+	fi
+
 ## generate: regenerate protobuf + JSON Schema from proto/ (buf generate)
-generate:
+generate: check-plugin
 	@echo "Running buf generate (proto + JSON Schema)..."
 	@if command -v buf > /dev/null 2>&1; then \
 		buf dep update && buf generate; \
 	else \
 		echo "buf not found. Install: https://buf.build/docs/installation"; \
-		echo "Also install the JSON Schema plugin:"; \
-		echo "  go install github.com/sunerpy/protoc-gen-jsonschema/cmd/protoc-gen-jsonschema@latest"; \
+		echo "The JSON Schema plugin (>= v$(PGJS_MIN_VERSION)) is also required:"; \
+		echo "  go install $(PGJS_PKG)@latest"; \
 		exit 1; \
 	fi
 
@@ -58,8 +100,8 @@ lint:
 		go vet ./...; \
 	fi
 
-## check: format, lint, and test the project
-check: fmt lint test
+## check: format, lint, test, and verify the protoc-gen-jsonschema version
+check: fmt lint test check-plugin
 
 ## clean: remove build artifacts
 clean:
