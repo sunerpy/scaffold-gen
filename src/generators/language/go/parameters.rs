@@ -1,5 +1,9 @@
-use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+
+use crate::constants::defaults;
 use crate::generators::core::{BaseParams, InheritableParams};
 
 /// Go语言级别参数 - 现在继承自BaseParams
@@ -28,7 +32,18 @@ impl InheritableParams for GoParams {
         &self.base
     }
 
-    // Go参数没有额外的参数，所有参数都在BaseParams中
+    /// Go 工具链版本约束。挂在 Go 语言层而不是 `build_base_context`，是因为
+    /// protoc-gen-jsonschema 只跟 Go 相关；挂在这里而不是 orchestrator 的 MCP 分支，
+    /// 是因为生产渲染和测试 harness 都经由 `GoParams::to_template_context()`，
+    /// 单点注入才能保证两边渲染出同一份内容。
+    fn extended_template_context(&self) -> HashMap<String, Value> {
+        let mut context = HashMap::new();
+        context.insert(
+            "protoc_gen_jsonschema_min_version".to_string(),
+            json!(defaults::PROTOC_GEN_JSONSCHEMA_MIN_VERSION),
+        );
+        context
+    }
 }
 
 impl GoParams {

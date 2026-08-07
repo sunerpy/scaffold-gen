@@ -142,6 +142,17 @@ pub mod defaults {
     pub const RUFF_VERSION: &str = "0.12.1";
     /// Python 最低支持版本
     pub const PYTHON_MIN_VERSION: &str = "3.12";
+    /// protoc-gen-jsonschema 最低要求版本（Go MCP 脚手架的 JSON Schema 生成插件）。
+    ///
+    /// 生成项目的 `go.mod` pin、`Makefile` 的 `generate` 版本断言、`README` 前置说明
+    /// 三处都由它驱动。**不带 `v` 前缀**：与插件 `--version` 输出
+    /// （`protoc-gen-jsonschema 0.2.0`）一致，写成 `"v0.2.0"` 会让 go.mod 变成 `vv0.2.0`、
+    /// 并让 Makefile 的数值版本比较恒假。需要 `v` 的地方由模板自己拼。
+    ///
+    /// 卡版本的理由：更早的插件把 proto3 `map<string,string>` 渲染成 JSON Schema 的
+    /// `array` 而不是带 `additionalProperties` 的 `object`。`buf generate` / `go build` /
+    /// `go vet` 全部通过，只有 MCP 客户端校验工具入参时才拒绝调用 —— 静默产出错误契约。
+    pub const PROTOC_GEN_JSONSCHEMA_MIN_VERSION: &str = "0.2.0";
 }
 
 /// 字符串转换工具函数

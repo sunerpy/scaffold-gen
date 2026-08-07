@@ -25,13 +25,13 @@ func main() {
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		os.Stderr.WriteString("failed to load config: " + err.Error() + "\n")
+		_, _ = os.Stderr.WriteString("failed to load config: " + err.Error() + "\n")
 		os.Exit(1)
 	}
 
 	logger, err := applog.New(cfg.Log.Level, cfg.Log.Format)
 	if err != nil {
-		os.Stderr.WriteString("failed to build logger: " + err.Error() + "\n")
+		_, _ = os.Stderr.WriteString("failed to build logger: " + err.Error() + "\n")
 		os.Exit(1)
 	}
 	defer func() { _ = logger.Sync() }()

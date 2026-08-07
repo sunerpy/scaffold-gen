@@ -27,7 +27,7 @@
 ├── config.toml                     # ★ 监听地址/端口/路径/日志级别 —— 改这里
 ├── config.example.toml             # 配置范例（复制为 config.toml 用）
 ├── buf.yaml / buf.gen.yaml         # buf：proto + JSON Schema 代码生成
-├── Makefile                        # make generate / build / run / test / fmt / lint
+├── Makefile                        # make check-plugin / generate / build / run / test / fmt / lint
 ├── tools.go                        # 依赖锚点（//go:build tools，不参与编译）—— 别删
 ├── cmd/server/main.go              # 启动入口：读配置 → 建 MCP server → 挂到 Gin → 运行
 ├── proto/
@@ -47,13 +47,32 @@
 
 - **Go <<go_version>>+**
 - **[buf](https://buf.build/docs/installation)** —— Protobuf 构建工具（驱动代码生成）。
-- **protoc-gen-jsonschema** —— 把 proto 生成 JSON Schema 的插件：
+- **protoc-gen-jsonschema ≥ v<<protoc_gen_jsonschema_min_version>>**（最低版本，硬要求）
+  —— 把 proto 生成 JSON Schema 的插件：
 
   ```bash
+  # 安装最新版（一定满足最低版本 v<<protoc_gen_jsonschema_min_version>>）
   go install github.com/sunerpy/protoc-gen-jsonschema/cmd/protoc-gen-jsonschema@latest
+
+  # 或者钉住最低版本
+  go install github.com/sunerpy/protoc-gen-jsonschema/cmd/protoc-gen-jsonschema@v<<protoc_gen_jsonschema_min_version>>
+
+  # 确认版本
+  protoc-gen-jsonschema --version
   ```
 
-  对应的 Go 运行时库 `github.com/sunerpy/protoc-gen-jsonschema` 已经在 `go.mod` 里，由根目录的
+  > **为什么卡版本**：`buf` 是从 **PATH** 解析这个插件的（`buf.gen.yaml` 里写的是 `local:`），
+  > 所以决定 schema 的是 PATH 上的二进制，**不是 `go.mod` 里的版本**。更早的插件会把
+  > proto3 的 `map<string,string>` 渲染成 JSON Schema 的 `array`（键值对数组），而不是带
+  > `additionalProperties` 的 `object` —— 而 `buf generate`、`go build`、`go vet` **全都会通过**，
+  > 只有 MCP 客户端在校验工具入参时才会拒绝调用。
+  >
+  > 所以 `make generate` 会在跑 `buf generate` **之前**先断言插件版本
+  > （`make check-plugin`），低于 v<<protoc_gen_jsonschema_min_version>> 直接非零退出，
+  > 不会产出错误的 schema。
+
+  对应的 Go 运行时库 `github.com/sunerpy/protoc-gen-jsonschema` 已经在 `go.mod` 里（同样钉在
+  v<<protoc_gen_jsonschema_min_version>>，与插件二进制保持同步），由根目录的
   `tools.go`（`//go:build tools` 空导入锚点）钉住 —— `make generate` 之后直接 `go build` 即可，
   不需要额外 `go get`。**请不要删除 `tools.go`**，否则下一次 `go mod tidy` 会把它和
   `google.golang.org/protobuf` 一起从 `go.mod` 里裁掉。
